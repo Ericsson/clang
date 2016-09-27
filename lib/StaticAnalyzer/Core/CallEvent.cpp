@@ -16,6 +16,9 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
 #include "clang/AST/ParentMap.h"
 #include "clang/Analysis/ProgramPoint.h"
+#include "clang/Frontend/ASTUnit.h"
+#include "clang/Frontend/CompilerInstance.h"
+#include "clang/Frontend/TextDiagnosticPrinter.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/DynamicTypeMap.h"
 #include "llvm/ADT/SmallSet.h"
@@ -24,6 +27,10 @@
 
 using namespace clang;
 using namespace ento;
+
+CallEvent::FileASTUnitMapping CallEvent::FileASTUnitMap;
+CallEvent::FunctionAstUnitMapping CallEvent::FunctionAstUnitMap;
+CallEvent::FunctionFileMapping CallEvent::FunctionFileMap;
 
 QualType CallEvent::getResultType() const {
   const Expr *E = getOriginExpr();
@@ -354,6 +361,44 @@ void AnyFunctionCall::getInitialStackFrameContents(
   addParameterValuesToBindings(CalleeCtx, Bindings, SVB, *this,
                                D->parameters());
 }
+
+RuntimeDefinition AnyFunctionCall::getRuntimeDefinition() const {
+  const FunctionDecl *FD = getDecl();
+  // Note that the AnalysisDeclContext will have the FunctionDecl with
+  // the definition (if one exists).
+  if (!FD)
+    return RuntimeDefinition();
+
+  AnalysisDeclContext *AD =
+    getLocationContext()->getAnalysisDeclContext()->
+    getManager()->getContext(FD);
+  if (AD->getBody())
+    return RuntimeDefinition(AD->getDecl());
+
+  auto Engine = static_cast<ExprEngine *>(
+      getState()->getStateManager().getOwningEngine());
+  CompilerInstance &CI = Engine->getCompilerInstance();
+
+  auto ASTLoader = [&](StringRef ASTFileName) {
+    IntrusiveRefCntPtr<DiagnosticOptions> DiagOpts = new DiagnosticOptions();
+    TextDiagnosticPrinter *DiagClient =
+        new TextDiagnosticPrinter(llvm::errs(), &*DiagOpts);
+    IntrusiveRefCntPtr<DiagnosticIDs> DiagID(new DiagnosticIDs());
+    IntrusiveRefCntPtr<DiagnosticsEngine> Diags(
+        new DiagnosticsEngine(DiagID, &*DiagOpts, DiagClient));
+    return ASTUnit::LoadFromASTFile(
+               ASTFileName, CI.getPCHContainerOperations()->getRawReader(),
+               Diags, CI.getFileSystemOpts())
+        .release();
+  };
+
+  const FunctionDecl *XTUDecl = AD->getASTContext().getXTUDefinition(
+      FD, CI, Engine->getAnalysisManager().options.getXTUDir(),
+      CI.getDiagnostics(), ASTLoader);
+
+  return RuntimeDefinition(XTUDecl);
+}
+
 
 bool AnyFunctionCall::argumentsMayEscape() const {
   if (CallEvent::argumentsMayEscape() || hasVoidPointerToNonConstArg())

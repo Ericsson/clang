@@ -50,6 +50,7 @@ class TypeAliasTemplateDecl;
 class TypeLoc;
 class UnresolvedSetImpl;
 class VarTemplateDecl;
+class CompilerInstance;
 
 /// \brief A container of type source information.
 ///

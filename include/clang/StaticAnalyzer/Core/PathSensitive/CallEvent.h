@@ -165,6 +165,10 @@ private:
   void Release() const;
 
 protected:
+  typedef llvm::StringMap<std::string> FunctionFileMapping;
+  typedef llvm::StringMap<clang::ASTUnit*> FunctionAstUnitMapping;
+  typedef llvm::StringMap<clang::ASTUnit*> FileASTUnitMapping;
+
   friend class CallEventManager;
 
   CallEvent(const Expr *E, ProgramStateRef state, const LocationContext *lctx)
@@ -384,6 +388,11 @@ public:
   // Iterator access to formal parameters and their types.
 private:
   typedef std::const_mem_fun_t<QualType, ParmVarDecl> get_type_fun;
+  
+protected:
+  static FileASTUnitMapping FileASTUnitMap;
+  static FunctionAstUnitMapping FunctionAstUnitMap;
+  static FunctionFileMapping FunctionFileMap;
 
 public:
   /// Return call's formal parameters.
@@ -436,20 +445,7 @@ public:
     return cast<FunctionDecl>(CallEvent::getDecl());
   }
 
-  RuntimeDefinition getRuntimeDefinition() const override {
-    const FunctionDecl *FD = getDecl();
-    // Note that the AnalysisDeclContext will have the FunctionDecl with
-    // the definition (if one exists).
-    if (FD) {
-      AnalysisDeclContext *AD =
-        getLocationContext()->getAnalysisDeclContext()->
-        getManager()->getContext(FD);
-      if (AD->getBody())
-        return RuntimeDefinition(AD->getDecl());
-    }
-
-    return RuntimeDefinition();
-  }
+  RuntimeDefinition getRuntimeDefinition() const override;
 
   bool argumentsMayEscape() const override;
 
