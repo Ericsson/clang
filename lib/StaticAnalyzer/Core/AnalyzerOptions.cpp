@@ -370,3 +370,10 @@ bool AnalyzerOptions::shouldDisplayNotesAsEvents() {
         getBooleanOption("notes-as-events", /*Default=*/false);
   return DisplayNotesAsEvents.getValue();
 }
+
+StringRef AnalyzerOptions::getXTUDir() {
+  if (!XTUDir.hasValue())
+    XTUDir = getOptionAsString("xtu-dir", "");
+  return XTUDir.getValue();
+}
+

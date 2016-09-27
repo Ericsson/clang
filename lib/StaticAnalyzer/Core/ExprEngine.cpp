@@ -67,25 +67,19 @@ REGISTER_TRAIT_WITH_PROGRAMSTATE(InitializedTemporariesSet,
 
 static const char* TagProviderName = "ExprEngine";
 
-ExprEngine::ExprEngine(AnalysisManager &mgr, bool gcEnabled,
-                       SetOfConstDecls *VisitedCalleesIn,
-                       FunctionSummariesTy *FS,
-                       InliningModes HowToInlineIn)
-  : AMgr(mgr),
-    AnalysisDeclContexts(mgr.getAnalysisDeclContextManager()),
-    Engine(*this, FS),
-    G(Engine.getGraph()),
-    StateMgr(getContext(), mgr.getStoreManagerCreator(),
-             mgr.getConstraintManagerCreator(), G.getAllocator(),
-             this),
-    SymMgr(StateMgr.getSymbolManager()),
-    svalBuilder(StateMgr.getSValBuilder()),
-    currStmtIdx(0), currBldrCtx(nullptr),
-    ObjCNoRet(mgr.getASTContext()),
-    ObjCGCEnabled(gcEnabled), BR(mgr, *this),
-    VisitedCallees(VisitedCalleesIn),
-    HowToInline(HowToInlineIn)
-{
+ExprEngine::ExprEngine(CompilerInstance &CI, AnalysisManager &mgr,
+                       bool gcEnabled, SetOfConstDecls *VisitedCalleesIn,
+                       FunctionSummariesTy *FS, InliningModes HowToInlineIn)
+    : CI(CI), AMgr(mgr),
+      AnalysisDeclContexts(mgr.getAnalysisDeclContextManager()),
+      Engine(*this, FS), G(Engine.getGraph()),
+      StateMgr(getContext(), mgr.getStoreManagerCreator(),
+               mgr.getConstraintManagerCreator(), G.getAllocator(), this),
+      SymMgr(StateMgr.getSymbolManager()),
+      svalBuilder(StateMgr.getSValBuilder()), currStmtIdx(0),
+      currBldrCtx(nullptr), ObjCNoRet(mgr.getASTContext()),
+      ObjCGCEnabled(gcEnabled), BR(mgr, *this),
+      VisitedCallees(VisitedCalleesIn), HowToInline(HowToInlineIn) {
   unsigned TrimInterval = mgr.options.getGraphTrimInterval();
   if (TrimInterval != 0) {
     // Enable eager node reclaimation when constructing the ExplodedGraph.

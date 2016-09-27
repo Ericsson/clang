@@ -79,6 +79,17 @@ static const DeclContext *getEffectiveDeclContext(const Decl *D) {
     if (FD->isExternC())
       return FD->getASTContext().getTranslationUnitDecl();
 
+  // Avoid infinite recursion with code like:
+  //   void f(struct S* p);
+  // Where this is the first declaration of S. This is only valid for C.
+  // For some tools it makes sense to mangle C functions (e.g. avoid collisions
+  // when indexing). It might be nicer to check whether the Decl is in
+  // FunctionPrototypeScope, but this information is lost after the Sema is
+  // done.
+  if (!D->getASTContext().getLangOpts().CPlusPlus && DC->isFunctionOrMethod() &&
+      isa<TagDecl>(D))
+    return D->getASTContext().getTranslationUnitDecl();
+
   return DC->getRedeclContext();
 }
 
@@ -653,9 +664,11 @@ void CXXNameMangler::mangleFunctionEncoding(const FunctionDecl *FD) {
   // <encoding> ::= <function name> <bare-function-type>
 
   // Don't mangle in the type if this isn't a decl we should typically mangle.
-  if (!Context.shouldMangleDeclName(FD)) {
-    mangleName(FD);
-    return;
+  if (!Context.shouldMangleDeclName(FD) &&
+      !(Context.shouldForceMangleProto() &&
+        FD->getType()->getAs<FunctionProtoType>())){
+	 mangleName(FD);
+     return;
   }
 
   AbiTagList ReturnTypeAbiTags = makeFunctionReturnTypeTags(FD);
