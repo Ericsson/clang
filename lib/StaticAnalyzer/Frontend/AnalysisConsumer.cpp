@@ -40,9 +40,17 @@
 #include "llvm/Support/Program.h"
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
+#include <assert.h>
 #include <memory>
 #include <queue>
 #include <utility>
+#include <sys/file.h>
+#include <unistd.h>
+#include <fstream>
+#include <time.h>
+#include "clang/Frontend/TextDiagnosticPrinter.h"
+#include "clang/AST/Mangle.h"
+#include "clang/Basic/TargetInfo.h"
 
 using namespace clang;
 using namespace ento;
@@ -168,6 +176,7 @@ public:
   AnalyzerOptionsRef Opts;
   ArrayRef<std::string> Plugins;
   CodeInjector *Injector;
+  CompilerInstance &CI;
 
   /// \brief Stores the declarations from the local translation unit.
   /// Note, we pre-compute the local declarations at parse time as an
@@ -192,12 +201,12 @@ public:
   /// translation unit.
   FunctionSummariesTy FunctionSummaries;
 
-  AnalysisConsumer(const Preprocessor &pp, const std::string &outdir,
-                   AnalyzerOptionsRef opts, ArrayRef<std::string> plugins,
-                   CodeInjector *injector)
+  AnalysisConsumer(CompilerInstance &CI, const Preprocessor &pp,
+                   const std::string &outdir, AnalyzerOptionsRef opts,
+                   ArrayRef<std::string> plugins, CodeInjector *injector)
       : RecVisitorMode(0), RecVisitorBR(nullptr), Ctx(nullptr), PP(pp),
         OutDir(outdir), Opts(std::move(opts)), Plugins(plugins),
-        Injector(injector) {
+        Injector(injector), CI(CI) {
     DigestAnalyzerOptions();
     if (Opts->PrintStats) {
       llvm::EnableStatistics(false);
@@ -413,6 +422,21 @@ void AnalysisConsumer::storeTopLevelDecls(DeclGroupRef DG) {
 
     LocalTUDecls.push_back(*I);
   }
+}
+
+extern std::string getMangledName(const NamedDecl *ND,
+                                  MangleContext *MangleCtx);
+
+void lockedWrite(const std::string &fileName, const std::string &content) {
+  if (content.empty()) 
+    return;
+  int fd = open(fileName.c_str(), O_CREAT|O_WRONLY|O_APPEND, 0666);
+  flock(fd, LOCK_EX);
+  ssize_t written = write(fd, content.c_str(), content.length());
+  assert(written == static_cast<ssize_t>(content.length()));
+  (void)written;
+  flock(fd, LOCK_UN);
+  close(fd);
 }
 
 static bool shouldSkipFunction(const Decl *D,
@@ -706,7 +730,8 @@ void AnalysisConsumer::ActionExprEngine(Decl *D, bool ObjCGCEnabled,
   if (!Mgr->getAnalysisDeclContext(D)->getAnalysis<RelaxedLiveVariables>())
     return;
 
-  ExprEngine Eng(*Mgr, ObjCGCEnabled, VisitedCallees, &FunctionSummaries,IMode);
+  ExprEngine Eng(CI, *Mgr, ObjCGCEnabled, VisitedCallees, &FunctionSummaries,
+                 IMode);
 
   // Set the graph auditor.
   std::unique_ptr<ExplodedNode::Auditor> Auditor;
@@ -764,7 +789,7 @@ ento::CreateAnalysisConsumer(CompilerInstance &CI) {
   bool hasModelPath = analyzerOpts->Config.count("model-path") > 0;
 
   return llvm::make_unique<AnalysisConsumer>(
-      CI.getPreprocessor(), CI.getFrontendOpts().OutputFile, analyzerOpts,
+      CI, CI.getPreprocessor(), CI.getFrontendOpts().OutputFile, analyzerOpts,
       CI.getFrontendOpts().Plugins,
       hasModelPath ? new ModelInjector(CI) : nullptr);
 }
