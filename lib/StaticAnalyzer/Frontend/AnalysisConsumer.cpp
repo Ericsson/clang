@@ -43,6 +43,13 @@
 #include <memory>
 #include <queue>
 #include <utility>
+#include <sys/file.h>
+#include <unistd.h>
+#include <fstream>
+#include <time.h>
+#include "clang/Frontend/TextDiagnosticPrinter.h"
+#include "clang/AST/Mangle.h"
+#include "clang/Basic/TargetInfo.h"
 
 using namespace clang;
 using namespace ento;
@@ -168,6 +175,7 @@ public:
   AnalyzerOptionsRef Opts;
   ArrayRef<std::string> Plugins;
   CodeInjector *Injector;
+  CompilerInstance &CI;
 
   /// \brief Stores the declarations from the local translation unit.
   /// Note, we pre-compute the local declarations at parse time as an
@@ -192,12 +200,12 @@ public:
   /// translation unit.
   FunctionSummariesTy FunctionSummaries;
 
-  AnalysisConsumer(const Preprocessor &pp, const std::string &outdir,
-                   AnalyzerOptionsRef opts, ArrayRef<std::string> plugins,
-                   CodeInjector *injector)
+  AnalysisConsumer(CompilerInstance &CI, const Preprocessor &pp,
+                   const std::string &outdir, AnalyzerOptionsRef opts,
+                   ArrayRef<std::string> plugins, CodeInjector *injector)
       : RecVisitorMode(0), RecVisitorBR(nullptr), Ctx(nullptr), PP(pp),
         OutDir(outdir), Opts(std::move(opts)), Plugins(plugins),
-        Injector(injector) {
+        Injector(injector), CI(CI) {
     DigestAnalyzerOptions();
     if (Opts->PrintStats) {
       llvm::EnableStatistics(false);
@@ -415,9 +423,25 @@ void AnalysisConsumer::storeTopLevelDecls(DeclGroupRef DG) {
   }
 }
 
+extern std::string getMangledName(const NamedDecl *ND,
+                                  MangleContext *MangleCtx);
+
+void lockedWrite(const std::string &fileName, const std::string &content) {
+  if (content.empty()) 
+    return;
+  int fd = open(fileName.c_str(), O_CREAT|O_WRONLY|O_APPEND, 0777);
+  flock(fd, LOCK_EX);
+  write(fd, content.c_str(), content.length());
+  flock(fd, LOCK_UN);
+  close(fd);
+}
+
 static bool shouldSkipFunction(const Decl *D,
                                const SetOfConstDecls &Visited,
-                               const SetOfConstDecls &VisitedAsTopLevel) {
+                               const SetOfConstDecls &VisitedAsTopLevel,
+                               llvm::StringSet<> &VisitedAsXTU,
+                               MangleContext *MangleCtx,
+                               const std::string &Triple) {
   if (VisitedAsTopLevel.count(D))
     return true;
 
@@ -430,6 +454,7 @@ static bool shouldSkipFunction(const Decl *D,
   //   Count naming convention errors more aggressively.
   if (isa<ObjCMethodDecl>(D))
     return false;
+
   // We also want to reanalyze all C++ copy and move assignment operators to
   // separately check the two cases where 'this' aliases with the parameter and
   // where it may not. (cplusplus.SelfAssignmentChecker)
@@ -437,9 +462,22 @@ static bool shouldSkipFunction(const Decl *D,
     if (MD->isCopyAssignmentOperator() || MD->isMoveAssignmentOperator())
       return false;
   }
-
   // Otherwise, if we visited the function before, do not reanalyze it.
-  return Visited.count(D);
+  const FunctionDecl *FD = dyn_cast<FunctionDecl>(D);
+  if (Visited.count(D)) {
+    return true;
+    /*if (D->getAccess() == AS_private)
+      return true;
+    if (FD && !FD->hasExternalFormalLinkage())
+      return true;*/
+  }
+
+  if (FD && FD->hasExternalFormalLinkage()) {
+    std::string MangledFnName = getMangledName(FD, MangleCtx) + "@" + Triple;
+    if (VisitedAsXTU.count(MangledFnName))
+      return true;
+  }
+  return false;
 }
 
 ExprEngine::InliningModes
@@ -458,6 +496,17 @@ AnalysisConsumer::getInliningModeForFunction(const Decl *D,
 }
 
 void AnalysisConsumer::HandleDeclsCallGraph(const unsigned LocalTUDeclsSize) {
+
+  IntrusiveRefCntPtr<DiagnosticOptions> DiagOpts = new DiagnosticOptions();
+  IntrusiveRefCntPtr<DiagnosticIDs> DiagID(new DiagnosticIDs());
+  TextDiagnosticPrinter *DiagClient =
+      new TextDiagnosticPrinter(llvm::errs(), &*DiagOpts);
+  DiagnosticsEngine Diags(DiagID, &*DiagOpts, DiagClient);
+  std::unique_ptr<MangleContext> MangleCtx(
+      ItaniumMangleContext::create(*Ctx, Diags));
+  MangleCtx->setShouldForceMangleProto(true);
+  std::string Triple = Ctx->getTargetInfo().getTriple().getTriple();
+
   // Build the Call Graph by adding all the top level declarations to the graph.
   // Note: CallGraph can trigger deserialization of more items from a pch
   // (though HandleInterestingDecl); triggering additions to LocalTUDecls.
@@ -475,6 +524,26 @@ void AnalysisConsumer::HandleDeclsCallGraph(const unsigned LocalTUDeclsSize) {
   // often.
   SetOfConstDecls Visited;
   SetOfConstDecls VisitedAsTopLevel;
+
+  // The visitedFunc.txt collects all functions that were inlinded as callee or
+  // top level caller these functions will not be visited as top level nodes.
+  llvm::StringSet<> VisitedAsXTU;
+  std::string VisitedFuncSetFile;
+  StringRef BuildDir = Opts->getXTUDir();
+  if (!BuildDir.empty() && !Opts->shouldReanalyzeXTUVisitedFns()) {
+    clock_t t1 = clock();
+    VisitedFuncSetFile = (BuildDir + "/visitedFunc.txt").str();
+    std::ifstream VisitedFuncSetStream(VisitedFuncSetFile);
+    std::string FunctionName;
+    while (VisitedFuncSetStream >> FunctionName)
+      VisitedAsXTU.insert(FunctionName);
+    VisitedFuncSetStream.close();
+    clock_t t2 = clock();
+    llvm::errs() << "! Reading " << VisitedFuncSetFile << " took "
+                 << ((double)(t2 - t1)) / ((double)CLOCKS_PER_SEC)
+                 << " seconds\n";
+  }
+
   llvm::ReversePostOrderTraversal<clang::CallGraph*> RPOT(&CG);
   for (llvm::ReversePostOrderTraversal<clang::CallGraph*>::rpo_iterator
          I = RPOT.begin(), E = RPOT.end(); I != E; ++I) {
@@ -489,7 +558,8 @@ void AnalysisConsumer::HandleDeclsCallGraph(const unsigned LocalTUDeclsSize) {
 
     // Skip the functions which have been processed already or previously
     // inlined.
-    if (shouldSkipFunction(D, Visited, VisitedAsTopLevel))
+    if (shouldSkipFunction(D->getCanonicalDecl(), Visited, VisitedAsTopLevel,
+                           VisitedAsXTU, MangleCtx.get(), Triple))
       continue;
 
     // Analyze the function.
@@ -505,6 +575,37 @@ void AnalysisConsumer::HandleDeclsCallGraph(const unsigned LocalTUDeclsSize) {
       Visited.insert(isa<ObjCMethodDecl>(Callee) ? Callee
                                                  : Callee->getCanonicalDecl());
     VisitedAsTopLevel.insert(D);
+  }
+
+  if (!BuildDir.empty() && !Opts->shouldReanalyzeXTUVisitedFns()) {
+    clock_t t1 = clock();
+    llvm::StringSet<> NewVisited;
+
+    // FIXME: Unify these loops
+    for (const Decl *D : Visited) {
+      std::string MN =
+          getMangledName(dyn_cast_or_null<FunctionDecl>(D), MangleCtx.get()) +
+          '@' + Triple;
+      if (!VisitedAsXTU.count(MN))
+        NewVisited.insert(MN);
+    }
+
+    for (const Decl *D : VisitedAsTopLevel) {
+      std::string MN =
+          getMangledName(dyn_cast_or_null<FunctionDecl>(D), MangleCtx.get()) +
+          '@' + Triple;
+      if (!VisitedAsXTU.count(MN))
+        NewVisited.insert(MN);
+    }
+
+    std::string NewVisitedString;
+    for (auto &Entry : NewVisited)
+      NewVisitedString += (Entry.getKey() + "\n").str();
+    lockedWrite(VisitedFuncSetFile, NewVisitedString);
+    clock_t t2 = clock();
+    llvm::errs() << "! Writing " << VisitedFuncSetFile << " took "
+                 << ((double)(t2 - t1)) / ((double)CLOCKS_PER_SEC)
+                 << " seconds\n";
   }
 }
 
@@ -704,7 +805,8 @@ void AnalysisConsumer::ActionExprEngine(Decl *D, bool ObjCGCEnabled,
   if (!Mgr->getAnalysisDeclContext(D)->getAnalysis<RelaxedLiveVariables>())
     return;
 
-  ExprEngine Eng(*Mgr, ObjCGCEnabled, VisitedCallees, &FunctionSummaries,IMode);
+  ExprEngine Eng(CI, *Mgr, ObjCGCEnabled, VisitedCallees, &FunctionSummaries,
+                 IMode);
 
   // Set the graph auditor.
   std::unique_ptr<ExplodedNode::Auditor> Auditor;
@@ -716,7 +818,23 @@ void AnalysisConsumer::ActionExprEngine(Decl *D, bool ObjCGCEnabled,
   // Execute the worklist algorithm.
   Eng.ExecuteWorkList(Mgr->getAnalysisDeclContextManager().getStackFrame(D),
                       Mgr->options.getMaxNodesPerTopLevelFunction());
-
+  if (const auto *FD = dyn_cast<FunctionDecl>(D)) {
+    IntrusiveRefCntPtr<DiagnosticOptions> DiagOpts = new DiagnosticOptions();
+    IntrusiveRefCntPtr<DiagnosticIDs> DiagID(new DiagnosticIDs());
+    TextDiagnosticPrinter *DiagClient =
+        new TextDiagnosticPrinter(llvm::errs(), &*DiagOpts);
+    DiagnosticsEngine Diags(DiagID, &*DiagOpts, DiagClient);
+    std::unique_ptr<MangleContext> MangleCtx(
+        ItaniumMangleContext::create(*Ctx, Diags));
+    MangleCtx->setShouldForceMangleProto(true);
+    llvm::errs() << getMangledName(FD, MangleCtx.get()) << " "
+                 << (Eng.hasEmptyWorkList() ? "empty" : "has_work") << "_wl "
+                 << (Eng.wasBlocksExhausted() ? "block_exhausted"
+                                              : "not_exhausted")
+                 << " "
+                 << (Eng.getCoreEngine().wasBlockAborted() ? "has" : "no")
+                 << "_block_aborted\n";
+  }
   // Release the auditor (if any) so that it doesn't monitor the graph
   // created BugReporter.
   ExplodedNode::SetAuditor(nullptr);
@@ -762,7 +880,7 @@ ento::CreateAnalysisConsumer(CompilerInstance &CI) {
   bool hasModelPath = analyzerOpts->Config.count("model-path") > 0;
 
   return llvm::make_unique<AnalysisConsumer>(
-      CI.getPreprocessor(), CI.getFrontendOpts().OutputFile, analyzerOpts,
+      CI, CI.getPreprocessor(), CI.getFrontendOpts().OutputFile, analyzerOpts,
       CI.getFrontendOpts().Plugins,
       hasModelPath ? new ModelInjector(CI) : nullptr);
 }

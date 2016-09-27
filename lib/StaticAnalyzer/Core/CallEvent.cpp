@@ -16,6 +16,7 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
 #include "clang/AST/ParentMap.h"
 #include "clang/Analysis/ProgramPoint.h"
+#include "clang/Frontend/CompilerInstance.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/DynamicTypeMap.h"
 #include "llvm/ADT/SmallSet.h"
@@ -24,6 +25,10 @@
 
 using namespace clang;
 using namespace ento;
+
+CallEvent::FileASTUnitMapping CallEvent::FileASTUnitMap;
+CallEvent::FunctionAstUnitMapping CallEvent::FunctionAstUnitMap;
+CallEvent::FunctionFileMapping CallEvent::FunctionFileMap;
 
 QualType CallEvent::getResultType() const {
   const Expr *E = getOriginExpr();
@@ -354,6 +359,26 @@ void AnyFunctionCall::getInitialStackFrameContents(
   addParameterValuesToBindings(CalleeCtx, Bindings, SVB, *this,
                                D->parameters());
 }
+
+RuntimeDefinition AnyFunctionCall::getRuntimeDefinition() const {
+  const FunctionDecl *FD = getDecl();
+  // Note that the AnalysisDeclContext will have the FunctionDecl with
+  // the definition (if one exists).
+  if (!FD)
+    return RuntimeDefinition();
+
+  AnalysisDeclContext *AD =
+    getLocationContext()->getAnalysisDeclContext()->
+    getManager()->getContext(FD);
+  if (AD->getBody())
+    return RuntimeDefinition(AD->getDecl());
+
+  const FunctionDecl *XTUDecl = FD->getXTUDefinition(
+      ((ExprEngine *)getState()->getStateManager().getOwningEngine())
+          ->getCompilerInstance());
+  return RuntimeDefinition(XTUDecl);
+}
+
 
 bool AnyFunctionCall::argumentsMayEscape() const {
   if (CallEvent::argumentsMayEscape() || hasVoidPointerToNonConstArg())

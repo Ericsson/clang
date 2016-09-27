@@ -40,6 +40,7 @@
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/Specifiers.h"
 #include "clang/Basic/XRayLists.h"
+#include "clang/Basic/VersionTuple.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
@@ -78,12 +79,12 @@ struct fltSemantics;
 } // end namespace llvm
 
 namespace clang {
-
 class ASTMutationListener;
 class ASTRecordLayout;
 class AtomicExpr;
 class BlockExpr;
 class CharUnits;
+class CompilerInstance;
 class CXXABI;
 class DiagnosticsEngine;
 class Expr;
@@ -1904,6 +1905,26 @@ public:
   static bool isObjCNSObjectType(QualType Ty) {
     return Ty->isObjCNSObjectType();
   }
+
+  //===--------------------------------------------------------------------===//
+  //                         Cross-translation unit support
+  //===--------------------------------------------------------------------===//
+private:
+  typedef llvm::StringMap<std::string> FunctionFileMapping;
+  typedef llvm::StringMap<clang::ASTUnit *> FunctionAstUnitMapping;
+  typedef llvm::StringMap<clang::ASTUnit *> FileASTUnitMapping;
+  typedef std::map<TranslationUnitDecl *, ASTImporter *> ASTUnitImporterMapping;
+  typedef std::map<const FunctionDecl *, const FunctionDecl *> ImportMapping;
+  FileASTUnitMapping FileASTUnitMap;
+  FunctionAstUnitMapping FunctionAstUnitMap;
+  FunctionFileMapping FunctionFileMap;
+  ASTUnitImporterMapping ASTUnitImporterMap;
+  ImportMapping ImportMap;
+  ASTImporter &getOrCreateASTImporter(ASTContext &From);
+
+public:
+  const FunctionDecl *getXTUDefinition(const FunctionDecl *FD,
+                                       CompilerInstance &CI);
 
   //===--------------------------------------------------------------------===//
   //                         Type Sizing and Analysis

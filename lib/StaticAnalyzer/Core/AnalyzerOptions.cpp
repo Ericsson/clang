@@ -387,3 +387,16 @@ bool AnalyzerOptions::shouldDisplayNotesAsEvents() {
         getBooleanOption("notes-as-events", /*Default=*/false);
   return DisplayNotesAsEvents.getValue();
 }
+
+StringRef AnalyzerOptions::getXTUDir() {
+  if (!XTUDir.hasValue())
+    XTUDir = getOptionAsString("xtu-dir", "");
+  return XTUDir.getValue();
+}
+
+bool AnalyzerOptions::shouldReanalyzeXTUVisitedFns() {
+  if (!ReanalyzeXTUVisitedFns.hasValue())
+    ReanalyzeXTUVisitedFns =
+        getBooleanOption("reanalyze-xtu-visited", /*Default=*/false);
+  return ReanalyzeXTUVisitedFns.getValue();
+}

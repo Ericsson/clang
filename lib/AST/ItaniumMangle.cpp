@@ -653,9 +653,11 @@ void CXXNameMangler::mangleFunctionEncoding(const FunctionDecl *FD) {
   // <encoding> ::= <function name> <bare-function-type>
 
   // Don't mangle in the type if this isn't a decl we should typically mangle.
-  if (!Context.shouldMangleDeclName(FD)) {
-    mangleName(FD);
-    return;
+  if (!Context.shouldMangleDeclName(FD) &&
+      !(Context.shouldForceMangleProto() &&
+        FD->getType()->getAs<FunctionProtoType>())){
+	 mangleName(FD);
+     return;
   }
 
   AbiTagList ReturnTypeAbiTags = makeFunctionReturnTypeTags(FD);
