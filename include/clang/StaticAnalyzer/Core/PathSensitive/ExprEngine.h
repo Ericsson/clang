@@ -56,6 +56,8 @@ public:
   };
 
 private:
+  CompilerInstance &CI;
+
   AnalysisManager &AMgr;
   
   AnalysisDeclContextManager &AnalysisDeclContexts;
@@ -97,9 +99,8 @@ private:
   InliningModes HowToInline;
 
 public:
-  ExprEngine(AnalysisManager &mgr, bool gcEnabled,
-             SetOfConstDecls *VisitedCalleesIn,
-             FunctionSummariesTy *FS,
+  ExprEngine(CompilerInstance &CI, AnalysisManager &mgr, bool gcEnabled,
+             SetOfConstDecls *VisitedCalleesIn, FunctionSummariesTy *FS,
              InliningModes HowToInlineIn);
 
   ~ExprEngine() override;
@@ -131,6 +132,8 @@ public:
   SValBuilder &getSValBuilder() { return svalBuilder; }
 
   BugReporter& getBugReporter() { return BR; }
+
+  CompilerInstance &getCompilerInstance() { return CI; }
 
   const NodeBuilderContext &getBuilderContext() {
     assert(currBldrCtx);
