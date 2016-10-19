@@ -114,7 +114,7 @@ original_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
 funcmap_workers = multiprocessing.Pool(processes=mainargs.threads)
 signal.signal(signal.SIGINT, original_handler)
 try:
-    res = funcmap_workers.apply_async(map_functions, cmd_order)
+    res = funcmap_workers.map_async(map_functions, cmd_order)
     res.get(9999)
 except KeyboardInterrupt:
     funcmap_workers.terminate()
