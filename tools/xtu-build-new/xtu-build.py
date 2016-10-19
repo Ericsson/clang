@@ -6,6 +6,7 @@ import json
 import multiprocessing
 import os
 import re
+import signal
 import subprocess
 import string
 
@@ -93,17 +94,35 @@ clear_file(os.path.join(mainargs.xtuindir, 'definedFns.txt'))
 clear_file(os.path.join(mainargs.xtuindir, 'externalFns.txt'))
 clear_file(os.path.join(mainargs.xtuindir, 'externalFnMap.txt'))
 
+original_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
 ast_workers = multiprocessing.Pool(processes=mainargs.threads)
-for source in src_order :
-    ast_workers.apply_async(generate_ast, [source])
-ast_workers.close()
-ast_workers.join()
+signal.signal(signal.SIGINT, original_handler)
+try:
+    res = ast_workers.map_async(generate_ast, src_order)
+    # Block with timeout so that signals don't get ignored, python bug
+    # 8296
+    res.get(9999)
+except KeyboardInterrupt:
+    ast_workers.terminate()
+    ast_workers.join()
+    exit(1)
+else:
+    ast_workers.close()
+    ast_workers.join()
 
+original_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
 funcmap_workers = multiprocessing.Pool(processes=mainargs.threads)
-for command in cmd_order :
-    funcmap_workers.apply_async(map_functions, [command])
-funcmap_workers.close()
-funcmap_workers.join()
+signal.signal(signal.SIGINT, original_handler)
+try:
+    res = funcmap_workers.apply_async(map_functions, cmd_order)
+    res.get(9999)
+except KeyboardInterrupt:
+    funcmap_workers.terminate()
+    funcmap_workers.join()
+    exit(1)
+else:
+    funcmap_workers.close()
+    funcmap_workers.join()
 
 
 # Generate externalFnMap.txt
