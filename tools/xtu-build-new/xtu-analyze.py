@@ -23,6 +23,7 @@ parser.add_argument('-j', metavar='threads', dest='threads', help='Number of thr
 parser.add_argument('-v', dest='verbose', action='store_true', help='Verbose output of every command executed')
 parser.add_argument('--clang-path', metavar='clang-path', dest='clang_path', help='Set path of clang binaries to be used (default taken from CLANG_PATH environment variable)', default=os.environ.get('CLANG_PATH', '.'))
 parser.add_argument('--ccc-analyzer-path', metavar='ccc-analyzer-path', dest='ccc_path', help='Set path of ccc-analyzer to be used (default is current directory)', default='.')
+parser.add_argument('--timeout', metavar='N', help='Timeout for analysis in seconds (default: %d)' % timeout, default=timeout)
 mainargs = parser.parse_args()
 
 clang_path = os.path.abspath(mainargs.clang_path)
@@ -77,7 +78,7 @@ def get_compiler_and_arguments(cmd) :
             compiler = arg
     return compiler, args
 
-def analyze(directory, command) :
+def analyze((directory, command)) :
     old_environ = os.environ
     old_workdir = os.getcwd()
     compiler, args = get_compiler_and_arguments(command)
@@ -87,7 +88,14 @@ def analyze(directory, command) :
     ccc_cmd = os.path.join(ccc_path, 'ccc-analyzer') + ' ' + string.join(args, ' ')
     if mainargs.verbose :
         print ccc_cmd
-    subprocess.call(ccc_cmd, shell=True)
+    # Buffer output of subprocess and dump it out at the end, so that
+    # the subprocess doesn't continue to write output after the user
+    # sends SIGTERM
+    po = subprocess.Popen(ccc_cmd, shell=True, stderr=subprocess.PIPE,
+            stdout=subprocess.PIPE)
+    out, err = po.communicate()
+    sys.stderr.write(err)
+    sys.stdout.write(out)
     os.chdir(old_workdir)
     os.environ.update(old_environ)
 
@@ -97,12 +105,22 @@ except OSError:
     print 'Output directory %s already exists!' % os.path.abspath(mainargs.xtuoutdir)
     sys.exit(1)
 
+original_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
 ccc_workers = multiprocessing.Pool(processes=mainargs.threads)
-for step in buildlog :
-    if step['command'] in cmd_2_order :
-        ccc_workers.apply_async(analyze, [step['directory'], step['command']])
-ccc_workers.close()
-ccc_workers.join()
+signal.signal(signal.SIGINT, original_handler)
+steps = [(step['directory'], step['command']) for step in buildlog
+        if step['command'] in cmd_2_order]
+try:
+    res = ccc_workers.map_async(analyze, steps)
+    # Block with timeout so that signals are not ignored, python bug 8296
+    res.get(mainargs.timeout)
+except KeyboardInterrupt:
+    ccc_workers.terminate()
+    ccc_workers.join()
+    exit(1)
+else:
+    ccc_workers.close()
+    ccc_workers.join()
 
 #TODO correct execution order
 
