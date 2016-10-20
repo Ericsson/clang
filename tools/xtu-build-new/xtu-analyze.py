@@ -13,6 +13,9 @@ import sys
 
 threading_factor = int(multiprocessing.cpu_count() * 1.5)
 timeout = 86400
+analyser_output_formats = ['plist-multi-file', 'plist', 'html',
+    'plist-html', 'text']
+analyser_output_format = analyser_output_formats[0]
 
 parser = argparse.ArgumentParser(description='Executes 2nd pass of XTU analysis')
 parser.add_argument('-b', required=True, dest='buildlog', metavar='build.json', help='Use a JSON Compilation Database')
@@ -25,6 +28,10 @@ parser.add_argument('-j', metavar='threads', dest='threads', help='Number of thr
 parser.add_argument('-v', dest='verbose', action='store_true', help='Verbose output of every command executed')
 parser.add_argument('--clang-path', metavar='clang-path', dest='clang_path', help='Set path of clang binaries to be used (default taken from CLANG_PATH environment variable)', default=os.environ.get('CLANG_PATH', '.'))
 parser.add_argument('--ccc-analyzer-path', metavar='ccc-analyzer-path', dest='ccc_path', help='Set path of ccc-analyzer to be used (default is current directory)', default='.')
+parser.add_argument('--output-format', metavar='format',
+    choices=analyser_output_formats, default=analyser_output_format,
+    help='Format for analysis reports (one of %s; default is "%s").' %
+    (', '.join(analyser_output_formats), analyser_output_format))
 parser.add_argument('--timeout', metavar='N', help='Timeout for analysis in seconds (default: %d)' % timeout, default=timeout)
 mainargs = parser.parse_args()
 
@@ -49,7 +56,7 @@ analyzer_env['CLANG'] = os.path.join(clang_path, 'clang')
 analyzer_env['OUT_DIR'] = os.path.abspath(mainargs.xtuindir)
 analyzer_env['CCC_ANALYZER_HTML'] = os.path.abspath(mainargs.xtuoutdir)
 analyzer_env['CCC_ANALYZER_ANALYSIS'] = ' '.join(analyzer_params)
-analyzer_env['CCC_ANALYZER_OUTPUT_FORMAT'] = 'plist-multi-file'
+analyzer_env['CCC_ANALYZER_OUTPUT_FORMAT'] = mainargs.output_format
 #analyzer_env['CCC_ANALYZER_TIMEOUT'] = str(60 * int(args.timeout))
 analyzer_env['IS_INTERCEPTED'] = 'true'
 
