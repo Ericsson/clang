@@ -100,7 +100,7 @@ clear_file(os.path.join(mainargs.xtuindir, 'externalFns.txt'))
 clear_file(os.path.join(mainargs.xtuindir, 'externalFnMap.txt'))
 
 original_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
-ast_workers = multiprocessing.Pool(processes=mainargs.threads)
+ast_workers = multiprocessing.Pool(processes=int(mainargs.threads))
 signal.signal(signal.SIGINT, original_handler)
 try:
     res = ast_workers.map_async(generate_ast, src_order)
@@ -115,7 +115,7 @@ else:
     ast_workers.join()
 
 original_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
-funcmap_workers = multiprocessing.Pool(processes=mainargs.threads)
+funcmap_workers = multiprocessing.Pool(processes=int(mainargs.threads))
 signal.signal(signal.SIGINT, original_handler)
 try:
     res = funcmap_workers.map_async(map_functions, cmd_order)

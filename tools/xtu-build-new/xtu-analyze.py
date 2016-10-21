@@ -133,7 +133,7 @@ except OSError:
     sys.exit(1)
 
 original_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
-analyze_workers = multiprocessing.Pool(processes=mainargs.threads)
+analyze_workers = multiprocessing.Pool(processes=int(mainargs.threads))
 signal.signal(signal.SIGINT, original_handler)
 steps = [(step['directory'], step['command']) for step in buildlog
         if step['command'] in cmd_2_order]
