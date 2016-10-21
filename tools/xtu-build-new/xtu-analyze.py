@@ -26,7 +26,7 @@ parser.add_argument('-e', metavar='enabled-checker', nargs='+', dest='enabled_ch
 parser.add_argument('-d', metavar='disabled-checker', nargs='+', dest='disabled_checkers', help='List all disabled checkers')
 parser.add_argument('-j', metavar='threads', dest='threads', help='Number of threads used (default=' + str(threading_factor) + ')', default=threading_factor)
 parser.add_argument('-v', dest='verbose', action='store_true', help='Verbose output of every command executed')
-parser.add_argument('--clang-path', metavar='clang-path', dest='clang_path', help='Set path of clang binaries to be used (default taken from CLANG_PATH environment variable)', default=os.environ.get('CLANG_PATH', '.'))
+parser.add_argument('--clang-path', metavar='clang-path', dest='clang_path', help='Set path of clang binaries to be used (default taken from CLANG_PATH environment variable)', default=os.environ.get('CLANG_PATH'))
 parser.add_argument('--ccc-analyzer-path', metavar='ccc-analyzer-path', dest='ccc_path', help='Set path of ccc-analyzer to be used (default is current directory)', default='.')
 parser.add_argument('--output-format', metavar='format',
     choices=analyser_output_formats, default=analyser_output_format,
@@ -35,9 +35,12 @@ parser.add_argument('--output-format', metavar='format',
 parser.add_argument('--timeout', metavar='N', help='Timeout for analysis in seconds (default: %d)' % timeout, default=timeout)
 mainargs = parser.parse_args()
 
-clang_path = os.path.abspath(mainargs.clang_path)
+if mainargs.clang_path is None :
+    clang_path = ''
+else :
+    clang_path = os.path.abspath(mainargs.clang_path)
 if mainargs.verbose :
-    print 'XTU uses clang dir: ' + clang_path
+    print 'XTU uses clang dir: ' + (clang_path if clang_path != '' else '<taken from PATH>')
 
 ccc_path = os.path.abspath(mainargs.ccc_path)
 if mainargs.verbose :

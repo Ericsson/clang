@@ -18,13 +18,16 @@ parser.add_argument('-b', required=True, dest='buildlog', metavar='build.json', 
 parser.add_argument('-p', metavar='preanalyze-dir', dest='xtuindir', help='Use directory for reading preanalyzation data (default=".xtu")', default='.xtu')
 parser.add_argument('-j', metavar='threads', dest='threads', help='Number of threads used (default=' + str(threading_factor) + ')', default=threading_factor)
 parser.add_argument('-v', dest='verbose', action='store_true', help='Verbose output of every command executed')
-parser.add_argument('--clang-path', metavar='clang-path', dest='clang_path', help='Set path of clang binaries to be used (default taken from CLANG_PATH environment variable)', default=os.environ.get('CLANG_PATH', '.'))
+parser.add_argument('--clang-path', metavar='clang-path', dest='clang_path', help='Set path of clang binaries to be used (default taken from CLANG_PATH environment variable)', default=os.environ.get('CLANG_PATH'))
 parser.add_argument('--timeout', metavar='N', help='Timeout for build in seconds (default: %d)' % timeout, default=timeout)
 mainargs = parser.parse_args()
 
-clang_path = os.path.abspath(mainargs.clang_path)
+if mainargs.clang_path is None :
+    clang_path = ''
+else :
+    clang_path = os.path.abspath(mainargs.clang_path)
 if mainargs.verbose :
-    print 'XTU uses clang dir: ' + clang_path
+    print 'XTU uses clang dir: ' + (clang_path if clang_path != '' else '<taken from PATH>')
 
 buildlog_file = open(mainargs.buildlog, 'r')
 buildlog = json.load(buildlog_file)
@@ -78,7 +81,7 @@ def generate_ast(source) :
             pass
         else :
             raise
-    ast_command = os.path.join(clang_path, 'clang -emit-ast') + ' ' + string.join(args, ' ') + ' -w ' + source + ' -o ' + ast_path
+    ast_command = os.path.join(clang_path, 'clang') + ' -emit-ast ' + string.join(args, ' ') + ' -w ' + source + ' -o ' + ast_path
     if mainargs.verbose :
         print ast_command
     subprocess.call(ast_command, shell=True)
