@@ -50,9 +50,11 @@ static cl::opt<std::string> XTUDir(
 static void lockedWrite(const std::string &fileName,
                         const std::string &content) {
   if (!content.empty()) {
-    int fd = open(fileName.c_str(), O_CREAT | O_WRONLY | O_APPEND, 0777);
+    int fd = open(fileName.c_str(), O_CREAT | O_WRONLY | O_APPEND, 0666);
     flock(fd, LOCK_EX);
-    write(fd, content.c_str(), content.length());
+    ssize_t written = write(fd, content.c_str(), content.length());
+    assert(written == content.length());
+    (void)written;
     flock(fd, LOCK_UN);
     close(fd);
   }
