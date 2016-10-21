@@ -11,7 +11,6 @@ import subprocess
 import string
 import sys
 
-threading_factor = int(multiprocessing.cpu_count() * 1.5)
 timeout = 86400
 analyser_output_formats = ['plist-multi-file', 'plist', 'html',
     'plist-html', 'text']
@@ -19,12 +18,12 @@ analyser_output_format = analyser_output_formats[0]
 
 parser = argparse.ArgumentParser(description='Executes 2nd pass of XTU analysis')
 parser.add_argument('-b', required=True, dest='buildlog', metavar='build.json', help='Use a JSON Compilation Database')
-#parser.add_argument('-g', required=True, dest='buildgraph', metavar='build-graph.json', help='Use a JSON Build Dependency Graph')
+#parser.add_argument('-g', dest='buildgraph', metavar='build-graph.json', help='Use a JSON Build Dependency Graph (required in normal mode)')
 parser.add_argument('-p', metavar='preanalyze-dir', dest='xtuindir', help='Use directory for reading preanalyzation data (default=".xtu")', default='.xtu')
 parser.add_argument('-o', metavar='output-dir', dest='xtuoutdir', help='Use directory for output analyzation results (default=".xtu-out")', default='.xtu-out')
 parser.add_argument('-e', metavar='enabled-checker', nargs='+', dest='enabled_checkers', help='List all enabled checkers')
 parser.add_argument('-d', metavar='disabled-checker', nargs='+', dest='disabled_checkers', help='List all disabled checkers')
-parser.add_argument('-j', metavar='threads', dest='threads', help='Number of threads used (default=' + str(threading_factor) + ')', default=threading_factor)
+parser.add_argument('-j', metavar='threads', dest='threads', help='Number of threads used (default=1)', default=1)
 parser.add_argument('-v', dest='verbose', action='store_true', help='Verbose output of every command executed')
 parser.add_argument('--clang-path', metavar='clang-path', dest='clang_path', help='Set path of clang binaries to be used (default taken from CLANG_PATH environment variable)', default=os.environ.get('CLANG_PATH'))
 parser.add_argument('--ccc-analyzer-path', metavar='ccc-analyzer-path', dest='ccc_path', help='Set path of ccc-analyzer to be used (default is current directory)', default='.')
@@ -33,7 +32,15 @@ parser.add_argument('--output-format', metavar='format',
     help='Format for analysis reports (one of %s; default is "%s").' %
     (', '.join(analyser_output_formats), analyser_output_format))
 parser.add_argument('--timeout', metavar='N', help='Timeout for analysis in seconds (default: %d)' % timeout, default=timeout)
+parser.add_argument('--reanalyze-xtu-visited', dest='without_visitedfns', action='store_true', help='Do not use a buildgraph file and visitedFunc.txt, reanalyze everything in random order with full parallelism (set -j for optimal results)')
 mainargs = parser.parse_args()
+
+#if mainargs.without_visitedfns and mainargs.buildgraph is not None :
+#    print 'A buildgraph JSON cannot be used when in reanalyze-xtu-visited mode.'
+#    sys.exit(1)
+#if not mainargs.without_visitedfns and mainargs.buildgraph is None :
+#    print 'A buildgraph JSON should be given in normal mode to avoid revisiting functions.'
+#    sys.exit(1)
 
 if mainargs.clang_path is None :
     clang_path = ''
@@ -52,6 +59,8 @@ if mainargs.enabled_checkers:
 if mainargs.disabled_checkers:
     analyzer_params += [ '-analyzer-disable-checker', mainargs.disable_checkers ]
 analyzer_params += [ '-analyzer-config', 'xtu-dir=' + os.path.abspath(mainargs.xtuindir) ]
+if mainargs.without_visitedfns :
+    analyzer_params += [ '-analyzer-config', 'reanalyze-xtu-visited=true' ]
 analyzer_params += [ '-analyzer-stats' ]
 
 analyzer_env = {}

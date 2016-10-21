@@ -40,6 +40,7 @@
 #include "llvm/Support/Program.h"
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
+#include <assert.h>
 #include <memory>
 #include <queue>
 #include <utility>
@@ -429,9 +430,11 @@ extern std::string getMangledName(const NamedDecl *ND,
 void lockedWrite(const std::string &fileName, const std::string &content) {
   if (content.empty()) 
     return;
-  int fd = open(fileName.c_str(), O_CREAT|O_WRONLY|O_APPEND, 0777);
+  int fd = open(fileName.c_str(), O_CREAT|O_WRONLY|O_APPEND, 0666);
   flock(fd, LOCK_EX);
-  write(fd, content.c_str(), content.length());
+  ssize_t written = write(fd, content.c_str(), content.length());
+  assert(written == content.length());
+  (void)written;
   flock(fd, LOCK_UN);
   close(fd);
 }
