@@ -10,6 +10,8 @@ import signal
 import subprocess
 import string
 import sys
+import threading
+import time
 
 timeout = 86400
 analyser_output_formats = ['plist', 'plist-multi-file', 'html', 'plist-html', 'text']
@@ -17,7 +19,7 @@ analyser_output_format = analyser_output_formats[0]
 
 parser = argparse.ArgumentParser(description='Executes 2nd pass of XTU analysis')
 parser.add_argument('-b', required=True, dest='buildlog', metavar='build.json', help='Use a JSON Compilation Database')
-#parser.add_argument('-g', dest='buildgraph', metavar='build-graph.json', help='Use a JSON Build Dependency Graph (required in normal mode)')
+parser.add_argument('-g', dest='buildgraph', metavar='build-graph.json', help='Use a JSON Build Dependency Graph (required in normal mode)')
 parser.add_argument('-p', metavar='preanalyze-dir', dest='xtuindir', help='Use directory for reading preanalyzation data (default=".xtu")', default='.xtu')
 parser.add_argument('-o', metavar='output-dir', dest='xtuoutdir', help='Use directory for output analyzation results (default=".xtu-out")', default='.xtu-out')
 parser.add_argument('-e', metavar='enabled-checker', nargs='+', dest='enabled_checkers', help='List all enabled checkers')
@@ -34,12 +36,12 @@ parser.add_argument('--timeout', metavar='N', help='Timeout for analysis in seco
 parser.add_argument('--reanalyze-xtu-visited', dest='without_visitedfns', action='store_true', help='Do not use a buildgraph file and visitedFunc.txt, reanalyze everything in random order with full parallelism (set -j for optimal results)')
 mainargs = parser.parse_args()
 
-#if mainargs.without_visitedfns and mainargs.buildgraph is not None :
-#    print 'A buildgraph JSON cannot be used when in reanalyze-xtu-visited mode.'
-#    sys.exit(1)
-#if not mainargs.without_visitedfns and mainargs.buildgraph is None :
-#    print 'A buildgraph JSON should be given in normal mode to avoid revisiting functions.'
-#    sys.exit(1)
+if mainargs.without_visitedfns and mainargs.buildgraph is not None :
+    print 'A buildgraph JSON cannot be used when in reanalyze-xtu-visited mode.'
+    sys.exit(1)
+if not mainargs.without_visitedfns and mainargs.buildgraph is None :
+    print 'A buildgraph JSON should be given in normal mode to avoid revisiting functions.'
+    sys.exit(1)
 
 if mainargs.clang_path is None :
     clang_path = ''
@@ -77,21 +79,41 @@ analyzer_env['ANALYZE_BUILD_PARAMETERS'] = ' '.join(passthru_analyzer_params)
 analyzer_env['ANALYZE_BUILD_REPORT_FORMAT'] = mainargs.output_format
 #analyzer_env['ANALYZE_BUILD_VERBOSE'] = 'DEBUG'
 
+graph_lock = threading.Lock()
+
 buildlog_file = open(mainargs.buildlog, 'r')
 buildlog = json.load(buildlog_file)
 buildlog_file.close()
 
-#buildgraph_file = open(mainargs.buildgraph, 'r')
-#buildgraph = json.load(buildgraph_file)
-#buildgraph_file.close()
+if not mainargs.without_visitedfns :
+    buildgraph_file = open(mainargs.buildgraph, 'r')
+    buildgraph = json.load(buildgraph_file)
+    buildgraph_file.close()
 
 src_pattern = re.compile('.*\.(cc|c|cxx|cpp)$', re.IGNORECASE)
-cmd_2_order = {}
+dircmd_separator = ': '
+dircmd_2_orders = {}
+dep_graph = {}
 build_steps = 0
 for step in buildlog :
     if src_pattern.match(step['file']) :
-        cmd_2_order[step['command']] = build_steps
+        uid = step['directory'] + dircmd_separator + step['command']
+        if uid not in dircmd_2_orders :
+            dircmd_2_orders[uid] = [build_steps]
+        else :
+            dircmd_2_orders[uid].append(build_steps)
     build_steps += 1
+
+if not mainargs.without_visitedfns :
+    for dep in buildgraph :
+        assert len(dep) == 2
+        assert dep[0] >= 0 and dep[0] < build_steps
+        assert dep[1] >= 0 and dep[1] < build_steps
+        assert dep[0] != dep[1]
+        if dep[1] not in dep_graph :
+            dep_graph[dep[1]] = [dep[0]]
+        else :
+            dep_graph[dep[1]].append(dep[0])
 
 def get_compiler_and_arguments(cmd) :
     had_command = False
@@ -104,7 +126,7 @@ def get_compiler_and_arguments(cmd) :
             compiler = arg
     return compiler, args
 
-def analyze((directory, command)) :
+def analyze(directory, command) :
     old_environ = os.environ
     old_workdir = os.getcwd()
     compiler, args = get_compiler_and_arguments(command)
@@ -126,6 +148,47 @@ def analyze((directory, command)) :
     os.chdir(old_workdir)
     os.environ.update(old_environ)
 
+def analyze_work() :
+    while len(dircmd_2_orders) > 0 :
+        graph_lock.acquire()
+        found_dircmd_orders = None
+        found_dircmd = None
+        found_orders = None
+        for dircmd_orders in dircmd_2_orders.items() :
+            dircmd = dircmd_orders[0].split(dircmd_separator, 2)
+            orders = dircmd_orders[1]
+            assert len(dircmd) == 2 and len(dircmd[0]) > 0 and len(dircmd[1]) > 0
+            assert len(orders) > 0
+            independent = True
+            for order in orders :
+                depends = dep_graph.get(order)
+                if depends is not None :
+                    independent = False
+            if independent :
+                found_dircmd_orders = dircmd_orders
+                found_dircmd = dircmd
+                found_orders = orders
+                break
+        if found_dircmd_orders is not None :
+            del dircmd_2_orders[found_dircmd_orders[0]]
+            graph_lock.release()
+            analyze(found_dircmd[0], found_dircmd[1])
+            graph_lock.acquire()
+            deps_2_remove = []
+            for dep in dep_graph.items() :
+                for i in range(len(dep[1])) :
+                    if dep[1][i] in found_orders :
+                        dep[1][i] = dep[1][-1]
+                        del dep[1][-1]
+                        if len(dep[1]) == 0 :
+                            deps_2_remove.append(dep[0])
+            for dep in deps_2_remove :
+                del dep_graph[dep]
+            graph_lock.release()
+        else :
+            graph_lock.release()
+            time.sleep(0.25)
+
 try:
     os.makedirs(os.path.abspath(mainargs.xtuoutdir))
 except OSError:
@@ -133,23 +196,18 @@ except OSError:
     sys.exit(1)
 
 original_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
-analyze_workers = multiprocessing.Pool(processes=int(mainargs.threads))
 signal.signal(signal.SIGINT, original_handler)
-steps = [(step['directory'], step['command']) for step in buildlog
-        if step['command'] in cmd_2_order]
-try:
-    res = analyze_workers.map_async(analyze, steps)
-    # Block with timeout so that signals are not ignored, python bug 8296
-    res.get(mainargs.timeout)
-except KeyboardInterrupt:
-    analyze_workers.terminate()
-    analyze_workers.join()
-    exit(1)
-else:
-    analyze_workers.close()
-    analyze_workers.join()
 
-#TODO correct execution order
+analyze_workers = []
+for i in range(int(mainargs.threads)) :
+    analyze_workers.append(threading.Thread(target=analyze_work))
+for worker in analyze_workers :
+    worker.start()
+try:
+    for worker in analyze_workers :
+        worker.join(9999999999)
+except KeyboardInterrupt:
+    exit(1)
 
 os.system('rm -vf ' + os.path.join(os.path.abspath(mainargs.xtuindir), 'visitedFunc.txt'))
 try:
