@@ -101,9 +101,9 @@ def main():
             if line in fns and not line in external_map:
                 external_map[line] = fns[line]
 
-    with open(tmpdir + "externalFnMap.txt", "w") as out_file:
-        for func, fname in list(external_map.items()):
-            out_file.write("%s %s.ast\n" % (func, fname))
+#    with open(tmpdir + "externalFnMap.txt", "w") as out_file:
+#        for func, fname in list(external_map.items()):
+#            out_file.write("%s %s.ast\n" % (func, fname))
 
     #-------------- analyze call graph to find analysis order --------------#
 
@@ -213,12 +213,12 @@ def main():
         dependency_file.write(json.dumps(list_graph))
 
     # topological order of build_graph
-    file_order = topological_order(build_graph)
-    print("write topological order of build commands to "+ tmpdir +"order.txt")
-    with open(tmpdir + "order.txt", "w") as order_file:
-        for file_id in file_order:
-            order_file.write(sorted_commands[file_id]['command'])
-            order_file.write("\n")
+#    file_order = topological_order(build_graph)
+#    print("write topological order of build commands to "+ tmpdir +"order.txt")
+#    with open(tmpdir + "order.txt", "w") as order_file:
+#        for file_id in file_order:
+#            order_file.write(sorted_commands[file_id]['command'])
+#            order_file.write("\n")
 
 
 if __name__ == "__main__":
