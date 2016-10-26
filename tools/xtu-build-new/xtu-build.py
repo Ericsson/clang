@@ -33,7 +33,7 @@ buildlog_file = open(mainargs.buildlog, 'r')
 buildlog = json.load(buildlog_file)
 buildlog_file.close()
 
-src_pattern = re.compile('.*\.(cc|c|cxx|cpp)$', re.IGNORECASE)
+src_pattern = re.compile('.*\.(C|c|cc|cpp|cxx|ii|m|mm)$', re.IGNORECASE)
 src_2_cmd = {}
 src_order = []
 cmd_2_src = {}

@@ -90,7 +90,7 @@ if not mainargs.without_visitedfns :
     buildgraph = json.load(buildgraph_file)
     buildgraph_file.close()
 
-src_pattern = re.compile('.*\.(cc|c|cxx|cpp)$', re.IGNORECASE)
+src_pattern = re.compile('.*\.(C|c|cc|cpp|cxx|ii|m|mm)$', re.IGNORECASE)
 dircmd_separator = ': '
 dircmd_2_orders = {}
 dep_graph = {}
