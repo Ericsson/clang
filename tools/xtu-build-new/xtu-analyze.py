@@ -36,6 +36,10 @@ parser.add_argument('--timeout', metavar='N', help='Timeout for analysis in seco
 parser.add_argument('--reanalyze-xtu-visited', dest='without_visitedfns', action='store_true', help='Do not use a buildgraph file and visitedFunc.txt, reanalyze everything in random order with full parallelism (set -j for optimal results)')
 mainargs = parser.parse_args()
 
+concurrent_threads = 0
+concurrent_thread_times = [0.0]
+concurrent_thread_last_clock = time.time()
+
 if mainargs.without_visitedfns and mainargs.buildgraph is not None :
     print 'A buildgraph JSON cannot be used when in reanalyze-xtu-visited mode.'
     sys.exit(1)
@@ -149,6 +153,12 @@ def analyze(directory, command) :
     os.environ.update(old_environ)
 
 def analyze_work() :
+    global concurrent_threads
+    global concurrent_thread_times
+    global concurrent_thread_last_clock
+    global graph_lock
+    global dircmd_2_orders
+    global dep_graph
     while len(dircmd_2_orders) > 0 :
         graph_lock.acquire()
         found_dircmd_orders = None
@@ -171,9 +181,24 @@ def analyze_work() :
                 break
         if found_dircmd_orders is not None :
             del dircmd_2_orders[found_dircmd_orders[0]]
+            
+            concurrent_thread_current_clock = time.time()
+            concurrent_thread_times[concurrent_threads] += concurrent_thread_current_clock - concurrent_thread_last_clock
+            concurrent_thread_last_clock = concurrent_thread_current_clock
+            concurrent_threads += 1
+            if len(concurrent_thread_times) == concurrent_threads :
+                concurrent_thread_times.append(0.0)
+            
             graph_lock.release()
             analyze(found_dircmd[0], found_dircmd[1])
             graph_lock.acquire()
+            
+            concurrent_thread_current_clock = time.time()
+            concurrent_thread_times[concurrent_threads] += concurrent_thread_current_clock - concurrent_thread_last_clock
+            concurrent_thread_last_clock = concurrent_thread_current_clock
+            concurrent_threads -= 1
+            assert concurrent_threads >= 0
+            
             deps_2_remove = []
             for dep in dep_graph.items() :
                 for i in range(len(dep[1])) :
@@ -187,7 +212,7 @@ def analyze_work() :
             graph_lock.release()
         else :
             graph_lock.release()
-            time.sleep(0.25)
+            time.sleep(0.125)
 
 try:
     os.makedirs(os.path.abspath(mainargs.xtuoutdir))
@@ -215,4 +240,13 @@ try:
     print 'Removing directory %s because it contains no reports' % os.path.abspath(mainargs.xtuoutdir)
 except OSError:
     pass
+
+assert concurrent_threads == 0
+concurrent_thread_times[0] += time.time() - concurrent_thread_last_clock
+sumtime = 0.0
+for i in range(len(concurrent_thread_times)) :
+    sumtime += concurrent_thread_times[i]
+print '--- Total running time: %.2fs' % sumtime
+for i in range(len(concurrent_thread_times)) :
+    print '----- ' + (('using %d processes' % i) if i != 0 else 'self time') + ' for %.2fs (%.0f%%)' % (concurrent_thread_times[i], concurrent_thread_times[i] * 100.0 / sumtime)
 
