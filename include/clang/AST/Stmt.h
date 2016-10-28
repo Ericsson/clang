@@ -693,9 +693,10 @@ class CaseStmt : public SwitchCase {
                              // GNU "case 1 ... 4" extension
 public:
   CaseStmt(Expr *lhs, Expr *rhs, SourceLocation caseLoc,
-           SourceLocation ellipsisLoc, SourceLocation colonLoc)
+           SourceLocation ellipsisLoc, SourceLocation colonLoc,
+           Stmt *SubStmt=nullptr)
     : SwitchCase(CaseStmtClass, caseLoc, colonLoc) {
-    SubExprs[SUBSTMT] = nullptr;
+    SubExprs[SUBSTMT] = SubStmt;
     SubExprs[LHS] = reinterpret_cast<Stmt*>(lhs);
     SubExprs[RHS] = reinterpret_cast<Stmt*>(rhs);
     EllipsisLoc = ellipsisLoc;
