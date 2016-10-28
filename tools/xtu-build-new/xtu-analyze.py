@@ -94,21 +94,21 @@ src_pattern = re.compile('.*\.(C|c|cc|cpp|cxx|ii|m|mm)$', re.IGNORECASE)
 dircmd_separator = ': '
 dircmd_2_orders = {}
 dep_graph = {}
-build_steps = 0
+src_build_steps = 0
 for step in buildlog :
     if src_pattern.match(step['file']) :
         uid = step['directory'] + dircmd_separator + step['command']
         if uid not in dircmd_2_orders :
-            dircmd_2_orders[uid] = [build_steps]
+            dircmd_2_orders[uid] = [src_build_steps]
         else :
-            dircmd_2_orders[uid].append(build_steps)
-    build_steps += 1
+            dircmd_2_orders[uid].append(src_build_steps)
+        src_build_steps += 1
 
 if not mainargs.without_visitedfns :
     for dep in buildgraph :
         assert len(dep) == 2
-        assert dep[0] >= 0 and dep[0] < build_steps
-        assert dep[1] >= 0 and dep[1] < build_steps
+        assert dep[0] >= 0 and dep[0] < src_build_steps
+        assert dep[1] >= 0 and dep[1] < src_build_steps
         assert dep[0] != dep[1]
         if dep[1] not in dep_graph :
             dep_graph[dep[1]] = [dep[0]]
