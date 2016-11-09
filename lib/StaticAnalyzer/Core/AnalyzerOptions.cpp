@@ -400,3 +400,10 @@ bool AnalyzerOptions::shouldReanalyzeXTUVisitedFns() {
         getBooleanOption("reanalyze-xtu-visited", /*Default=*/false);
   return ReanalyzeXTUVisitedFns.getValue();
 }
+
+StringRef AnalyzerOptions::coverageExportDir() {
+  if (!CoverageExportDir.hasValue())
+    CoverageExportDir = getOptionAsString("record-coverage", /*Default=*/"");
+  return CoverageExportDir.getValue();
+}
+

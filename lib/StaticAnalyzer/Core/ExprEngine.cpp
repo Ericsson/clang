@@ -30,8 +30,13 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/LoopWidening.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/LoopUnrolling.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/LineIterator.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/SaveAndRestore.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/raw_os_ostream.h"
+#include <fstream>
 
 #ifndef NDEBUG
 #include "llvm/Support/GraphWriter.h"
@@ -302,6 +307,45 @@ ExprEngine::createTemporaryRegionIfNeeded(ProgramStateRef State,
   return State;
 }
 
+// Mapping from file to line indexed hit count vector.
+static llvm::DenseMap<const FileEntry *,std::vector<int>> CoverageInfo;
+
+static void dumpCoverageInfo(llvm::SmallVectorImpl<char> &Path,
+                             SourceManager &SM) {
+  for (auto &Entry : CoverageInfo) {
+    SmallString<128> FilePath;
+    const FileEntry *FE = Entry.getFirst();
+    llvm::sys::path::append(FilePath, Path, FE->getName() + ".gcov");
+    SmallString<128> DirPath = FilePath;
+    llvm::sys::path::remove_filename(DirPath);
+    llvm::sys::fs::create_directories(DirPath);
+    bool Invalid = false;
+    llvm::MemoryBuffer *Buf = SM.getMemoryBufferForFile(FE, &Invalid);
+    if (Invalid)
+      continue;
+    std::ofstream OutFile(FilePath.c_str());
+    if (!OutFile) {
+      llvm::errs() << FilePath << " Fuck!\n";
+      continue;
+    }
+    llvm::raw_os_ostream Out(OutFile);
+    Out << "-:0:Source:" << FE->getName() << '\n';
+    Out << "-:0:Runs:1\n";
+    Out << "-:0:Programs:1\n";
+    for (llvm::line_iterator LI(*Buf, false); !LI.is_at_eof(); ++LI) {
+      int Count = Entry.getSecond()[LI.line_number() - 1];
+      if (Count > 0) {
+        Out << Count;
+      } else if (Count < 0) {
+        Out << "#####";
+      } else {
+        Out << '-';
+      }
+      Out << ':' << LI.line_number() << ':' << *LI << '\n';
+    }
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // Top-level transfer function logic (Dispatcher).
 //===----------------------------------------------------------------------===//
@@ -331,6 +375,12 @@ void ExprEngine::printState(raw_ostream &Out, ProgramStateRef State,
 }
 
 void ExprEngine::processEndWorklist(bool hasWorkRemaining) {
+  if (!AMgr.options.coverageExportDir().empty()) {
+    SmallString<128> Path = AMgr.options.coverageExportDir();
+    SourceManager &SM = getContext().getSourceManager();
+    SM.getFileManager().makeAbsolutePath(Path);
+    dumpCoverageInfo(Path, SM);
+  }
   getCheckerManager().runCheckersForEndAnalysis(G, BR, *this);
 }
 
@@ -1488,6 +1538,75 @@ bool ExprEngine::replayWithoutInlining(ExplodedNode *N,
   return true;
 }
 
+// Add the line range of the CFGBlock to a file entry indexed map.
+static void processCoverageInfo(const CFGBlock &Block, SourceManager &SM,
+                                bool Unexecuted = false) {
+  llvm::SmallVector<unsigned, 32> LinesInBlock;
+  const FileEntry *FE = nullptr;
+  for (unsigned I = 0; I < Block.size(); ++I) {
+    const Stmt *S = nullptr;
+    switch (Block[I].getKind()) {
+    case CFGElement::Statement:
+      S = Block[I].castAs<CFGStmt>().getStmt();
+      break;
+    case CFGElement::Initializer:
+      S = Block[I].castAs<CFGInitializer>().getInitializer()->getInit();
+      if (!S)
+        continue;
+      break;
+    case CFGElement::NewAllocator:
+      S = Block[I].castAs<CFGNewAllocator>().getAllocatorExpr();
+      break;
+    default:
+      continue;
+    }
+    assert(S);
+    SourceLocation SpellingStartLoc = SM.getSpellingLoc(S->getLocStart());
+    if (SM.isInSystemHeader(SpellingStartLoc))
+      return;
+    FileID FID = SM.getFileID(SpellingStartLoc);
+    if (FE) {
+      if (FE != SM.getFileEntryForID(FID))
+        continue;
+    } else {
+      FE = SM.getFileEntryForID(FID);
+      if (CoverageInfo.find(FE) == CoverageInfo.end()) {
+        unsigned Lines = SM.getSpellingLineNumber(SM.getLocForEndOfFile(FID));
+        CoverageInfo.insert(std::make_pair(FE, std::vector<int>(Lines, 0)));
+      }
+    }
+    bool Invalid = false;
+    unsigned LineBegin = SM.getSpellingLineNumber(S->getLocStart(), &Invalid);
+    if (Invalid)
+      continue;
+    unsigned LineEnd = SM.getSpellingLineNumber(S->getLocEnd(), &Invalid);
+    if (Invalid)
+      continue;
+    for (unsigned Line = LineBegin; Line <= LineEnd; ++Line) {
+      LinesInBlock.push_back(Line);
+    }
+  }
+  if (!FE)
+    return;
+  std::sort(LinesInBlock.begin(), LinesInBlock.end());
+  LinesInBlock.erase(std::unique(LinesInBlock.begin(), LinesInBlock.end()),
+                     LinesInBlock.end());
+  std::vector<int> &FileCov = CoverageInfo[FE];
+  if (Unexecuted) {
+    for (unsigned Line : LinesInBlock) {
+      if (FileCov[Line - 1] == 0)
+        FileCov[Line - 1] = -1;
+    }
+    return;
+  }
+  for (unsigned Line : LinesInBlock) {
+    if (FileCov[Line - 1] < 0)
+      FileCov[Line - 1] = 1;
+    else
+      ++FileCov[Line - 1];
+  }
+}
+
 /// Block entrance.  (Update counters).
 void ExprEngine::processCFGBlockEntrance(const BlockEdge &L,
                                          NodeBuilderWithSinks &nodeBuilder,
@@ -1513,6 +1632,9 @@ void ExprEngine::processCFGBlockEntrance(const BlockEdge &L,
     if (isUnrolledLoopBlock(ActualBlock, Pred, AMgr))
       return;
   }
+
+  if (!AMgr.options.coverageExportDir().empty())
+    processCoverageInfo(*L.getDst(), getContext().getSourceManager());
 
   // If this block is terminated by a loop and it has already been visited the
   // maximum number of times, widen the loop.
@@ -1859,6 +1981,10 @@ void ExprEngine::processBeginOfFunction(NodeBuilderContext &BC,
                                         ExplodedNode *Pred,
                                         ExplodedNodeSet &Dst,
                                         const BlockEdge &L) {
+  if (!AMgr.options.coverageExportDir().empty()) {
+    for (auto BlockIT : *L.getLocationContext()->getCFG())
+      processCoverageInfo(*BlockIT, getContext().getSourceManager(), true);
+  }
   SaveAndRestore<const NodeBuilderContext *> NodeContextRAII(currBldrCtx, &BC);
   getCheckerManager().runCheckersForBeginFunction(Dst, L, Pred, *this);
 }

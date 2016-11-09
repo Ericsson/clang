@@ -287,6 +287,9 @@ private:
   /// \sa shouldReanalyzeXTUVisitedFns
   Optional<bool> ReanalyzeXTUVisitedFns;
 
+  /// \sa shouldRecordCoverage
+  Optional<StringRef> CoverageExportDir;  
+
   /// A helper function that retrieves option for a given full-qualified
   /// checker name.
   /// Options for checkers can be specified via 'analyzer-config' command-line
@@ -588,6 +591,10 @@ public:
   /// should be reanalyzed again as top level in case it is not called in its
   /// own translation unit.
   bool shouldReanalyzeXTUVisitedFns();
+
+  /// Determines where the coverage info should be dumped to. The coverage
+  /// information is recorded on the basic block level granularity.
+  StringRef coverageExportDir();
 
 public:
   AnalyzerOptions() :
