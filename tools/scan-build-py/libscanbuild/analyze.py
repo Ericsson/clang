@@ -163,6 +163,7 @@ def analyze_compiler_wrapper_impl(result, execution):
     compilation = split_command(execution.cmd)
     if compilation is None:
         return
+    logging.info('execute compiler: %s', " ".join(execution.cmd))
     # collect the needed parameters from environment, crash when missing
     parameters = {
         'clang': os.getenv('ANALYZE_BUILD_CLANG'),

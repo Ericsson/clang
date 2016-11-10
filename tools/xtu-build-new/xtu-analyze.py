@@ -12,6 +12,7 @@ import string
 import sys
 import threading
 import time
+import uuid
 
 timeout = 86400
 analyser_output_formats = ['plist', 'plist-multi-file', 'html', 'plist-html', 'text']
@@ -144,11 +145,22 @@ def analyze(directory, command) :
     # Buffer output of subprocess and dump it out at the end, so that
     # the subprocess doesn't continue to write output after the user
     # sends SIGTERM
-    po = subprocess.Popen(analyze_cmd, shell=True, stderr=subprocess.PIPE,
-            stdout=subprocess.PIPE)
-    out, err = po.communicate()
-    sys.stderr.write(err)
-    sys.stdout.write(out)
+    po = subprocess.Popen(analyze_cmd, shell=True, stderr=subprocess.STDOUT,
+            stdout=subprocess.PIPE, universal_newlines=True)
+    out, _ = po.communicate()
+    if mainargs.verbose:
+        sys.stdout.write(out)
+    if po.returncode:
+        prefix = os.path.join(os.path.abspath(mainargs.xtuoutdir), "fails")
+    else:
+        prefix = os.path.join(os.path.abspath(mainargs.xtuoutdir), "passes")
+    last_arg = command.split()[-1]
+    if re.match(".+\.c(pp)?$", last_arg):
+        fname = re.sub("/", "_", last_arg)
+    else:
+        fname = uuid.uuid4()
+    with open(os.path.join(prefix, "%s.out" % fname), "w") as f:
+        f.write("%s\n%s" % (analyze_cmd, out))
     os.chdir(old_workdir)
     os.environ.update(old_environ)
 
@@ -219,6 +231,9 @@ try:
 except OSError:
     print 'Output directory %s already exists!' % os.path.abspath(mainargs.xtuoutdir)
     sys.exit(1)
+
+os.makedirs(os.path.join(os.path.abspath(mainargs.xtuoutdir), "passes"))
+os.makedirs(os.path.join(os.path.abspath(mainargs.xtuoutdir), "fails"))
 
 original_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
 signal.signal(signal.SIGINT, original_handler)
