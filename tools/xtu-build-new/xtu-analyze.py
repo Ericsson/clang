@@ -15,7 +15,7 @@ import time
 import uuid
 
 #timeout = 86400
-analyser_output_formats = ['plist', 'plist-multi-file', 'html', 'plist-html', 'text']
+analyser_output_formats = ['plist-multi-file', 'plist', 'html', 'plist-html', 'text']
 analyser_output_format = analyser_output_formats[0]
 
 parser = argparse.ArgumentParser(description='Executes 2nd pass of XTU analysis')
@@ -76,11 +76,12 @@ if not mainargs.no_xtu :
 if mainargs.without_visitedfns :
     analyzer_params += [ '-analyzer-config', 'reanalyze-xtu-visited=true' ]
 analyzer_params += [ '-analyzer-stats' ]
-analyzer_params += [ '-analyzer-output=' + mainargs.output_format ]
+#analyzer_params += [ '-analyzer-output ' + mainargs.output_format ]
 passthru_analyzer_params = []
 for param in analyzer_params :
     passthru_analyzer_params += ['-Xanalyzer']
     passthru_analyzer_params += [param]
+passthru_analyzer_params += [ '--analyzer-output ' + mainargs.output_format ]
 
 analyzer_env = {}
 analyzer_env['ANALYZE_BUILD_CLANG'] = os.path.join(clang_path, 'clang')
