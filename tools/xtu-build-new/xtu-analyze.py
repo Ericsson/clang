@@ -14,7 +14,7 @@ import threading
 import time
 import uuid
 
-timeout = 86400
+#timeout = 86400
 analyser_output_formats = ['plist', 'plist-multi-file', 'html', 'plist-html', 'text']
 analyser_output_format = analyser_output_formats[0]
 
@@ -33,18 +33,22 @@ parser.add_argument('--output-format', metavar='format',
     choices=analyser_output_formats, default=analyser_output_format,
     help='Format for analysis reports (one of %s; default is "%s").' %
     (', '.join(analyser_output_formats), analyser_output_format))
-parser.add_argument('--timeout', metavar='N', help='Timeout for analysis in seconds (default: %d)' % timeout, default=timeout)
+#parser.add_argument('--timeout', metavar='N', help='Timeout for analysis in seconds (default: %d)' % timeout, default=timeout)
 parser.add_argument('--reanalyze-xtu-visited', dest='without_visitedfns', action='store_true', help='Do not use a buildgraph file and visitedFunc.txt, reanalyze everything in random order with full parallelism (set -j for optimal results)')
+parser.add_argument('--no-xtu', dest='no_xtu', action='store_true', help='Do not use XTU at all, only do normal static analysis')
 mainargs = parser.parse_args()
 
 concurrent_threads = 0
 concurrent_thread_times = [0.0]
 concurrent_thread_last_clock = time.time()
 
-if mainargs.without_visitedfns and mainargs.buildgraph is not None :
+if mainargs.no_xtu and (mainargs.without_visitedfns or mainargs.buildgraph is not None) :
+    print 'No XTU related option can be used in non-XTU mode.'
+    sys.exit(1)
+if not mainargs.no_xtu and mainargs.without_visitedfns and mainargs.buildgraph is not None :
     print 'A buildgraph JSON cannot be used when in reanalyze-xtu-visited mode.'
     sys.exit(1)
-if not mainargs.without_visitedfns and mainargs.buildgraph is None :
+if not mainargs.no_xtu and not mainargs.without_visitedfns and mainargs.buildgraph is None :
     print 'A buildgraph JSON should be given in normal mode to avoid revisiting functions.'
     sys.exit(1)
 
@@ -63,11 +67,12 @@ if mainargs.verbose :
     print 'XTU uses analyze-cc dir: ' + (analyze_path if analyze_path != '' else '<taken from PATH>')
 
 analyzer_params = []
-if mainargs.enabled_checkers:
+if mainargs.enabled_checkers :
     analyzer_params += [ '-analyzer-checker', mainargs.enabled_checkers ]
-if mainargs.disabled_checkers:
+if mainargs.disabled_checkers :
     analyzer_params += [ '-analyzer-disable-checker', mainargs.disable_checkers ]
-analyzer_params += [ '-analyzer-config', 'xtu-dir=' + os.path.abspath(mainargs.xtuindir)]
+if not mainargs.no_xtu :
+    analyzer_params += [ '-analyzer-config', 'xtu-dir=' + os.path.abspath(mainargs.xtuindir)]
 if mainargs.without_visitedfns :
     analyzer_params += [ '-analyzer-config', 'reanalyze-xtu-visited=true' ]
 analyzer_params += [ '-analyzer-stats' ]
@@ -90,7 +95,7 @@ buildlog_file = open(mainargs.buildlog, 'r')
 buildlog = json.load(buildlog_file)
 buildlog_file.close()
 
-if not mainargs.without_visitedfns :
+if not mainargs.no_xtu and not mainargs.without_visitedfns :
     buildgraph_file = open(mainargs.buildgraph, 'r')
     buildgraph = json.load(buildgraph_file)
     buildgraph_file.close()
@@ -109,7 +114,7 @@ for step in buildlog :
             dircmd_2_orders[uid].append(src_build_steps)
         src_build_steps += 1
 
-if not mainargs.without_visitedfns :
+if not mainargs.no_xtu and not mainargs.without_visitedfns :
     for dep in buildgraph :
         assert len(dep) == 2
         assert dep[0] >= 0 and dep[0] < src_build_steps
