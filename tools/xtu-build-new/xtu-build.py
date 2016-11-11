@@ -15,7 +15,7 @@ timeout = 86400
 
 parser = argparse.ArgumentParser(description='Executes 1st pass of XTU analysis')
 parser.add_argument('-b', required=True, dest='buildlog', metavar='build.json', help='Use a JSON Compilation Database')
-parser.add_argument('-p', metavar='preanalyze-dir', dest='xtuindir', help='Use directory for reading preanalyzation data (default=".xtu")', default='.xtu')
+parser.add_argument('-p', metavar='preanalyze-dir', dest='xtuindir', help='Use directory for generating preanalyzation data (default=".xtu")', default='.xtu')
 parser.add_argument('-j', metavar='threads', dest='threads', help='Number of threads used (default=' + str(threading_factor) + ')', default=threading_factor)
 parser.add_argument('-v', dest='verbose', action='store_true', help='Verbose output of every command executed')
 parser.add_argument('--clang-path', metavar='clang-path', dest='clang_path', help='Set path of clang binaries to be used (default taken from CLANG_PATH environment variable)', default=os.environ.get('CLANG_PATH'))
