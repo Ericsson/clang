@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 '''
    Script to merge gcov files produced by the static analyzer.
    So coverage information of header files from multiple translation units are
@@ -22,6 +24,7 @@ import os
 import sys
 import shutil
 
+
 def is_num(val):
     '''Check if val can be converted to int.'''
     try:
@@ -35,7 +38,7 @@ def is_valid(line):
     '''Check whether a list is a valid gcov line after join on colon.'''
     if len(line) == 4:
         return line[2].lower() in {"graph", "data", "runs", "programs",
-                "source"}
+                                   "source"}
     else:
         return len(line) == 3
 
@@ -48,8 +51,8 @@ def merge_gcov(from_gcov, to_gcov):
 
         if len(from_lines) != len(to_lines):
             print("Fatal error: failed to match gcov files,"
-                    " different line count: (%s, %s)" %
-                    (from_gcov, to_gcov))
+                  " different line count: (%s, %s)" %
+                  (from_gcov, to_gcov))
             sys.exit(1)
 
         for i in range(len(from_lines)):
@@ -58,14 +61,14 @@ def merge_gcov(from_gcov, to_gcov):
 
             if not is_valid(from_split) or not is_valid(to_split):
                 print("Fatal error: invalid gcov format (%s, %s)" %
-                        (from_gcov, to_gcov))
+                      (from_gcov, to_gcov))
                 print("%s, %s" % (from_split, to_split))
                 sys.exit(1)
 
             for j in range(2):
                 if from_split[j+1] != to_split[j+1]:
                     print("Fatal error: failed to match gcov files: (%s, %s)" %
-                            (from_gcov, to_gcov))
+                          (from_gcov, to_gcov))
                     print("%s != %s" % (from_split[j+1], to_split[j+1]))
                     sys.exit(1)
 
@@ -98,30 +101,34 @@ def process_tu(tu_path, output):
                 merge_gcov(gcov_in_path, gcov_out_path)
             else:
                 # No merging needed.
+                try:
+                    os.makedirs(os.sep.join(gcov_out_path.split(os.sep)[:-1]))
+                except OSError:
+                    pass
                 shutil.copyfile(gcov_in_path, gcov_out_path)
 
 
-def main():
-    '''Parsing arguments, process each tu dir.'''
-    parser = argparse.ArgumentParser(description="Merge gcov files from "
-            "different translation units")
-    parser.add_argument("--input", "-i", help="Directory containing the input"
-            " gcov files", required=True)
-    parser.add_argument("--output", "-o", help="Output directory for gcov"
-            " files. Warning! Output tree will be cleared!", required=True)
-    args = parser.parse_args()
+def main(indir, outdir):
+    '''Process each tu dir.'''
+    if os.path.exists(outdir):
+        shutil.rmtree(outdir)
+    os.mkdir(outdir)
 
-    if os.path.exists(args.output):
-        shutil.rmtree(args.output)
-    os.mkdir(args.output)
-
-    for tu_dir in os.listdir(args.input):
-        tu_path = os.path.join(args.input, tu_dir)
+    for tu_dir in os.listdir(indir):
+        tu_path = os.path.join(indir, tu_dir)
         if not os.path.isdir(tu_path):
             continue
 
-        process_tu(tu_path, args.output)
+        process_tu(tu_path, outdir)
 
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser(description="Merge gcov files from "
+                                     "different translation units")
+    parser.add_argument("--input", "-i", help="Directory containing the input"
+                        " gcov files", required=True)
+    parser.add_argument("--output", "-o", help="Output directory for gcov"
+                        " files. Warning! Output tree will be cleared!",
+                        required=True)
+    args = parser.parse_args()
+    main(args.input, args.output)

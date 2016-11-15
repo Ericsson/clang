@@ -43,7 +43,7 @@ def eliminate_circles(graph):
             remove_nodes(graph, no_dependency)
             continue
         removable_node = max(iter(list(graph.keys())),
-                       key=(lambda key: len(graph[key].out)))
+                             key=(lambda key: len(graph[key].out)))
         for node in graph[removable_node].into:
             graph[node].out.remove(removable_node)
             removable_edges[node].out.add(removable_node)
@@ -69,9 +69,9 @@ def topological_order(graph):  # works only on DAG
 
 
 def main():
-    #-------------- obtain function-to-file mapping --------------#
+    # -------------- obtain function-to-file mapping --------------#
     print('Obtaining function-to-file mapping')
-    #sys.stdout.flush()
+    # sys.stdout.flush()
 
     tmpdir = ".xtu/"
 
@@ -94,24 +94,24 @@ def main():
         extern_fns_filename = args.extern_fns_file
     else:
         extern_fns_filename = tmpdir + "externalFns.txt"
-    
+
     with open(extern_fns_filename, "r") as extern_fns_file:
         for line in extern_fns_file:
             line = line.strip()
-            if line in fns and not line in external_map:
+            if line in fns and line not in external_map:
                 external_map[line] = fns[line]
 
 #    with open(tmpdir + "externalFnMap.txt", "w") as out_file:
 #        for func, fname in list(external_map.items()):
 #            out_file.write("%s %s.ast\n" % (func, fname))
 
-    #-------------- analyze call graph to find analysis order --------------#
+    # -------------- analyze call graph to find analysis order --------------#
 
     cfg = dict()
     func_set = set()
 
     print('Obtaining analysis order')
-    #sys.stdout.flush()
+    # sys.stdout.flush()
 
     callees_glob = set()
     ast_regexp = re.compile("^/ast/(?:\w)+")
@@ -140,7 +140,7 @@ def main():
                 elif callee in external_map:
                     arch = callee.split("@")[-1]
                     fname = re.sub(ast_regexp, "", external_map[callee]) + \
-                                "::" + callee.split("@")[0]
+                        "::" + callee.split("@")[0]
                     callees.add(fname)
                     func_set.add(fname)
             if callees:
@@ -154,10 +154,10 @@ def main():
         build_json = json.load(build_args_file)
 
     commandlist = [command for command in build_json
-                if src_pattern.match(command['file'])]
+                   if src_pattern.match(command['file'])]
 
-    compile_commands_id = { commandlist[i]['command']:i
-                            for i in range(0, len(commandlist)) }
+    compile_commands_id = {commandlist[i]['command']: i
+                           for i in range(0, len(commandlist))}
     command_id_to_compile_command_id = []
 
     sorted_commands = sorted(commandlist)
@@ -193,17 +193,18 @@ def main():
     removable_edges = eliminate_circles(build_graph_copy)
 
     build_graph = {
-    key: InOut( build_graph[key].into - removable_edges[key].into,
-                build_graph[key].out - removable_edges[key].out)
-         for key in list(build_graph.keys())
+                    key: InOut(build_graph[key].into -
+                               removable_edges[key].into,
+                               build_graph[key].out - removable_edges[key].out)
+                    for key in list(build_graph.keys())
     }
 
     if args.out_file:
         out_file = args.out_file
     else:
         out_file = tmpdir + "build_dependency.json"
-    
-    print("write build_dependency graph to " + out_file )
+
+    print("write build_dependency graph to " + out_file)
     with open(out_file, "w") as dependency_file:
         list_graph = []
         for n in build_graph:
@@ -213,9 +214,9 @@ def main():
         dependency_file.write(json.dumps(list_graph))
 
     # topological order of build_graph
-#    file_order = topological_order(build_graph)
-#    print("write topological order of build commands to "+ tmpdir +"order.txt")
-#    with open(tmpdir + "order.txt", "w") as order_file:
+#   file_order = topological_order(build_graph)
+#   print("write topological order of build commands to "+ tmpdir +"order.txt")
+#   with open(tmpdir + "order.txt", "w") as order_file:
 #        for file_id in file_order:
 #            order_file.write(sorted_commands[file_id]['command'])
 #            order_file.write("\n")
