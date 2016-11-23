@@ -216,7 +216,7 @@ def analyze(directory, command):
     tu_name = ''
     if last_src:
         tu_name += last_src.split(os.sep)[-1]
-        tu_name += '_' + re.sub(os.sep, "_", last_src)
+        #tu_name += '_' + re.sub(os.sep, "_", last_src)
     tu_name += '_' + str(uuid.uuid4())
 
     os.environ.update(analyzer_env)
