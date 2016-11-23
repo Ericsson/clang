@@ -303,12 +303,14 @@ def analyze_work():
 
             deps_2_remove = []
             for dep in dep_graph.items():
-                for i in range(len(dep[1])):
+                i = 0
+                while i < len(dep[1]):
                     if dep[1][i] in found_orders:
                         dep[1][i] = dep[1][-1]
                         del dep[1][-1]
                         if len(dep[1]) == 0:
                             deps_2_remove.append(dep[0])
+                    i+=1
             for dep in deps_2_remove:
                 del dep_graph[dep]
             graph_lock.release()
