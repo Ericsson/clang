@@ -313,9 +313,9 @@ static llvm::DenseMap<const FileEntry *,std::vector<int>> CoverageInfo;
 static void dumpCoverageInfo(llvm::SmallVectorImpl<char> &Path,
                              SourceManager &SM) {
   for (auto &Entry : CoverageInfo) {
-    SmallString<128> FilePath;
+    SmallString<128> FilePath(Path.begin(), Path.end());
     const FileEntry *FE = Entry.getFirst();
-    llvm::sys::path::append(FilePath, Path, FE->getName() + ".gcov");
+    llvm::sys::path::append(FilePath, FE->getName() + ".gcov");
     SmallString<128> DirPath = FilePath;
     llvm::sys::path::remove_filename(DirPath);
     llvm::sys::fs::create_directories(DirPath);
@@ -1565,11 +1565,17 @@ static void processCoverageInfo(const CFGBlock &Block, SourceManager &SM,
     if (SM.isInSystemHeader(SpellingStartLoc))
       return;
     FileID FID = SM.getFileID(SpellingStartLoc);
+    if (FID.isInvalid())
+      continue;
     if (FE) {
       if (FE != SM.getFileEntryForID(FID))
         continue;
     } else {
       FE = SM.getFileEntryForID(FID);
+      if (FE->getName().empty()) {
+        FE = nullptr;
+        continue;
+      }
       if (CoverageInfo.find(FE) == CoverageInfo.end()) {
         unsigned Lines = SM.getSpellingLineNumber(SM.getLocForEndOfFile(FID));
         CoverageInfo.insert(std::make_pair(FE, std::vector<int>(Lines, 0)));
