@@ -119,12 +119,13 @@ def generate_ast(source):
 def map_functions(command):
     args = get_command_arguments(command)
     sources = cmd_2_src[command]
+    dir_command = 'cd ' + src_2_dir[sources[0]]
     funcmap_command = os.path.join(clang_path, 'clang-func-mapping') + \
-        ' --xtu-dir ' + mainargs.xtuindir + ' ' + string.join(sources, ' ') + \
-        ' -- ' + string.join(args, ' ')
+        ' --xtu-dir ' + os.path.abspath(mainargs.xtuindir) + ' ' + \
+        string.join(sources, ' ') + ' -- ' + string.join(args, ' ')
     if mainargs.verbose:
         print funcmap_command
-    subprocess.call(funcmap_command, shell=True)
+    subprocess.call(dir_command + " && " + funcmap_command, shell=True)
 
 clear_file(os.path.join(mainargs.xtuindir, 'cfg.txt'))
 clear_file(os.path.join(mainargs.xtuindir, 'definedFns.txt'))
