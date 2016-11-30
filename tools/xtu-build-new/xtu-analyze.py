@@ -14,6 +14,11 @@ import sys
 import threading
 import time
 import uuid
+import sys
+
+reload(sys)  
+sys.setdefaultencoding('utf8')
+
 sys.path.append(os.path.join(os.path.dirname(__file__),
                              '..', '..', 'utils', 'analyzer'))
 try:
