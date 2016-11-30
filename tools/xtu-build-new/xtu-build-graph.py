@@ -1,6 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+import time
 import copy
 import re
 import argparse
@@ -71,6 +72,7 @@ def topological_order(graph):  # works only on DAG
 def main():
     # -------------- obtain function-to-file mapping --------------#
     print('Obtaining function-to-file mapping')
+    t = time.clock()
     # sys.stdout.flush()
 
     tmpdir = ".xtu/"
@@ -109,8 +111,9 @@ def main():
 
     cfg = dict()
     func_set = set()
-
+    print time.clock() - t
     print('Obtaining analysis order')
+    t = time.clock()
     # sys.stdout.flush()
 
     callees_glob = set()
@@ -169,7 +172,9 @@ def main():
         file_to_command_ids[buildcommand['file']].add(command_id)
         command_id += 1
 
+    print time.clock() - t
     print("build build_graph")
+    t = time.clock()
     # Create build_commands dependency graph based on function calls
     # (and containing files)
 
@@ -189,8 +194,9 @@ def main():
 
     # eliminate circles from build_graph
     build_graph_copy = copy.deepcopy(build_graph)
+    print time.clock() - t
     print("eliminate circles")
-    removable_edges = eliminate_circles(build_graph_copy)
+    t = time.clock()
 
     build_graph = {
                     key: InOut(build_graph[key].into -
@@ -198,6 +204,8 @@ def main():
                                build_graph[key].out - removable_edges[key].out)
                     for key in list(build_graph.keys())
     }
+    print time.clock() - t
+
 
     if args.out_file:
         out_file = args.out_file
