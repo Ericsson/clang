@@ -12,6 +12,7 @@ add_clang_executable(clang-cmdline-arch-extractor
 target_link_libraries(clang-cmdline-arch-extractor
   clangTooling
   clangBasic
+  clangFrontend
   clangRewriteFrontend
   )
 

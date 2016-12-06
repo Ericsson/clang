@@ -16,6 +16,7 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
 #include "clang/AST/ParentMap.h"
 #include "clang/Analysis/ProgramPoint.h"
+#include "clang/Frontend/ASTUnit.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/DynamicTypeMap.h"
@@ -373,9 +374,22 @@ RuntimeDefinition AnyFunctionCall::getRuntimeDefinition() const {
   if (AD->getBody())
     return RuntimeDefinition(AD->getDecl());
 
-  const FunctionDecl *XTUDecl = FD->getXTUDefinition(
-      ((ExprEngine *)getState()->getStateManager().getOwningEngine())
-          ->getCompilerInstance());
+  auto Engine = static_cast<ExprEngine *>(
+      getState()->getStateManager().getOwningEngine());
+  CompilerInstance &CI = Engine->getCompilerInstance();
+
+  auto ASTLoader = [&](StringRef ASTFileName) {
+    IntrusiveRefCntPtr<DiagnosticsEngine> DiagsPtr(&CI.getDiagnostics());
+    return ASTUnit::LoadFromASTFile(
+               ASTFileName, CI.getPCHContainerOperations()->getRawReader(),
+               DiagsPtr, CI.getFileSystemOpts())
+        .release();
+  };
+
+  const FunctionDecl *XTUDecl = AD->getASTContext().getXTUDefinition(
+      FD, CI, Engine->getAnalysisManager().options.getXTUDir(),
+      CI.getDiagnostics(), ASTLoader);
+
   return RuntimeDefinition(XTUDecl);
 }
 

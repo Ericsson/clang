@@ -64,6 +64,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <iterator>
 #include <memory>
 #include <new>
@@ -1923,8 +1924,10 @@ private:
   ASTImporter &getOrCreateASTImporter(ASTContext &From);
 
 public:
-  const FunctionDecl *getXTUDefinition(const FunctionDecl *FD,
-                                       CompilerInstance &CI);
+  const FunctionDecl *
+  getXTUDefinition(const FunctionDecl *FD, CompilerInstance &CI,
+                   StringRef XTUDir, DiagnosticsEngine &Diags,
+                   std::function<ASTUnit *(StringRef)> Loader);
 
   //===--------------------------------------------------------------------===//
   //                         Type Sizing and Analysis

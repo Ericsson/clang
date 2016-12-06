@@ -1459,8 +1459,10 @@ std::string getMangledName(const NamedDecl *ND, MangleContext *MangleCtx) {
   return OS.str();
 }
 
-const FunctionDecl *ASTContext::getXTUDefinition(const FunctionDecl *FD,
-                                                 CompilerInstance &CI) {
+const FunctionDecl *
+ASTContext::getXTUDefinition(const FunctionDecl *FD, CompilerInstance &CI,
+                             StringRef XTUDir, DiagnosticsEngine &Diags,
+                             std::function<ASTUnit *(StringRef)> Loader) {
   assert(!FD->hasBody() && "FD has a definition in current translation unit!");
   if (!FD->getType()->getAs<FunctionProtoType>())
     return nullptr; // Cannot even mangle that.
@@ -1468,20 +1470,13 @@ const FunctionDecl *ASTContext::getXTUDefinition(const FunctionDecl *FD,
   if (FoundImport != ImportMap.end())
     return FoundImport->second;
 
-  IntrusiveRefCntPtr<DiagnosticOptions> DiagOpts = new DiagnosticOptions();
-  TextDiagnosticPrinter *DiagClient =
-      new TextDiagnosticPrinter(llvm::errs(), &*DiagOpts);
-  IntrusiveRefCntPtr<DiagnosticIDs> DiagID(new DiagnosticIDs());
-  IntrusiveRefCntPtr<DiagnosticsEngine> Diags(
-      new DiagnosticsEngine(DiagID, &*DiagOpts, DiagClient));
   std::unique_ptr<MangleContext> MangleCtx(
-      ItaniumMangleContext::create(FD->getASTContext(), *Diags));
+      ItaniumMangleContext::create(FD->getASTContext(), Diags));
   MangleCtx->setShouldForceMangleProto(true);
   std::string MangledFnName = getMangledName(FD, MangleCtx.get());
-  StringRef BuildDir = CI.getAnalyzerOpts()->getXTUDir();
-  std::string ExternalFunctionMap = (BuildDir + "/externalFnMap.txt").str();
+  std::string ExternalFunctionMap = (XTUDir + "/externalFnMap.txt").str();
   ASTUnit *Unit = nullptr;
-  std::string ASTFileName;
+  StringRef ASTFileName;
 
   FunctionAstUnitMapping::const_iterator FnUnitCacheEntry =
       FunctionAstUnitMap.find(MangledFnName);
@@ -1491,7 +1486,7 @@ const FunctionDecl *ASTContext::getXTUDefinition(const FunctionDecl *FD,
       std::ifstream ExternalFnMapFile(ExternalFunctionMap);
       std::string FunctionName, FileName;
       while (ExternalFnMapFile >> FunctionName >> FileName)
-        FunctionFileMap[FunctionName] = (BuildDir + "/" + FileName).str();
+        FunctionFileMap[FunctionName] = (XTUDir + "/" + FileName).str();
       ExternalFnMapFile.close();
     }
 
@@ -1503,10 +1498,7 @@ const FunctionDecl *ASTContext::getXTUDefinition(const FunctionDecl *FD,
     FileASTUnitMapping::iterator ASTCacheEntry =
         FileASTUnitMap.find(ASTFileName);
     if (ASTCacheEntry == FileASTUnitMap.end()) {
-      Unit = ASTUnit::LoadFromASTFile(
-                 ASTFileName, CI.getPCHContainerOperations()->getRawReader(),
-                 Diags, CI.getFileSystemOpts())
-                 .release();
+      Unit = Loader(ASTFileName);
       FileASTUnitMap[ASTFileName] = Unit;
       FunctionAstUnitMap[MangledFnName] = Unit;
     } else {
