@@ -18,6 +18,7 @@
 #include "clang/Analysis/ProgramPoint.h"
 #include "clang/Frontend/ASTUnit.h"
 #include "clang/Frontend/CompilerInstance.h"
+#include "clang/Frontend/TextDiagnosticPrinter.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/DynamicTypeMap.h"
 #include "llvm/ADT/SmallSet.h"
@@ -379,10 +380,15 @@ RuntimeDefinition AnyFunctionCall::getRuntimeDefinition() const {
   CompilerInstance &CI = Engine->getCompilerInstance();
 
   auto ASTLoader = [&](StringRef ASTFileName) {
-    IntrusiveRefCntPtr<DiagnosticsEngine> DiagsPtr(&CI.getDiagnostics());
+    IntrusiveRefCntPtr<DiagnosticOptions> DiagOpts = new DiagnosticOptions();
+    TextDiagnosticPrinter *DiagClient =
+        new TextDiagnosticPrinter(llvm::errs(), &*DiagOpts);
+    IntrusiveRefCntPtr<DiagnosticIDs> DiagID(new DiagnosticIDs());
+    IntrusiveRefCntPtr<DiagnosticsEngine> Diags(
+        new DiagnosticsEngine(DiagID, &*DiagOpts, DiagClient));
     return ASTUnit::LoadFromASTFile(
                ASTFileName, CI.getPCHContainerOperations()->getRawReader(),
-               DiagsPtr, CI.getFileSystemOpts())
+               Diags, CI.getFileSystemOpts())
         .release();
   };
 
