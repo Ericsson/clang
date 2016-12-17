@@ -26,7 +26,7 @@ try:
 except:
     raise
 
-# timeout = 86400
+timeout = 86400
 analyser_output_formats = ['plist-multi-file', 'plist', 'plist-html',
                            'html', 'text']
 analyser_output_format = analyser_output_formats[0]
@@ -76,9 +76,9 @@ parser.add_argument('--output-format', metavar='format',
                          '(one of %s; default is "%s").' %
                     (', '.join(analyser_output_formats),
                      analyser_output_format))
-# parser.add_argument('--timeout', metavar='N',
-#                     help='Timeout for analysis in seconds (default: %d)' %
-#                     timeout, default=timeout)
+parser.add_argument('--timeout', metavar='N',
+                     help='Timeout for analysis in seconds (default: %d)' %
+                     timeout, default=timeout)
 parser.add_argument('--reanalyze-xtu-visited', dest='without_visitedfns',
                     action='store_true',
                     help='Do not use a buildgraph file and visitedFunc.txt, '
@@ -128,8 +128,8 @@ if mainargs.verbose:
                                          else '<taken from PATH>')
 
 analyzer_params = []
-if mainargs.enabled_checkers:
-    analyzer_params += ['-analyzer-checker', mainargs.enabled_checkers]
+for checker in mainargs.enabled_checkers:
+    analyzer_params += ['-analyzer-checker=%s' % checker]
 if mainargs.disabled_checkers:
     analyzer_params += ['-analyzer-disable-checker', mainargs.disable_checkers]
 if not mainargs.no_xtu:
@@ -158,7 +158,9 @@ analyzer_env['ANALYZE_BUILD_CLANG'] = os.path.join(clang_path, 'clang')
 analyzer_env['ANALYZE_BUILD_REPORT_DIR'] = os.path.abspath(mainargs.xtuoutdir)
 analyzer_env['ANALYZE_BUILD_PARAMETERS'] = ' '.join(passthru_analyzer_params)
 analyzer_env['ANALYZE_BUILD_REPORT_FORMAT'] = mainargs.output_format
-# analyzer_env['ANALYZE_BUILD_VERBOSE'] = 'DEBUG'
+analyzer_env['ANALYZE_BUILD_TIMEOUT'] = str(mainargs.timeout)
+if mainargs.verbose:
+    analyzer_env['ANALYZE_BUILD_VERBOSE'] = 'DEBUG'
 
 graph_lock = threading.Lock()
 

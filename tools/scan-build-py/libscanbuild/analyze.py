@@ -175,7 +175,8 @@ def analyze_build_wrapper(cplusplus):
                                      '').split(' '),
             'force_debug': os.getenv('ANALYZE_BUILD_FORCE_DEBUG'),
             'directory': os.getcwd(),
-            'command': [sys.argv[0], '-c'] + compilation.flags
+            'command': [sys.argv[0], '-c'] + compilation.flags,
+            'timeout': int(os.getenv('ANALYZE_BUILD_TIMEOUT'))
         }
         # call static analyzer against the compilation
         for source in compilation.files:
@@ -184,7 +185,7 @@ def analyze_build_wrapper(cplusplus):
             current = run(parameters)
             # display error message from the static analyzer
             if current is not None:
-                for line in current['error_output']:
+                for line in current['error_output'].splitlines():
                     logging.info(line.rstrip())
     except Exception:
         logging.exception("run analyzer inside compiler wrapper failed.")

@@ -11,6 +11,8 @@ import os.path
 import tempfile
 import functools
 import subprocess
+import sys
+import threading
 import logging
 from libscanbuild.compilation import classify_source, compiler_language
 from libscanbuild.clang import get_version, get_arguments
@@ -178,20 +180,28 @@ def run_analyzer(opts, continuation=report_failure):
                              universal_newlines=True,
                              stdout=subprocess.PIPE,
                              stderr=subprocess.STDOUT)
-    output = child.stdout.readlines()
-    child.stdout.close()
+    if 'timeout' in opts and opts['timeout']:
+        killer = threading.Timer(opts['timeout'], (lambda child: child.kill()),
+                                 [child])
+    else:
+        killer = threading.Timer(0, (lambda:None), [])
+    try:
+        killer.start()
+        cmd_out, _ = child.communicate()
+    finally:
+        killer.cancel()
+
     # do report details if it were asked
-    child.wait()
     if opts.get('output_failures', False) and child.returncode:
         error_type = 'crash' if child.returncode & 127 else 'other_error'
         opts.update({
             'error_type': error_type,
-            'error_output': output,
+            'error_output': cmd_out,
             'exit_code': child.returncode
         })
         return continuation(opts)
     # return the output for logging and exit code for testing
-    return {'error_output': output, 'exit_code': child.returncode}
+    return {'error_output': cmd_out, 'exit_code': child.returncode}
 
 
 @require(['flags', 'force_debug'])
