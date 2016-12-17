@@ -167,6 +167,7 @@ else:
 func_2_file = {}
 func_2_size = {}
 extfunc_2_file = {}
+func_2_fileset = {}
 
 defined_fns_filename = os.path.join(mainargs.xtuindir, 'definedFns.txt')
 with open(defined_fns_filename,  'r') as defined_fns_file:
@@ -174,6 +175,10 @@ with open(defined_fns_filename,  'r') as defined_fns_file:
         funcname, filename, funlen = line.strip().split(' ')
         if funcname.startswith('!'):
             funcname = funcname[1:]  # main function
+        if funcname not in func_2_file.keys():
+            func_2_fileset[funcname] = set([filename])
+        else:
+            func_2_fileset[funcname].add(filename)
         func_2_file[funcname] = filename
         func_2_size[funcname] = funlen
 
@@ -187,4 +192,5 @@ with open(extern_fns_filename,  'r') as extern_fns_file:
 extern_fns_map_filename = os.path.join(mainargs.xtuindir, 'externalFnMap.txt')
 with open(extern_fns_map_filename, 'w') as out_file:
     for func, fname in extfunc_2_file.items():
-        out_file.write('%s %s.ast\n' % (func, fname))
+        if len(func_2_fileset[func]) == 1:
+            out_file.write('%s %s.ast\n' % (func, fname))

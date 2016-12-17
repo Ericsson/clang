@@ -80,8 +80,10 @@ struct fltSemantics;
 } // end namespace llvm
 
 namespace clang {
+class ASTImporter;
 class ASTMutationListener;
 class ASTRecordLayout;
+class ASTUnit;
 class AtomicExpr;
 class BlockExpr;
 class CharUnits;
