@@ -52,7 +52,10 @@ private:
   ASTContext &Context;
   DiagnosticsEngine &Diags;
   const ManglerKind Kind;
-  //TODO-CTU: check if we need it
+  // Used for cross tranlsation unit analysis.
+  // To reduce the risk of function name collision in C projects, we force
+  // name mangling for C functions when generating lookup identifiers for
+  // the static analyzer.
   bool ShouldForceMangleProto;
 
   llvm::DenseMap<const BlockDecl*, unsigned> GlobalBlockIds;

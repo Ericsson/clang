@@ -56,7 +56,7 @@ int main(int argc, const char **argv) {
     return 1;
 
   Args.push_back(Sources[0].data());
-  IntrusiveRefCntPtr<CompilerInvocation> CI(
+  std::unique_ptr<CompilerInvocation> CI(
       createInvocationFromCommandLine(Args));
 
   const std::string Suffix =

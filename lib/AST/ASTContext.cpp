@@ -1463,6 +1463,31 @@ std::string getMangledName(const NamedDecl *ND, MangleContext *MangleCtx) {
   return OS.str();
 }
 
+const FunctionDecl* iterateContextDecls(const DeclContext *DC,
+                                const std::string &MangledFnName,
+                                std::unique_ptr<MangleContext> &MangleCtx) {
+  //FIXME: Use ASTMatcher instead.
+  if (!DC)
+    return nullptr;
+  for (Decl *D : DC->decls()) {
+    const auto *SubDC = dyn_cast<DeclContext>(D);
+    if (const auto *FD = iterateContextDecls(SubDC, MangledFnName, MangleCtx))
+      return FD;
+
+    const auto *ND = dyn_cast<FunctionDecl>(D);
+    const FunctionDecl *ResultDecl;
+    if (!ND || !ND->hasBody(ResultDecl)) {
+      continue;
+    }
+    std::string LookupMangledName = getMangledName(ResultDecl, MangleCtx.get());
+    // We are already sure that the triple is correct here.
+    if (LookupMangledName != MangledFnName)
+      continue;
+    return ResultDecl;
+  }
+  return nullptr;
+}
+
 const FunctionDecl *
 ASTContext::getXTUDefinition(const FunctionDecl *FD, CompilerInstance &CI,
                              StringRef XTUDir, DiagnosticsEngine &Diags,
@@ -1484,12 +1509,10 @@ ASTContext::getXTUDefinition(const FunctionDecl *FD, CompilerInstance &CI,
   std::string ExternalFunctionMap = (XTUDir + "/externalFnMap.txt").str();
   ASTUnit *Unit = nullptr;
   StringRef ASTFileName;
-
   FunctionAstUnitMapping::const_iterator FnUnitCacheEntry =
       FunctionAstUnitMap.find(MangledFnName);
   if (FnUnitCacheEntry == FunctionAstUnitMap.end()) {
     if (FunctionFileMap.empty()) {
-      // FIXME: Replace with LLVM file API.
       std::ifstream ExternalFnMapFile(ExternalFunctionMap);
       std::string FunctionName, FileName;
       while (ExternalFnMapFile >> FunctionName >> FileName)
@@ -1518,21 +1541,12 @@ ASTContext::getXTUDefinition(const FunctionDecl *FD, CompilerInstance &CI,
 
   if (!Unit)
     return nullptr;
-
   assert(&Unit->getFileManager() ==
          &Unit->getASTContext().getSourceManager().getFileManager());
   ASTImporter &Importer = getOrCreateASTImporter(Unit->getASTContext());
   TranslationUnitDecl *TU = Unit->getASTContext().getTranslationUnitDecl();
-  for (Decl *D : TU->decls()) {
-    auto *ND = dyn_cast<FunctionDecl>(D);
-    // FIXME: Use ASTMatcher.
-    const FunctionDecl *ResultDecl;
-    if (!ND || !ND->hasBody(ResultDecl))
-      continue;
-    std::string LookupMangledName = getMangledName(ResultDecl, MangleCtx.get());
-    // We are already sure that the triple is correct here.
-    if (LookupMangledName != MangledFnName)
-      continue;
+  if (const FunctionDecl *ResultDecl =
+            iterateContextDecls(TU, MangledFnName, MangleCtx)) {
     llvm::errs() << "Importing function " << MangledFnName << " from "
                  << ASTFileName << "\n";
     // FIXME: Refactor const_cast
