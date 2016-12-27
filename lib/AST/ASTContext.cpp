@@ -38,6 +38,7 @@
 #include "clang/Frontend/ASTUnit.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/StaticAnalyzer/Core/AnalyzerOptions.h"
+#include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/Support/Capacity.h"
@@ -47,6 +48,10 @@
 #include <map>
 
 using namespace clang;
+#define DEBUG_TYPE "ASTContext"
+
+STATISTIC(NumGetXTUCalled, "The # of getXTUDefinition function called");
+STATISTIC(NumGetXTUSuccess, "The # of getXTUDefinition successfully return the requested function's body");
 
 unsigned ASTContext::NumImplicitDefaultConstructors;
 unsigned ASTContext::NumImplicitDefaultConstructorsDeclared;
@@ -1462,12 +1467,15 @@ const FunctionDecl *
 ASTContext::getXTUDefinition(const FunctionDecl *FD, CompilerInstance &CI,
                              StringRef XTUDir, DiagnosticsEngine &Diags,
                              std::function<ASTUnit *(StringRef)> Loader) {
+  NumGetXTUCalled++;
   assert(!FD->hasBody() && "FD has a definition in current translation unit!");
   if (!FD->getType()->getAs<FunctionProtoType>())
     return nullptr; // Cannot even mangle that.
   ImportMapping::const_iterator FoundImport = ImportMap.find(FD);
-  if (FoundImport != ImportMap.end())
+  if (FoundImport != ImportMap.end()){
+    NumGetXTUSuccess++;
     return FoundImport->second;
+  }
 
   std::unique_ptr<MangleContext> MangleCtx(
       ItaniumMangleContext::create(FD->getASTContext(), Diags));
@@ -1532,6 +1540,7 @@ ASTContext::getXTUDefinition(const FunctionDecl *FD, CompilerInstance &CI,
         Importer.Import(const_cast<FunctionDecl *>(ResultDecl)));
     assert(ToDecl->hasBody());
     ImportMap[FD] = ToDecl;
+    NumGetXTUSuccess++;
     return ToDecl;
   }
   return nullptr;
