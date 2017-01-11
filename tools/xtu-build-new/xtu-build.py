@@ -98,9 +98,9 @@ def generate_ast(source):
     arch_output = subprocess.check_output(arch_command, shell=True)
     arch = arch_output[arch_output.rfind('@')+1:].strip()
     ast_path = os.path.abspath(os.path.join(mainargs.xtuindir,
-                            os.path.join('/ast/' + arch,
-                                         os.path.realpath(source)[1:] +
-                                         '.ast')[1:]))
+                               os.path.join('/ast/' + arch,
+                                            os.path.realpath(source)[1:] +
+                                            '.ast')[1:]))
     try:
         os.makedirs(os.path.dirname(ast_path))
     except OSError:
@@ -194,3 +194,12 @@ with open(extern_fns_map_filename, 'w') as out_file:
     for func, fname in extfunc_2_file.items():
         if len(func_2_fileset[func]) == 1:
             out_file.write('%s %s.ast\n' % (func, fname))
+
+
+# Build dependency graph
+
+script_dir = os.path.dirname(os.path.realpath(__file__))
+graph_script = os.path.join(script_dir, 'lib/xtu-build-graph.py')
+graph_script += ' -b ' + mainargs.buildlog + ' -o '
+graph_script += os.path.join(mainargs.xtuindir, 'build_dependency.json')
+subprocess.call(graph_script, shell=True)

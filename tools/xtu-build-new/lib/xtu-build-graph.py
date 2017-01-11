@@ -34,8 +34,8 @@ onstack = set()
 
 hasPathTo = []
 hasPathFrom = []
-valueMatrix = [] 
-maxValFun = [] 
+valueMatrix = []
+maxValFun = []
 edges = []
 isPathFromTo = []
 
@@ -47,7 +47,8 @@ def remove_nodes(graph, nodes):
         graph.pop(node)
     nodes = []
 
-#print the approximated parallel threads at the same time
+
+# print the approximated parallel threads at the same time
 def paralell(graph):
     removable_edges = dict()
     for node in graph:
@@ -56,7 +57,7 @@ def paralell(graph):
     while graph:
         no_dependency = [node for node in graph if len(graph[node].into) == 0]
         if len(no_dependency) > 0:
-            #print len(no_dependency)
+            # print len(no_dependency)
             remove_nodes(graph, no_dependency)
             continue
         assert false
@@ -90,24 +91,27 @@ def updatePathTable(edge):
     for i in hasPathFrom[edge.to]:
         hasPathTo[i] |= hasPathTo[edge.fr]
 
+
 def resultCircle(edge):
     global hasPathTo
     return edge.fr in hasPathFrom[edge.to]
 
 
 def edgesort(e1, e2):
-    return e1.val > e2.val; 
+    return e1.val > e2.val
+
 
 def getEdgeVal(edge):
     return edge.val
 
+
 def kruskal_like_remove(graph):
-    global edges, hasPathTo, hasPathFrom, isPathFromTo 
-    edges.sort(key = getEdgeVal, reverse = True)
-    #for e in edges:
-    #    if e.val == 739:
-    #        print e
-    #print "edges end"
+    global edges, hasPathTo, hasPathFrom, isPathFromTo
+    edges.sort(key=getEdgeVal, reverse=True)
+    # for e in edges:
+    #     if e.val == 739:
+    #         print e
+    # print "edges end"
     b = True
     hasPathTo = [{i} for i in range(len(isPathFromTo))]
     hasPathFrom = [{i} for i in range(len(isPathFromTo))]
@@ -127,7 +131,7 @@ def kruskal_like_remove(graph):
             removable_edges2[edge.fr].out.add(edge.to)
             removable_edges2[edge.to].into.add(edge.fr)
             b = False
-            continue;
+            continue
         fixEdges.add(edge)
         alreadyInlined.add(edge.fn)
         print str(edge.fn) + " " + str(edge.val)
@@ -140,6 +144,7 @@ def kruskal_like_remove(graph):
             continue
         fixEdges.add(edge)
         updatePathTable(edge)
+
 
 def remove_circles_dfs(graph):
     global visited, oldvisited
@@ -167,13 +172,13 @@ def remove_circles_dfs(graph):
 def dfs(graph, start):
     global visited, oldvisited, onstack
     if start in oldvisited:
-    	return
-    
+        return
+
     stack = [start]
     path = [object()]
     path_set = set(path)
     while stack:
-    	vertex = stack.pop()
+        vertex = stack.pop()
         print vertex
         if vertex not in visited:
             visited.add(vertex)
@@ -181,8 +186,8 @@ def dfs(graph, start):
             path_set.add(vertex)
 
         for node in (graph[vertex].out & path_set):
-        	removable_edges2[vertex].out.add(node)
-        	removable_edges2[node].into.add(vertex)
+            removable_edges2[vertex].out.add(node)
+            removable_edges2[node].into.add(vertex)
         stack.extend(graph[vertex].out - visited - oldvisited)
     oldvisited |= visited
     visited = set()
@@ -233,7 +238,7 @@ def main():
     tmpdir = ".xtu/"
 
     ast_regexp = re.compile("^/ast/(?:\w)+")
-    
+
     fns = dict()
     fnsize = dict()
     external_map = dict()
@@ -252,7 +257,7 @@ def main():
             fullname = filename + "::" + funcname
             fullname = re.sub(ast_regexp, "", fullname).split('@')[0]
             fnsize[fullname] = max(int(funsize),
-                                fnsize.get(fullname,0))
+                                   fnsize.get(fullname, 0))
 
     if args.extern_fns_file:
         extern_fns_filename = args.extern_fns_file
@@ -344,39 +349,40 @@ def main():
     build_graph = defaultdict(InOut)
     for fid in range(0, command_id):
         build_graph[fid] = InOut(set(), set())
-    
-    #return
+
+    # return
     global valueMatrix, maxValFun, isPathFromTo
-    valueMatrix = [[-1 for x in range(command_id)] for y in range(command_id)] 
-    maxValFun =   [["" for x in range(command_id)] for y in range(command_id)] 
-    isPathFromTo = [[x==y for x in range(command_id)] for y in range(command_id)]
+    valueMatrix = [[-1 for x in range(command_id)] for y in range(command_id)]
+    maxValFun = [["" for x in range(command_id)] for y in range(command_id)]
+    isPathFromTo = [[x == y for x in range(command_id)]
+                    for y in range(command_id)]
 
     for caller, callees in list(cfg.items()):
         callerfile = caller.split('::')[0]
         for callerbuild_id in file_to_command_ids[callerfile]:
             for callee in callees:
                 calleefile = callee.split('::')[0]
-                calleefunsize = fnsize.get(callee,10)#[callee]
+                calleefunsize = fnsize.get(callee, 10)  # [callee]
                 for calleebuild_id in file_to_command_ids[calleefile]:
                     if calleebuild_id != callerbuild_id:
-                        if(calleefunsize > 
+                        if(calleefunsize >
                                 valueMatrix[callerbuild_id][calleebuild_id]):
                             valueMatrix[callerbuild_id][calleebuild_id] = \
-                                                                calleefunsize
+                                calleefunsize
                             maxValFun[callerbuild_id][calleebuild_id] = \
-                                                                callee
+                                callee
                         build_graph[callerbuild_id].out.add(calleebuild_id)
                         build_graph[calleebuild_id].into.add(callerbuild_id)
-    #print build_graph
-    #print valueMatrix[3][5]
-    #print valueMatrix
-    #print maxValFun
+    # print build_graph
+    # print valueMatrix[3][5]
+    # print valueMatrix
+    # print maxValFun
     global edges
-    edges = [Edge(x,y,valueMatrix[x][y],maxValFun[x][y])
-                                         for x in range(command_id)
-                                         for y in range(command_id)
-                                         if valueMatrix[x][y]>=0]
-   # print edges
+    edges = [Edge(x, y, valueMatrix[x][y], maxValFun[x][y])
+             for x in range(command_id)
+             for y in range(command_id)
+             if valueMatrix[x][y] >= 0]
+    # print edges
     # eliminate `circles from build_graph
     build_graph_copy = copy.deepcopy(build_graph)
     print time.clock() - t
@@ -384,10 +390,10 @@ def main():
     t = time.clock()
 
     for node in build_graph_copy.keys():
-    	removable_edges2[node] = InOut(set(), set())
+        removable_edges2[node] = InOut(set(), set())
 
-   # for node in build_graph_copy.keys():
-    	#remove_circles_dfs(build_graph_copy)
+    # for node in build_graph_copy.keys():
+        # remove_circles_dfs(build_graph_copy)
     kruskal_like_remove(build_graph_copy)
 
     removable_edges = removable_edges2
@@ -400,7 +406,7 @@ def main():
     }
     print time.clock() - t
 
-    #Some checks to make sure the algorithm is valid
+    # Some checks to make sure the algorithm is valid
     assert not cyclic(build_graph)
 
     build_graph_copy = copy.deepcopy(build_graph)

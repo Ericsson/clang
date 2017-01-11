@@ -16,7 +16,7 @@ import time
 import uuid
 import sys
 
-reload(sys)  
+reload(sys)
 sys.setdefaultencoding('utf8')
 
 sys.path.append(os.path.join(os.path.dirname(__file__),
@@ -26,6 +26,7 @@ try:
 except:
     raise
 
+threading_factor = int(multiprocessing.cpu_count() * 1.0)
 # timeout = 86400
 analyser_output_formats = ['plist-multi-file', 'plist', 'plist-html',
                            'html', 'text']
@@ -37,9 +38,6 @@ parser = argparse.ArgumentParser(
             description='Executes 2nd pass of XTU analysis')
 parser.add_argument('-b', required=True, dest='buildlog', metavar='build.json',
                     help='Use a JSON Compilation Database')
-parser.add_argument('-g', dest='buildgraph', metavar='build-graph.json',
-                    help='Use a JSON Build Dependency Graph '
-                         '(required in normal mode)')
 parser.add_argument('-p', metavar='preanalyze-dir', dest='xtuindir',
                     help='Use directory for reading preanalyzation data '
                          '(default=".xtu")',
@@ -55,8 +53,9 @@ parser.add_argument('-d', metavar='disabled-checker', nargs='+',
                     dest='disabled_checkers',
                     help='List all disabled checkers')
 parser.add_argument('-j', metavar='threads', dest='threads',
-                    help='Number of threads used (default=1)',
-                    default=1)
+                    help='Number of threads used (default=' +
+                    str(threading_factor) + ')',
+                    default=threading_factor)
 parser.add_argument('-v', dest='verbose', action='store_true',
                     help='Verbose output of every command executed')
 parser.add_argument('--clang-path', metavar='clang-path', dest='clang_path',
@@ -79,11 +78,11 @@ parser.add_argument('--output-format', metavar='format',
 # parser.add_argument('--timeout', metavar='N',
 #                     help='Timeout for analysis in seconds (default: %d)' %
 #                     timeout, default=timeout)
-parser.add_argument('--reanalyze-xtu-visited', dest='without_visitedfns',
+parser.add_argument('--do-not-revisit', dest='norevisit',
                     action='store_true',
-                    help='Do not use a buildgraph file and visitedFunc.txt, '
-                         'reanalyze everything in random order with full '
-                         'parallelism (set -j for optimal results)')
+                    help='Never reanalyze functions twice following '
+                         'topological order in generated build dependency '
+                         'graph file (lowers performance)')
 parser.add_argument('--no-xtu', dest='no_xtu', action='store_true',
                     help='Do not use XTU at all, '
                          'only do normal static analysis')
@@ -96,19 +95,8 @@ concurrent_threads = 0
 concurrent_thread_times = [0.0]
 concurrent_thread_last_clock = time.time()
 
-if mainargs.no_xtu and (mainargs.without_visitedfns or
-                        mainargs.buildgraph is not None):
+if mainargs.no_xtu and mainargs.norevisit:
     print 'No XTU related option can be used in non-XTU mode.'
-    sys.exit(1)
-if not mainargs.no_xtu and mainargs.without_visitedfns and \
-        mainargs.buildgraph is not None:
-    print 'A buildgraph JSON cannot be used when in ' \
-        'reanalyze-xtu-visited mode.'
-    sys.exit(1)
-if not mainargs.no_xtu and not mainargs.without_visitedfns and \
-        mainargs.buildgraph is None:
-    print 'A buildgraph JSON should be given in normal mode to avoid ' \
-        'revisiting functions.'
     sys.exit(1)
 
 if mainargs.clang_path is None:
@@ -135,7 +123,7 @@ if mainargs.disabled_checkers:
 if not mainargs.no_xtu:
     analyzer_params += ['-analyzer-config',
                         'xtu-dir=' + os.path.abspath(mainargs.xtuindir)]
-if mainargs.without_visitedfns:
+if not mainargs.norevisit:
     analyzer_params += ['-analyzer-config', 'reanalyze-xtu-visited=true']
 if mainargs.record_coverage:
     gcov_tmppath = os.path.abspath(os.path.join(mainargs.xtuoutdir,
@@ -166,8 +154,9 @@ buildlog_file = open(mainargs.buildlog, 'r')
 buildlog = json.load(buildlog_file)
 buildlog_file.close()
 
-if not mainargs.no_xtu and not mainargs.without_visitedfns:
-    buildgraph_file = open(mainargs.buildgraph, 'r')
+if not mainargs.no_xtu and mainargs.norevisit:
+    bg_file = os.path.join(mainargs.xtuindir, 'build_dependency.json')
+    buildgraph_file = open(bg_file, 'r')
     buildgraph = json.load(buildgraph_file)
     buildgraph_file.close()
 
@@ -185,7 +174,7 @@ for step in buildlog:
             dircmd_2_orders[uid].append(src_build_steps)
         src_build_steps += 1
 
-if not mainargs.no_xtu and not mainargs.without_visitedfns:
+if not mainargs.no_xtu and mainargs.norevisit:
     for dep in buildgraph:
         assert len(dep) == 2
         assert dep[0] >= 0 and dep[0] < src_build_steps
