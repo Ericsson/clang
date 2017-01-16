@@ -1,4 +1,14 @@
+_Z7h_chaini@x86_64 xtu-chain.cpp.ast
+_ZN4chns4chf2Ei@x86_64 xtu-chain.cpp.ast
+_ZN4chns5chcls4chf4Ei@x86_64 xtu-chain.cpp.ast
 _Z1fi@x86_64 xtu-other.cpp.ast
 _Z1gi@x86_64 xtu-other.cpp.ast
 _Z1hi@x86_64 xtu-other.cpp.ast
-_Z7h_chaini@x86_64 xtu-chain.cpp.ast
+_ZN4myns9embed_cls4feclEi@x86_64 xtu-other.cpp.ast
+_ZN4myns3fnsEi@x86_64 xtu-other.cpp.ast
+_ZN5mycls10embed_cls25fecl2Ei@x86_64 xtu-other.cpp.ast
+_ZN5mycls4fsclEi@x86_64 xtu-other.cpp.ast
+_ZN4chns4chf3Ei@x86_64 xtu-other.cpp.ast
+_ZN5mycls3fclEi@x86_64 xtu-other.cpp.ast
+_ZN4chns4chf1Ei@x86_64 xtu-other.cpp.ast
+_ZN4myns8embed_ns4fensEi@x86_64 xtu-other.cpp.ast
