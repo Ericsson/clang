@@ -232,6 +232,9 @@ def analyze(directory, command):
     tu_name = ''
     if last_src:
         tu_name += last_src.split(os.sep)[-1]
+
+    print 'Currently analyzing "{}"...'.format(tu_name)
+
     tu_name += '_' + str(uuid.uuid4())
 
     cmdenv = analyzer_env.copy()
@@ -271,6 +274,8 @@ def analyze(directory, command):
     with open(os.path.join(prefix, "%s.out" % tu_name), "w") as f:
         f.write("%s\n%s" % (analyze_cmd, out))
 
+    return runOK
+
 
 def analyze_work():
     global concurrent_threads
@@ -279,6 +284,8 @@ def analyze_work():
     global graph_lock
     global dircmd_2_orders
     global dep_graph
+    global num_passes
+    global num_fails
     while len(dircmd_2_orders) > 0:
         graph_lock.acquire()
         found_dircmd_orders = None
@@ -312,7 +319,11 @@ def analyze_work():
                 concurrent_thread_times.append(0.0)
 
             graph_lock.release()
-            analyze(found_dircmd[0], found_dircmd[1])
+            result = analyze(found_dircmd[0], found_dircmd[1])
+            if (result):
+                num_passes += 1
+            else:
+                num_fails += 1
             graph_lock.acquire()
 
             concurrent_thread_current_clock = time.time()
@@ -347,7 +358,9 @@ except OSError:
     sys.exit(1)
 
 os.makedirs(os.path.join(os.path.abspath(mainargs.xtuoutdir), "passes"))
+num_passes = 0
 os.makedirs(os.path.join(os.path.abspath(mainargs.xtuoutdir), "fails"))
+num_fails = 0
 
 original_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
 signal.signal(signal.SIGINT, original_handler)
@@ -387,3 +400,7 @@ for i in range(len(concurrent_thread_times)):
         (('using %d processes' % i) if i != 0 else 'self time') + \
         ' for %.2fs (%.0f%%)' % (concurrent_thread_times[i],
                                  concurrent_thread_times[i] * 100.0 / sumtime)
+
+print '--- Total files analyzed: {}'.format(num_fails + num_passes)
+print '----- Files passed: {}'.format(num_passes)
+print '----- Files failed: {}'.format(num_fails)
