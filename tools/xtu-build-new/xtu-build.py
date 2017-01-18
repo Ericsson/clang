@@ -38,13 +38,44 @@ parser.add_argument('--timeout', metavar='N',
                     default=timeout)
 mainargs = parser.parse_args()
 
-if mainargs.clang_path is None:
-    clang_path = ''
-else:
-    clang_path = os.path.abspath(mainargs.clang_path)
-if mainargs.verbose:
-    print 'XTU uses clang dir: ' + \
-        (clang_path if clang_path != '' else '<taken from PATH>')
+
+def executable_exists(path, exe_name):
+    abs_exe_path = os.path.abspath(os.path.join(path, exe_name))
+    return os.path.isfile(abs_exe_path) and os.access(abs_exe_path, os.X_OK)
+
+
+def find_executable_on_arg_path(path, exe_name):
+    exists = executable_exists(path, exe_name)
+    return path if exists else None
+
+
+def find_executable_on_env_path(exe_name):
+    paths = os.environ['PATH'].split(os.pathsep)
+    return next(
+        (path for path in paths if executable_exists(path, exe_name)), None)
+
+
+def check_executable_available(exe_name, arg_path):
+    found_path = None
+    if arg_path is not None:
+        found_path = find_executable_on_arg_path(arg_path, exe_name)
+    else:
+        found_path = find_executable_on_env_path(exe_name)
+
+    if found_path is None:
+        print 'Executable "{}" not found on PATH provided via {}!'.format(
+            exe_name,
+            'argument' if arg_path is not None else 'environment')
+        sys.exit(1)
+    elif mainargs.verbose:
+        print 'XTU uses {} dir: {}, taken from {}.'.format(
+            exe_name,
+            found_path,
+            'argument' if arg_path is not None else 'environment')
+    return found_path
+
+
+clang_path = check_executable_available('clang', mainargs.clang_path)
 
 buildlog_file = open(mainargs.buildlog, 'r')
 buildlog = json.load(buildlog_file)
