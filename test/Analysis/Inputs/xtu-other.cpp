@@ -65,3 +65,13 @@ int chf1(int x) {
   return chf2(x);
 }
 }
+
+//Test for a crash when importing
+//typedefs
+struct AVBuffer {
+	int a;
+};
+typedef struct AVBuffer avt;
+int avtSize(void){
+	return sizeof(avt);
+}

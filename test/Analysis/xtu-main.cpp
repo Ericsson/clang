@@ -39,6 +39,10 @@ public:
 namespace chns {
 int chf1(int x);
 }
+//test for a crash
+//when inlining typedefs
+typedef struct AVBuffer avt;
+int avtSize(void);
 
 int main() {
   clang_analyzer_eval(f(3) == 2); // expected-warning{{TRUE}}
@@ -46,13 +50,12 @@ int main() {
   clang_analyzer_eval(f(5) == 3); // expected-warning{{FALSE}}
   clang_analyzer_eval(g(4) == 6); // expected-warning{{TRUE}}
   clang_analyzer_eval(h(2) == 8); // expected-warning{{TRUE}}
-
   clang_analyzer_eval(myns::fns(2) == 9);                   // expected-warning{{TRUE}}
   clang_analyzer_eval(myns::embed_ns::fens(2) == -1);       // expected-warning{{TRUE}}
   clang_analyzer_eval(mycls().fcl(1) == 6);                 // expected-warning{{TRUE}}
   clang_analyzer_eval(mycls::fscl(1) == 7);                 // expected-warning{{TRUE}}
   clang_analyzer_eval(myns::embed_cls().fecl(1) == -6);     // expected-warning{{TRUE}}
   clang_analyzer_eval(mycls::embed_cls2().fecl2(0) == -11); // expected-warning{{TRUE}}
-
   clang_analyzer_eval(chns::chf1(4) == 12); // expected-warning{{TRUE}}
+  clang_analyzer_eval(avtSize() == 4); // expected-warning{{TRUE}}
 }

@@ -12,3 +12,5 @@ _ZN4chns4chf3Ei@x86_64 xtu-other.cpp.ast
 _ZN5mycls3fclEi@x86_64 xtu-other.cpp.ast
 _ZN4chns4chf1Ei@x86_64 xtu-other.cpp.ast
 _ZN4myns8embed_ns4fensEi@x86_64 xtu-other.cpp.ast
+_Z7avtSizev@x86_64 xtu-other.cpp.ast
+_Z7h_chaini@x86_64 xtu-chain.cpp.ast
