@@ -51,6 +51,10 @@ using namespace clang;
 #define DEBUG_TYPE "ASTContext"
 
 STATISTIC(NumGetXTUCalled, "The # of getXTUDefinition function called");
+STATISTIC(NumNoUnit, "The # of getXTUDefinition NoUnit");
+STATISTIC(NumNotInOtherTU, "The # of getXTUDefinition called but the function is not in other TU");
+STATISTIC(NumNotEvenMangle, "The # of getXTUDefinition cant even mangle");
+STATISTIC(NumIterateNotFound, "The # of iteration not found");
 STATISTIC(NumGetXTUSuccess, "The # of getXTUDefinition successfully return the requested function's body");
 
 unsigned ASTContext::NumImplicitDefaultConstructors;
@@ -1495,7 +1499,10 @@ ASTContext::getXTUDefinition(const FunctionDecl *FD, CompilerInstance &CI,
   NumGetXTUCalled++;
   assert(!FD->hasBody() && "FD has a definition in current translation unit!");
   if (!FD->getType()->getAs<FunctionProtoType>())
+  {
+    NumNotEvenMangle++;
     return nullptr; // Cannot even mangle that.
+  }
   ImportMapping::const_iterator FoundImport = ImportMap.find(FD);
   if (FoundImport != ImportMap.end()){
     NumGetXTUSuccess++;
@@ -1524,8 +1531,11 @@ ASTContext::getXTUDefinition(const FunctionDecl *FD, CompilerInstance &CI,
     if (it != FunctionFileMap.end())
       ASTFileName = it->second;
     else // No definition found even in some other build unit.
+    {
+      NumNotInOtherTU++;
       return nullptr;
-    FileASTUnitMapping::iterator ASTCacheEntry =
+    }
+      FileASTUnitMapping::iterator ASTCacheEntry =
         FileASTUnitMap.find(ASTFileName);
     if (ASTCacheEntry == FileASTUnitMap.end()) {
       Unit = Loader(ASTFileName);
@@ -1539,8 +1549,10 @@ ASTContext::getXTUDefinition(const FunctionDecl *FD, CompilerInstance &CI,
     Unit = FnUnitCacheEntry->second;
   }
 
-  if (!Unit)
+  if (!Unit){
+    NumNoUnit++;
     return nullptr;
+  }
   assert(&Unit->getFileManager() ==
          &Unit->getASTContext().getSourceManager().getFileManager());
   ASTImporter &Importer = getOrCreateASTImporter(Unit->getASTContext());
@@ -1557,6 +1569,7 @@ ASTContext::getXTUDefinition(const FunctionDecl *FD, CompilerInstance &CI,
     NumGetXTUSuccess++;
     return ToDecl;
   }
+  NumIterateNotFound++;
   return nullptr;
 }
 
