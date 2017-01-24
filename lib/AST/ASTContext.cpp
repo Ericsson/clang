@@ -1552,10 +1552,12 @@ ASTContext::getXTUDefinition(const FunctionDecl *FD, CompilerInstance &CI,
             iterateContextDecls(TU, MangledFnName, MangleCtx)) {
     llvm::errs() << "Importing function " << MangledFnName << " from "
                  << ASTFileName << "\n";
+
     // FIXME: Refactor const_cast
     auto *ToDecl = cast<FunctionDecl>(
         Importer.Import(const_cast<FunctionDecl *>(ResultDecl)));
-    assert(ToDecl->hasBody());
+    if(!ToDecl || !ToDecl->hasBody())
+      return nullptr;
     ImportMap[FD] = ToDecl;
     NumGetXTUSuccess++;
     return ToDecl;
