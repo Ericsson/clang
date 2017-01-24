@@ -36,7 +36,8 @@ gcov_tmpdir = gcov_outdir + '_tmp'
 
 parser = argparse.ArgumentParser(
             description='Executes 2nd pass of XTU analysis')
-parser.add_argument('-b', required=True, dest='buildlog', metavar='build.json',
+parser.add_argument('-b', required=True, metavar='buildlog.json',
+                    dest='buildlog',
                     help='Use a JSON Compilation Database')
 parser.add_argument('-p', metavar='preanalyze-dir', dest='xtuindir',
                     help='Use directory for reading preanalyzation data '
@@ -89,6 +90,9 @@ parser.add_argument('--no-xtu', dest='no_xtu', action='store_true',
 parser.add_argument('--record-coverage', dest='record_coverage',
                     action='store_true',
                     help='Generate coverage information during analysis')
+parser.add_argument('--log-passed-build', metavar='passed-buildlog.json',
+                    dest='passed_buildlog',
+                    help='Write new buildlog JSON of files passing analysis')
 mainargs = parser.parse_args()
 
 concurrent_threads = 0
@@ -189,14 +193,20 @@ dircmd_separator = ': '
 dircmd_2_orders = {}
 dep_graph = {}
 src_build_steps = 0
+all_build_steps = 0
+passed_buildlog = []
+dircmd_2_original_orders = {}
 for step in buildlog:
     if src_pattern.match(step['file']):
         uid = step['directory'] + dircmd_separator + step['command']
         if uid not in dircmd_2_orders:
             dircmd_2_orders[uid] = [src_build_steps]
+            dircmd_2_original_orders[uid] = [all_build_steps]
         else:
             dircmd_2_orders[uid].append(src_build_steps)
+            dircmd_2_original_orders[uid].append(all_build_steps)
         src_build_steps += 1
+    all_build_steps += 1
 
 if not mainargs.no_xtu and mainargs.norevisit:
     for dep in buildgraph:
@@ -284,6 +294,9 @@ def analyze_work():
     global graph_lock
     global dircmd_2_orders
     global dep_graph
+    global buildlog
+    global passed_buildlog
+    global dircmd_2_original_orders
     global num_passes
     global num_fails
     while len(dircmd_2_orders) > 0:
@@ -320,11 +333,13 @@ def analyze_work():
 
             graph_lock.release()
             result = analyze(found_dircmd[0], found_dircmd[1])
+            graph_lock.acquire()
             if (result):
                 num_passes += 1
+                for order in dircmd_2_original_orders[found_dircmd_orders[0]]:
+                    passed_buildlog.append(buildlog[order])
             else:
                 num_fails += 1
-            graph_lock.acquire()
 
             concurrent_thread_current_clock = time.time()
             concurrent_thread_times[concurrent_threads] += \
@@ -404,3 +419,9 @@ for i in range(len(concurrent_thread_times)):
 print '--- Total files analyzed: {}'.format(num_fails + num_passes)
 print '----- Files passed: {}'.format(num_passes)
 print '----- Files failed: {}'.format(num_fails)
+
+if mainargs.passed_buildlog is not None:
+    passed_buildlog_file = open(mainargs.passed_buildlog, 'w')
+    json.dump(passed_buildlog, passed_buildlog_file, indent=4)
+    passed_buildlog_file.close()
+    print 'Passed buildlog is written to: ' + mainargs.passed_buildlog
