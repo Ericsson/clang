@@ -1631,7 +1631,7 @@ Decl *ASTNodeImporter::VisitRecordDecl(RecordDecl *D) {
   DeclarationName SearchName = Name;
   if (!SearchName && D->getTypedefNameForAnonDecl()) {
     SearchName = Importer.Import(D->getTypedefNameForAnonDecl()->getDeclName());
-    IDNS = Decl::IDNS_Ordinary;
+    IDNS |= Decl::IDNS_Ordinary;
   } else if (Importer.getToContext().getLangOpts().CPlusPlus)
     IDNS |= Decl::IDNS_Ordinary;
 
@@ -1767,6 +1767,7 @@ Decl *ASTNodeImporter::VisitRecordDecl(RecordDecl *D) {
     D2->setQualifierInfo(Importer.Import(D->getQualifierLoc()));
     D2->setLexicalDeclContext(LexicalDC);
     LexicalDC->addDeclInternal(D2);
+    D2->setImplicit(D->isImplicit());
     if (D->isAnonymousStructOrUnion())
       D2->setAnonymousStructOrUnion(true);
     if (PrevDecl) {
@@ -1789,7 +1790,6 @@ Decl *ASTNodeImporter::VisitEnumConstantDecl(EnumConstantDecl *D) {
   DeclarationName Name;
   SourceLocation Loc;
   NamedDecl *ToD;
-  const FunctionDecl *FoundWithoutBody = nullptr;
 
   if (ImportDeclParts(D, DC, LexicalDC, Name, ToD, Loc))
     return nullptr;
@@ -1854,6 +1854,8 @@ Decl *ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
     return nullptr;
   if (ToD)
     return ToD;
+
+  const FunctionDecl *FoundWithoutBody = nullptr;
 
   // Try to find a function in our own ("to") context with the same name, same
   // type, and in the same context as the function we're importing.
@@ -2221,6 +2223,7 @@ Decl *ASTNodeImporter::VisitIndirectFieldDecl(IndirectFieldDecl *D) {
 
   ToIndirectField->setAccess(D->getAccess());
   ToIndirectField->setLexicalDeclContext(LexicalDC);
+  ToIndirectField->setImplicit(D->isImplicit());
   Importer.Imported(D, ToIndirectField);
   LexicalDC->addDeclInternal(ToIndirectField);
   return ToIndirectField;
