@@ -66,3 +66,7 @@ add_clang_library(clangAST
   clangBasic
   clangLex
   )
+
+if(NOT DEFINED ${XTU_ALLOW_FAILED_IMPORT} or ${XTU_ALLOW_FAILED_IMPORT})
+  add_definitions(-DXTU_ALLOW_FAILED_IMPORT)
+endif()

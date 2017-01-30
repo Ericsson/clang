@@ -56,6 +56,7 @@ STATISTIC(NumNotInOtherTU, "The # of getXTUDefinition called but the function is
 STATISTIC(NumNotEvenMangle, "The # of getXTUDefinition cant even mangle");
 STATISTIC(NumIterateNotFound, "The # of iteration not found");
 STATISTIC(NumGetXTUSuccess, "The # of getXTUDefinition successfully return the requested function's body");
+STATISTIC(NumImportError, "The # of XTU function or its body import fails.");
 
 unsigned ASTContext::NumImplicitDefaultConstructors;
 unsigned ASTContext::NumImplicitDefaultConstructorsDeclared;
@@ -1552,10 +1553,16 @@ ASTContext::getXTUDefinition(const FunctionDecl *FD, CompilerInstance &CI,
             iterateContextDecls(TU, MangledFnName, MangleCtx)) {
     llvm::errs() << "Importing function " << MangledFnName << " from "
                  << ASTFileName << "\n";
-    // FIXME: Refactor const_cast
-    auto *ToDecl = cast<FunctionDecl>(
+    auto *ToDecl = cast_or_null<FunctionDecl>(
         Importer.Import(const_cast<FunctionDecl *>(ResultDecl)));
+#ifndef XTU_ALLOW_FAILED_IMPORT
+    assert(ToDecl);
     assert(ToDecl->hasBody());
+#endif
+    if (!ToDecl || !ToDecl->hasBody()) {
+      NumImportError++;
+      return nullptr;
+    }
     ImportMap[FD] = ToDecl;
     NumGetXTUSuccess++;
     return ToDecl;
