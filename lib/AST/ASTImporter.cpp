@@ -2875,7 +2875,7 @@ Decl *ASTNodeImporter::VisitRecordDecl(RecordDecl *D) {
   DeclarationName SearchName = Name;
   if (!SearchName && D->getTypedefNameForAnonDecl()) {
     SearchName = Importer.Import(D->getTypedefNameForAnonDecl()->getDeclName());
-    IDNS = Decl::IDNS_Ordinary;
+    IDNS |= Decl::IDNS_Ordinary;
   } else if (Importer.getToContext().getLangOpts().CPlusPlus)
     IDNS |= Decl::IDNS_Ordinary;
 
@@ -3000,6 +3000,7 @@ Decl *ASTNodeImporter::VisitRecordDecl(RecordDecl *D) {
     D2->setQualifierInfo(Importer.Import(D->getQualifierLoc()));
     D2->setLexicalDeclContext(LexicalDC);
     LexicalDC->addDeclInternal(D2);
+    D2->setImplicit(D->isImplicit());
     if (D->isAnonymousStructOrUnion())
       D2->setAnonymousStructOrUnion(true);
   }
@@ -3447,6 +3448,7 @@ Decl *ASTNodeImporter::VisitIndirectFieldDecl(IndirectFieldDecl *D) {
 
   ToIndirectField->setAccess(D->getAccess());
   ToIndirectField->setLexicalDeclContext(LexicalDC);
+  ToIndirectField->setImplicit(D->isImplicit());
   Importer.Imported(D, ToIndirectField);
   LexicalDC->addDeclInternal(ToIndirectField);
   return ToIndirectField;
