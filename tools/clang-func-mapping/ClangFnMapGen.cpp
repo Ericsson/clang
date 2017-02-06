@@ -53,7 +53,7 @@ static void lockedWrite(const std::string &fileName,
     int fd = open(fileName.c_str(), O_CREAT | O_WRONLY | O_APPEND, 0666);
     flock(fd, LOCK_EX);
     ssize_t written = write(fd, content.c_str(), content.length());
-    assert(written == content.length());
+    assert(written == (ssize_t)content.length());
     (void)written;
     flock(fd, LOCK_UN);
     close(fd);

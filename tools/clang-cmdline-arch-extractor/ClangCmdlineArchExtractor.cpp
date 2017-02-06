@@ -63,9 +63,10 @@ int main(int argc, const char **argv) {
       "@" + getTripleSuffix(llvm::Triple(CI->getTargetOpts().Triple));
 
   for (StringRef SourceFile : Sources) {
-    const char *Path = realpath(SourceFile.data(), nullptr);
+    char *Path = realpath(SourceFile.data(), nullptr);
     if (Path)
       outs() << Path << Suffix << " ";
+    free(Path);
   }
 
   return 0;
