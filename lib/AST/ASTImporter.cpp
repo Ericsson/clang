@@ -3878,13 +3878,16 @@ Decl *ASTNodeImporter::VisitParmVarDecl(ParmVarDecl *D) {
   if (T.isNull())
     return nullptr;
 
+  // Import the default argument.
+  Expr* DefaultArg = Importer.Import(D->getDefaultArg());
+
   // Create the imported parameter.
   TypeSourceInfo *TInfo = Importer.Import(D->getTypeSourceInfo());
   ParmVarDecl *ToParm = ParmVarDecl::Create(Importer.getToContext(), DC,
                                      Importer.Import(D->getInnerLocStart()),
                                             Loc, Name.getAsIdentifierInfo(),
                                             T, TInfo, D->getStorageClass(),
-                                            /*FIXME: Default argument*/nullptr);
+                                            DefaultArg);
   ToParm->setHasInheritedDefaultArg(D->hasInheritedDefaultArg());
 
   if (D->isUsed())
