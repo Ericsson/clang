@@ -108,6 +108,10 @@ int testDefaultArg(int a = 2*2) {
   return a;
 }
 
+int testDefArgExpr(){
+  return testDefaultArg();
+}
+
 template <typename T> // T has TemplateTypeParmType
 void testTemplateTypeParmType(int i);
 
@@ -119,9 +123,3 @@ const bool ExpressionTrait = __is_lvalue_expr(1);
 const unsigned ArrayRank = __array_rank(int[10][20]);
 const unsigned ArrayExtent = __array_extent(int[10][20], 1);
 
-int testDefArgExpr(int Arg = 42){
-  return Arg;
-}
-int test(){
-return testDefArgExpr();
-}
