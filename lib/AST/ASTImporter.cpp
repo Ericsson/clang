@@ -3878,17 +3878,28 @@ Decl *ASTNodeImporter::VisitParmVarDecl(ParmVarDecl *D) {
   if (T.isNull())
     return nullptr;
 
-  // Import the default argument.
-  Expr* DefaultArg = Importer.Import(D->getDefaultArg());
-
   // Create the imported parameter.
   TypeSourceInfo *TInfo = Importer.Import(D->getTypeSourceInfo());
   ParmVarDecl *ToParm = ParmVarDecl::Create(Importer.getToContext(), DC,
                                      Importer.Import(D->getInnerLocStart()),
                                             Loc, Name.getAsIdentifierInfo(),
                                             T, TInfo, D->getStorageClass(),
-                                            DefaultArg);
+                                            /*DefaultArg*/ nullptr);
+
+  // Set the default argument.
   ToParm->setHasInheritedDefaultArg(D->hasInheritedDefaultArg());
+  ToParm->setKNRPromoted(D->isKNRPromoted());
+
+  if (D->hasUninstantiatedDefaultArg()) {
+    Expr *UDArg = D->getUninstantiatedDefaultArg();
+    Expr *ToUDefArg = Importer.Import(UDArg);
+    ToParm->setUninstantiatedDefaultArg(ToUDefArg);
+  } else if (D->hasUnparsedDefaultArg()) {
+    ToParm->setUnparsedDefaultArg();
+  } else if (Expr* FromDefaultArg = D->getDefaultArg()) {
+    Expr* ToDefArg = Importer.Import(FromDefaultArg);
+    ToParm->setDefaultArg(ToDefArg);
+  }
 
   if (D->isUsed())
     ToParm->setIsUsed();

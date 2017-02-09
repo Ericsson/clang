@@ -41,5 +41,6 @@ void testImport(int *x, const S1 &cs1, S1 &s1) {
   testScalarInit(42);
   testOffsetOf();
   testDefaultArg(12);
+  testDefaultArgExpr();
   useTemplateType();
 }

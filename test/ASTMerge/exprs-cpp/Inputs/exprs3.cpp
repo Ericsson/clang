@@ -108,7 +108,7 @@ int testDefaultArg(int a = 2*2) {
   return a;
 }
 
-int testDefArgExpr(){
+int testDefaultArgExpr() {
   return testDefaultArg();
 }
 
@@ -122,4 +122,3 @@ void useTemplateType() {
 const bool ExpressionTrait = __is_lvalue_expr(1);
 const unsigned ArrayRank = __array_rank(int[10][20]);
 const unsigned ArrayExtent = __array_extent(int[10][20], 1);
-
