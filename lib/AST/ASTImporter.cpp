@@ -3890,14 +3890,19 @@ Decl *ASTNodeImporter::VisitParmVarDecl(ParmVarDecl *D) {
   ToParm->setHasInheritedDefaultArg(D->hasInheritedDefaultArg());
   ToParm->setKNRPromoted(D->isKNRPromoted());
 
+  Expr* ToDefArg = nullptr;
   if (D->hasUninstantiatedDefaultArg()) {
     Expr *UDArg = D->getUninstantiatedDefaultArg();
-    Expr *ToUDefArg = Importer.Import(UDArg);
-    ToParm->setUninstantiatedDefaultArg(ToUDefArg);
+    ToDefArg = Importer.Import(UDArg);
+    if (!ToDefArg)
+      return nullptr;
+    ToParm->setUninstantiatedDefaultArg(ToDefArg);
   } else if (D->hasUnparsedDefaultArg()) {
     ToParm->setUnparsedDefaultArg();
   } else if (Expr* FromDefaultArg = D->getDefaultArg()) {
-    Expr* ToDefArg = Importer.Import(FromDefaultArg);
+    ToDefArg = Importer.Import(FromDefaultArg);
+    if(!ToDefArg)
+      return nullptr;
     ToParm->setDefaultArg(ToDefArg);
   }
 
