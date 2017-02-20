@@ -164,7 +164,7 @@ def main():
 
     cfg = dict()
     func_set = set()
-    print time.clock() - t
+    print(time.clock() - t)
     print('Obtaining analysis order')
     t = time.clock()
     # sys.stdout.flush()
@@ -226,7 +226,7 @@ def main():
         command_id_to_file[command_id] = buildcommand['file']
         command_id += 1
 
-    print time.clock() - t
+    print(time.clock() - t)
     print("build build_graph")
     t = time.clock()
     # Create build_commands dependency graph based on function calls
@@ -247,7 +247,7 @@ def main():
                         build_graph[calleebuild_id].into.add(callerbuild_id)
     # eliminate `circles from build_graph
     build_graph_copy = copy.deepcopy(build_graph)
-    print time.clock() - t
+    print(time.clock() - t)
     print("eliminate circles")
     t = time.clock()
 
@@ -263,7 +263,7 @@ def main():
                                build_graph[key].out - removable_edges[key].out)
                     for key in list(build_graph.keys())
     }
-    print time.clock() - t
+    print(time.clock() - t)
 
     # Some checks to make sure the algorithm is valid
     assert not cyclic(build_graph)
