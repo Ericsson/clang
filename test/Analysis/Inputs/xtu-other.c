@@ -12,3 +12,17 @@ int f(int i) {
   }
   return 1;
 }
+
+//TEST reporting an
+//error in macro
+//definition
+#define MYMACRO(ctx) \
+    ctx->a;
+struct S{
+  int a;
+};
+
+int g(struct S *ctx){  
+  MYMACRO(ctx);
+  return 0; 
+}
