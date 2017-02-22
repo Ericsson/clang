@@ -5959,7 +5959,10 @@ SourceLocation ASTImporter::Import(SourceLocation FromLoc) {
   // For now, map everything down to its file location, so that we
   // don't have to import macro expansions.
   // FIXME: Import macro expansions!
-  FromLoc = FromSM.getFileLoc(FromLoc);
+  // If the FromLoc refers to a location
+  // inside a macro definition, the invocation
+  // location of that macro is imported.
+  FromLoc = FromSM.getExpansionLoc(FromLoc);
   std::pair<FileID, unsigned> Decomposed = FromSM.getDecomposedLoc(FromLoc);
   SourceManager &ToSM = ToContext.getSourceManager();
   FileID ToFileID = Import(Decomposed.first);
