@@ -76,11 +76,15 @@ def merge_gcov(from_gcov, to_gcov):
                     sys.exit(1)
 
             if to_split[0] == '#####':
-                to_split[0] = from_split[0]
+                if from_split[0] != '-':
+                    to_split[0] = from_split[0]
             elif to_split[0] == '-':
-                assert from_split[0] == '-'
+                assert is_num(from_split[0]) or from_split[0] == '#####' \
+                       or from_split[0] == '-'
+                to_split[0] = from_split[0]
             elif is_num(to_split[0]):
-                assert is_num(from_split[0]) or from_split[0] == '#####'
+                assert is_num(from_split[0]) or from_split[0] == '#####' \
+                       or from_split[0] == '-'
                 if is_num(from_split[0]):
                     to_split[0] = str(int(to_split[0]) + int(from_split[0]))
 
