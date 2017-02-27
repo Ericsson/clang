@@ -3884,8 +3884,27 @@ Decl *ASTNodeImporter::VisitParmVarDecl(ParmVarDecl *D) {
                                      Importer.Import(D->getInnerLocStart()),
                                             Loc, Name.getAsIdentifierInfo(),
                                             T, TInfo, D->getStorageClass(),
-                                            /*FIXME: Default argument*/nullptr);
+                                            /*DefaultArg*/ nullptr);
+
+  // Set the default argument.
   ToParm->setHasInheritedDefaultArg(D->hasInheritedDefaultArg());
+  ToParm->setKNRPromoted(D->isKNRPromoted());
+
+  Expr* ToDefArg = nullptr;
+  if (D->hasUninstantiatedDefaultArg()) {
+    Expr *UDArg = D->getUninstantiatedDefaultArg();
+    ToDefArg = Importer.Import(UDArg);
+    if (!ToDefArg)
+      return nullptr;
+    ToParm->setUninstantiatedDefaultArg(ToDefArg);
+  } else if (D->hasUnparsedDefaultArg()) {
+    ToParm->setUnparsedDefaultArg();
+  } else if (Expr* FromDefaultArg = D->getDefaultArg()) {
+    ToDefArg = Importer.Import(FromDefaultArg);
+    if(!ToDefArg)
+      return nullptr;
+    ToParm->setDefaultArg(ToDefArg);
+  }
 
   if (D->isUsed())
     ToParm->setIsUsed();
