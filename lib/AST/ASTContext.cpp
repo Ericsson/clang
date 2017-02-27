@@ -1459,14 +1459,14 @@ std::string getMangledName(const NamedDecl *ND, MangleContext *MangleCtx) {
 }
 
 const FunctionDecl* iterateContextDecls(const DeclContext *DC,
-                                const std::string &MangledFnName,
-                                std::unique_ptr<MangleContext> &MangleCtx) {
+                                const std::string &LookUpName,
+                                std::unique_ptr<MangleContext> &MangleCtx, bool LookUpByName = false) {
   //FIXME: Use ASTMatcher instead.
   if (!DC)
     return nullptr;
   for (Decl *D : DC->decls()) {
     const auto *SubDC = dyn_cast<DeclContext>(D);
-    if (const auto *FD = iterateContextDecls(SubDC, MangledFnName, MangleCtx))
+    if (const auto *FD = iterateContextDecls(SubDC, LookUpName, MangleCtx, LookUpByName))
       return FD;
 
     const auto *ND = dyn_cast<FunctionDecl>(D);
@@ -1474,9 +1474,11 @@ const FunctionDecl* iterateContextDecls(const DeclContext *DC,
     if (!ND || !ND->hasBody(ResultDecl)) {
       continue;
     }
-    std::string LookupMangledName = getMangledName(ResultDecl, MangleCtx.get());
+    std::string ResultName = LookUpByName
+                             ? ResultDecl->getNameAsString()
+                             : getMangledName(ResultDecl, MangleCtx.get());
     // We are already sure that the triple is correct here.
-    if (LookupMangledName != MangledFnName)
+    if (LookUpName != ResultName)
       continue;
     return ResultDecl;
   }
@@ -1489,52 +1491,72 @@ ASTContext::getXTUDefinition(const FunctionDecl *FD, CompilerInstance &CI,
                              std::function<ASTUnit *(StringRef)> Loader) {
   NumGetXTUCalled++;
   assert(!FD->hasBody() && "FD has a definition in current translation unit!");
-  if (!FD->getType()->getAs<FunctionProtoType>())
+  bool LookUpByName = false;
+  if (!FD->getType()->getAs<FunctionProtoType>() && !getLangOpts().ImplicitInt)
   {
     NumNotEvenMangle++;
     return nullptr; // Cannot even mangle that.
+  } else if(!FD->getType()->getAs<FunctionProtoType>())
+  {
+    LookUpByName = true;
   }
+
   ImportMapping::const_iterator FoundImport = ImportMap.find(FD);
   if (FoundImport != ImportMap.end()){
     NumGetXTUSuccess++;
     return FoundImport->second;
   }
-
+  std::string LookUpName;
   std::unique_ptr<MangleContext> MangleCtx(
       ItaniumMangleContext::create(FD->getASTContext(), Diags));
-  MangleCtx->setShouldForceMangleProto(true);
-  std::string MangledFnName = getMangledName(FD, MangleCtx.get());
-  std::string ExternalFunctionMap = (XTUDir + "/externalFnMap.txt").str();
+  if(LookUpByName)
+  {
+    LookUpName = FD->getNameAsString();
+  } else {
+    MangleCtx->setShouldForceMangleProto(true);
+    LookUpName = getMangledName(FD, MangleCtx.get());
+  }
+
+
   ASTUnit *Unit = nullptr;
   StringRef ASTFileName;
   FunctionAstUnitMapping::const_iterator FnUnitCacheEntry =
-      FunctionAstUnitMap.find(MangledFnName);
+      FunctionAstUnitMap.find(LookUpName);
+
   if (FnUnitCacheEntry == FunctionAstUnitMap.end()) {
-    if (FunctionFileMap.empty()) {
+    if (MangledNameFileMap.empty()) {
+      std::string ExternalFunctionMap = (XTUDir + "/externalFnMap.txt").str();
       std::ifstream ExternalFnMapFile(ExternalFunctionMap);
-      std::string FunctionName, FileName;
-      while (ExternalFnMapFile >> FunctionName >> FileName)
-        FunctionFileMap[FunctionName] = (XTUDir + "/" + FileName).str();
+      std::string FileName, MangledName, FnName;
+      while (ExternalFnMapFile >> MangledName >> FnName >> FileName) {
+        MangledNameFileMap[MangledName] = (XTUDir + "/" + FileName).str();
+        if(FnName != "__invalid__")
+          FnNameFileMap[FnName] = (XTUDir + "/" + FileName).str();
+      }
       ExternalFnMapFile.close();
     }
 
-    FunctionFileMapping::iterator it = FunctionFileMap.find(MangledFnName);
-    if (it != FunctionFileMap.end())
+    FunctionFileMapping::iterator it =
+        LookUpByName ? FnNameFileMap.find(LookUpName)
+                     : MangledNameFileMap.find(LookUpName);
+
+    if (it != MangledNameFileMap.end() && it != FnNameFileMap.end())
       ASTFileName = it->second;
     else // No definition found even in some other build unit.
     {
       NumNotInOtherTU++;
       return nullptr;
     }
-      FileASTUnitMapping::iterator ASTCacheEntry =
+
+    FileASTUnitMapping::iterator ASTCacheEntry =
         FileASTUnitMap.find(ASTFileName);
     if (ASTCacheEntry == FileASTUnitMap.end()) {
       Unit = Loader(ASTFileName);
       FileASTUnitMap[ASTFileName] = Unit;
-      FunctionAstUnitMap[MangledFnName] = Unit;
+      FunctionAstUnitMap[LookUpName] = Unit;
     } else {
       Unit = ASTCacheEntry->second;
-      FunctionAstUnitMap[MangledFnName] = Unit;
+      FunctionAstUnitMap[LookUpName] = Unit;
     }
   } else {
     Unit = FnUnitCacheEntry->second;
@@ -1549,8 +1571,8 @@ ASTContext::getXTUDefinition(const FunctionDecl *FD, CompilerInstance &CI,
   ASTImporter &Importer = getOrCreateASTImporter(Unit->getASTContext());
   TranslationUnitDecl *TU = Unit->getASTContext().getTranslationUnitDecl();
   if (const FunctionDecl *ResultDecl =
-            iterateContextDecls(TU, MangledFnName, MangleCtx)) {
-    llvm::errs() << "Importing function " << MangledFnName << " from "
+            iterateContextDecls(TU, LookUpName, MangleCtx, LookUpByName)) {
+    llvm::errs() << "Importing function " << LookUpName << " from "
                  << ASTFileName << "\n";
     // FIXME: Refactor const_cast
     auto *ToDecl = cast<FunctionDecl>(

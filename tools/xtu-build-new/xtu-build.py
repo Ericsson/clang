@@ -196,22 +196,26 @@ else:
 # Generate externalFnMap.txt
 
 func_2_file = {}
-func_2_size = {}
+func_2_shortname = {}
 extfunc_2_file = {}
 func_2_fileset = {}
+invalid_func_names = set()
 
 defined_fns_filename = os.path.join(mainargs.xtuindir, 'definedFns.txt')
 with open(defined_fns_filename,  'r') as defined_fns_file:
     for line in defined_fns_file:
-        funcname, filename, funlen = line.strip().split(' ')
-        if funcname.startswith('!'):
-            funcname = funcname[1:]  # main function
-        if funcname not in func_2_file.keys():
-            func_2_fileset[funcname] = set([filename])
+        mangledname, fnname, filename = line.strip().split(' ')
+        if mangledname.startswith('!'):
+            mangledname = mangledname[1:]  # main function
+        if mangledname not in func_2_file.keys():
+            func_2_fileset[mangledname] = set([filename])
         else:
-            func_2_fileset[funcname].add(filename)
-        func_2_file[funcname] = filename
-        func_2_size[funcname] = funlen
+            func_2_fileset[mangledname].add(filename)
+        func_2_file[mangledname] = filename
+        if fnname not in func_2_shortname.values():
+            func_2_shortname[mangledname] = fnname
+        else:
+            invalid_func_names.add(fnname)
 
 extern_fns_filename = os.path.join(mainargs.xtuindir, 'externalFns.txt')
 with open(extern_fns_filename,  'r') as extern_fns_file:
@@ -224,7 +228,10 @@ extern_fns_map_filename = os.path.join(mainargs.xtuindir, 'externalFnMap.txt')
 with open(extern_fns_map_filename, 'w') as out_file:
     for func, fname in extfunc_2_file.items():
         if len(func_2_fileset[func]) == 1:
-            out_file.write('%s %s.ast\n' % (func, fname))
+            if func_2_shortname[func] in invalid_func_names:
+                out_file.write('%s %s %s.ast\n' % (func, "__invalid__", fname))
+            else:
+                out_file.write('%s %s %s.ast\n' % (func, func_2_shortname[func], fname))
 
 
 # Build dependency graph

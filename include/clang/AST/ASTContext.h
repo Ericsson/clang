@@ -1904,7 +1904,7 @@ private:
   typedef std::map<const FunctionDecl *, const FunctionDecl *> ImportMapping;
   FileASTUnitMapping FileASTUnitMap;
   FunctionAstUnitMapping FunctionAstUnitMap;
-  FunctionFileMapping FunctionFileMap;
+  FunctionFileMapping MangledNameFileMap, FnNameFileMap;
   ASTUnitImporterMapping ASTUnitImporterMap;
   ImportMapping ImportMap;
   ASTImporter &getOrCreateASTImporter(ASTContext &From);
