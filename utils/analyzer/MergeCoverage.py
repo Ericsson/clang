@@ -35,12 +35,15 @@ def is_num(val):
 
 
 def is_valid(line):
-    '''Check whether a list is a valid gcov line after join on colon.'''
-    if len(line) == 4:
-        return line[2].lower() in {"graph", "data", "runs", "programs",
-                                   "source"}
-    else:
-        return len(line) == 3
+    '''Check whether a list is a valid gcov line after join on colon.
+       Note that the source code might also containt colons, so the checks
+       on the length is not strict. This could be improved in the future.'''
+    if len(line) < 3:
+        return False
+    if line[2].lower() in {"graph", "data", "runs", "programs",
+                                   "source"}:
+        return len(line) == 4
+    return True
 
 
 def merge_gcov(from_gcov, to_gcov):
