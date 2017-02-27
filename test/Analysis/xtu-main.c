@@ -12,10 +12,12 @@ typedef struct {
 int f(int);
 extern foobar fb;
 
+int getkey();
+
 int main() {
   clang_analyzer_eval(f(5) == 1); // expected-warning{{TRUE}}
-  
-  return 0;
+
+  return getkey();
 }
 
 //TEST
