@@ -11,6 +11,7 @@
         ...
         gcovdir/TranslationUnit1/fileN.gcov
         ...
+        gcovdir/TranslationUnitK/file1.gcov
         gcovdir/TranslationUnitK/fileM.gcov
    The output:
         outputdir/file1.gcov
@@ -46,7 +47,38 @@ def is_valid(line):
     return True
 
 
-def merge_gcov(from_gcov, to_gcov):
+def diff_gcov_lines(to_split, from_split):
+    if to_split[0] == '#####':
+        if is_num(from_split[0]):
+            to_split[0] = '#####'
+        else:
+            to_split[0] = '-'
+    elif to_split[0] == '-':
+        if is_num(from_split[0]):
+            to_split[0] = '#####'
+    elif is_num(to_split[0]):
+        if is_num(from_split[0]) or from_split[0] == '-':
+            to_split[0] = '-'
+        elif from_split[0] == '#####':
+            to_split[0] = '1'
+
+
+def union_gcov_lines(to_split, from_split):
+    if to_split[0] == '#####':
+        if from_split[0] != '-':
+            to_split[0] = from_split[0]
+    elif to_split[0] == '-':
+        assert is_num(from_split[0]) or from_split[0] == '#####' \
+            or from_split[0] == '-'
+        to_split[0] = from_split[0]
+    elif is_num(to_split[0]):
+        assert is_num(from_split[0]) or from_split[0] == '#####' \
+            or from_split[0] == '-'
+        if is_num(from_split[0]):
+            to_split[0] = str(int(to_split[0]) + int(from_split[0]))
+
+
+def process_gcov(from_gcov, to_gcov, line_op):
     '''Merge to existing gcov file, modify the second one.'''
     with open(from_gcov) as from_file, open(to_gcov) as to_file:
         from_lines = from_file.readlines()
@@ -75,26 +107,14 @@ def merge_gcov(from_gcov, to_gcov):
                     print("%s != %s" % (from_split[j+1], to_split[j+1]))
                     sys.exit(1)
 
-            if to_split[0] == '#####':
-                if from_split[0] != '-':
-                    to_split[0] = from_split[0]
-            elif to_split[0] == '-':
-                assert is_num(from_split[0]) or from_split[0] == '#####' \
-                       or from_split[0] == '-'
-                to_split[0] = from_split[0]
-            elif is_num(to_split[0]):
-                assert is_num(from_split[0]) or from_split[0] == '#####' \
-                       or from_split[0] == '-'
-                if is_num(from_split[0]):
-                    to_split[0] = str(int(to_split[0]) + int(from_split[0]))
-
+            line_op(to_split, from_split)
             to_lines[i] = ":".join(to_split)
 
     with open(to_gcov, 'w') as to_file:
         to_file.writelines(to_lines)
 
 
-def process_tu(tu_path, output):
+def process_tu(tu_path, output, operation):
     '''Process a directory containing files originated from checking a tu.'''
     for root, _, files in os.walk(tu_path):
         for gcovfile in files:
@@ -105,7 +125,7 @@ def process_tu(tu_path, output):
             gcov_out_path = os.path.join(
                     output, os.path.relpath(gcov_in_path, tu_path))
             if os.path.exists(gcov_out_path):
-                merge_gcov(gcov_in_path, gcov_out_path)
+                operation(gcov_in_path, gcov_out_path)
             else:
                 # No merging needed.
                 try:
@@ -115,27 +135,45 @@ def process_tu(tu_path, output):
                 shutil.copyfile(gcov_in_path, gcov_out_path)
 
 
-def main(indir, outdir):
+def merge(indir, outdir):
     '''Process each tu dir.'''
-    if os.path.exists(outdir):
-        shutil.rmtree(outdir)
     os.mkdir(outdir)
-
     for tu_dir in os.listdir(indir):
         tu_path = os.path.join(indir, tu_dir)
         if not os.path.isdir(tu_path):
             continue
 
-        process_tu(tu_path, outdir)
+        def merge_gcov(from_gcov, to_gcov):
+            process_gcov(from_gcov, to_gcov, union_gcov_lines)
 
+        process_tu(tu_path, outdir, merge_gcov)
+
+
+def diff(baseline, indir, outdir):
+    shutil.copytree(baseline, outdir) 
+
+    def diff_gcov(from_gcov, to_gcov):
+        process_gcov(from_gcov, to_gcov, diff_gcov_lines)
+
+    process_tu(indir, outdir, diff_gcov)
+ 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Merge gcov files from "
                                      "different translation units")
-    parser.add_argument("--input", "-i", help="Directory containing the input"
+    parser.add_argument("--input", "-i", help="Directory containing the input."
                         " gcov files", required=True)
+    parser.add_argument("--baseline", "-b", help="Directory containing the baseline"
+                        " gcov files. Only used for diffing coverage.", required=False)
     parser.add_argument("--output", "-o", help="Output directory for gcov"
                         " files. Warning! Output tree will be cleared!",
                         required=True)
     args = parser.parse_args()
-    main(args.input, args.output)
+
+    if os.path.exists(args.output):
+        shutil.rmtree(args.output)
+
+    if args.baseline: 
+        diff(args.baseline, args.input, args.output)
+    else:
+        merge(args.input, args.output)
