@@ -5244,12 +5244,14 @@ Stmt *ASTNodeImporter::VisitGCCAsmStmt(GCCAsmStmt *S) {
   SmallVector<IdentifierInfo *, 4> Names;
   for (unsigned I = 0, E = S->getNumOutputs(); I != E; I++) {
     IdentifierInfo *ToII = Importer.Import(S->getOutputIdentifier(I));
-    // Even if assert(ToII) fails, we should not abort the whole Stmt
+    // It is normal that assert(ToII) fails,
+    // see ParseStmtAsm::ParseAsmOperandsOpt putting nullptr in Names
     Names.push_back(ToII);
   }
   for (unsigned I = 0, E = S->getNumInputs(); I != E; I++) {
     IdentifierInfo *ToII = Importer.Import(S->getInputIdentifier(I));
-    // Even if assert(ToII) fails, we should not abort the whole Stmt
+    // It is normal that assert(ToII) fails,
+    // see ParseStmtAsm::ParseAsmOperandsOpt putting nullptr in Names
     Names.push_back(ToII);
   }
 
@@ -5257,7 +5259,8 @@ Stmt *ASTNodeImporter::VisitGCCAsmStmt(GCCAsmStmt *S) {
   for (unsigned I = 0, E = S->getNumClobbers(); I != E; I++) {
     StringLiteral *Clobber = cast_or_null<StringLiteral>(
           Importer.Import(S->getClobberStringLiteral(I)));
-    // Even if assert(Clobber) fails, we should not abort the whole Stmt
+    if (!Clobber)
+      return nullptr;
     Clobbers.push_back(Clobber);
   }
 
@@ -5265,14 +5268,16 @@ Stmt *ASTNodeImporter::VisitGCCAsmStmt(GCCAsmStmt *S) {
   for (unsigned I = 0, E = S->getNumOutputs(); I != E; I++) {
     StringLiteral *Output = cast_or_null<StringLiteral>(
           Importer.Import(S->getOutputConstraintLiteral(I)));
-    // Even if assert(Output) fails, we should not abort the whole Stmt
+    if (!Output)
+      return nullptr;
     Constraints.push_back(Output);
   }
 
   for (unsigned I = 0, E = S->getNumInputs(); I != E; I++) {
     StringLiteral *Input = cast_or_null<StringLiteral>(
           Importer.Import(S->getInputConstraintLiteral(I)));
-    // Even if assert(Input) fails, we should not abort the whole Stmt
+    if (!Input)
+      return nullptr;
     Constraints.push_back(Input);
   }
 
