@@ -1,0 +1,3 @@
+#!/bin/bash
+$VALGRIND_PATH -q --tool=massif --massif-out-file=$MEMPROF_PATH/massif.out.%p $ANALYZE_BUILD_CLANG_ORIG $@
+exit $?
