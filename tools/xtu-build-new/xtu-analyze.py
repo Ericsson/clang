@@ -159,8 +159,6 @@ if mainargs.record_coverage:
     gcov_finalpath = os.path.abspath(os.path.join(mainargs.xtuoutdir,
                                                   gcov_outdir))
     shutil.rmtree(gcov_tmppath, True)
-    # analyzer_params += ['-analyzer-config',
-    #                     'record-coverage=' + gcov_tmppath]
 analyzer_params += ['-analyzer-stats']
 # analyzer_params += ['-analyzer-output ' + mainargs.output_format]
 passthru_analyzer_params = []
@@ -401,7 +399,7 @@ except OSError:
     pass
 
 if mainargs.record_coverage:
-    MergeCoverage.main(gcov_tmppath, gcov_finalpath)
+    MergeCoverage.merge(gcov_tmppath, gcov_finalpath)
     shutil.rmtree(gcov_tmppath, True)
 
 assert concurrent_threads == 0
