@@ -1,2 +1,3 @@
 _Z1fi@x86_64 xtu-other.c.ast
 _Z1gP1S@x86_64 xtu-other.c.ast
+_Z6getkeyv@x86_64 xtu-other.c.ast
