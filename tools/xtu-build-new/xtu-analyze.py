@@ -163,7 +163,6 @@ if mainargs.record_coverage:
     gcov_finalpath = os.path.abspath(os.path.join(mainargs.xtuoutdir,
                                                   gcov_outdir))
     shutil.rmtree(gcov_tmppath, True)
-
 if mainargs.record_memprof:
     #memprof_analyze.sh calls clang with valgrind profiling.
     #We need to wrap it in a script so scan-build/analyze-cc
@@ -172,7 +171,6 @@ if mainargs.record_memprof:
                                                 "memprof"))
     memprof_command = os.path.join(os.path.dirname(__file__),
                              'lib', 'memprof_analyze.py')    
-    
 
 analyzer_params += ['-analyzer-stats']
 passthru_analyzer_params = []
