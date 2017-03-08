@@ -89,10 +89,10 @@ parser.add_argument('--no-xtu', dest='no_xtu', action='store_true',
                          'only do normal static analysis')
 parser.add_argument('--record-coverage', dest='record_coverage',
                     action='store_true',
-                    help='Generate Valgrind Massif memory profile information during analysis (into xtuoutdir/memprof)')
+                    help='Generate coverage information during analysis')                    
 parser.add_argument('--record-memory-profile', dest='record_memprof',
                     action='store_true',
-                    help='Generate coverage information during analysis')
+                    help='Generate Valgrind Massif memory profile information during analysis (into xtuoutdir/memprof)')
 parser.add_argument('--log-passed-build', metavar='passed-buildlog.json',
                     dest='passed_buildlog',
                     help='Write new buildlog JSON of files passing analysis')
@@ -165,14 +165,16 @@ if mainargs.record_coverage:
     shutil.rmtree(gcov_tmppath, True)
 
 if mainargs.record_memprof:
+    #memprof_analyze.sh calls clang with valgrind profiling.
+    #We need to wrap it in a script so scan-build/analyze-cc
+    #can call it instead of clang.
     memprof_path = os.path.abspath(os.path.join(mainargs.xtuoutdir,                                                
                                                 "memprof"))
     memprof_command = os.path.join(os.path.dirname(__file__),
-                             'lib', 'memprof_analyze')
+                             'lib', 'memprof_analyze.py')    
     
 
 analyzer_params += ['-analyzer-stats']
-# analyzer_params += ['-analyzer-output ' + mainargs.output_format]
 passthru_analyzer_params = []
 for param in analyzer_params:
     passthru_analyzer_params += ['-Xanalyzer']
@@ -184,7 +186,6 @@ analyzer_env['ANALYZE_BUILD_CLANG'] = os.path.join(clang_path, 'clang')
 analyzer_env['ANALYZE_BUILD_REPORT_DIR'] = os.path.abspath(mainargs.xtuoutdir)
 analyzer_env['ANALYZE_BUILD_PARAMETERS'] = ' '.join(passthru_analyzer_params)
 analyzer_env['ANALYZE_BUILD_REPORT_FORMAT'] = mainargs.output_format
-# analyzer_env['ANALYZE_BUILD_VERBOSE'] = 'DEBUG'
 
 graph_lock = threading.Lock()
 
@@ -270,10 +271,12 @@ def analyze(directory, command):
         cmdenv['MEMPROF_PATH'] = memprof_path
         cmdenv['ANALYZE_BUILD_CLANG_ORIG'] = analyzer_env['ANALYZE_BUILD_CLANG']
         cmdenv['ANALYZE_BUILD_CLANG'] = memprof_command
-        cmdenv['VALGRIND_PATH'] = os.path.join(valgrind_path,"valgrind")
+        cmdenv['VALGRIND_PATH'] = os.path.join(valgrind_path, "valgrind")
+        cmdenv['MEMPROF_OUTFILE'] = tu_name
          
     if mainargs.verbose:
         print analyze_cmd
+        cmdenv['ANALYZE_BUILD_VERBOSE'] = 'DEBUG'
 
     # Buffer output of subprocess and dump it out at the end, so that
     # the subprocess doesn't continue to write output after the user
@@ -382,10 +385,9 @@ def analyze_work():
             time.sleep(0.125)
 
 try:
-    os.makedirs(os.path.abspath(mainargs.xtuoutdir))
-    memprofp=os.path.join(os.path.abspath(mainargs.xtuoutdir),"memprof")
-    if not os.path.exists(memprofp):
-        os.makedirs(memprofp)
+    os.makedirs(os.path.abspath(mainargs.xtuoutdir))    
+    if not os.path.exists(memprof_path):
+        os.makedirs(memprof_path)
 except OSError:
     print 'Output directory %s already exists!' % \
         os.path.abspath(mainargs.xtuoutdir)
