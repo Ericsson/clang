@@ -247,6 +247,7 @@ namespace clang {
     Expr *VisitStmtExpr(StmtExpr *E);
     Expr *VisitUnaryOperator(UnaryOperator *E);
     Expr *VisitUnaryExprOrTypeTraitExpr(UnaryExprOrTypeTraitExpr *E);
+    Expr *VisitTypeTraitExpr(TypeTraitExpr *E);
     Expr *VisitBinaryOperator(BinaryOperator *E);
     Expr *VisitConditionalOperator(ConditionalOperator *E);
     Expr *VisitBinaryConditionalOperator(BinaryConditionalOperator *E);
@@ -4724,6 +4725,31 @@ Expr *ASTNodeImporter::VisitUnaryExprOrTypeTraitExpr(
                                           SubExpr, ResultType,
                                           Importer.Import(E->getOperatorLoc()),
                                           Importer.Import(E->getRParenLoc()));
+}
+
+Expr *ASTNodeImporter::VisitTypeTraitExpr(TypeTraitExpr *E) {
+  QualType T = Importer.Import(E->getType());
+  if (T.isNull())
+    return nullptr;
+
+  unsigned NumArgs = E->getNumArgs();
+  llvm::SmallVector<TypeSourceInfo *, 2> ToArgTypes(NumArgs);
+  for (unsigned AI = 0, AE = NumArgs; AI != AE; ++AI) {
+    TypeSourceInfo *FromArgType = E->getArg(AI);
+    TypeSourceInfo *ToArgType = Importer.Import(FromArgType);
+    if (!ToArgType)
+      return nullptr;
+    ToArgTypes[AI] = ToArgType;
+  }
+  TypeSourceInfo **ToArgTypesArray = new (Importer.getToContext())
+      TypeSourceInfo*[NumArgs];
+  for (unsigned AI = 0, AE = NumArgs; AI != AE; ++AI)
+    ToArgTypesArray[AI] = ToArgTypes[AI];
+
+  return TypeTraitExpr::Create(Importer.getToContext(), T,
+        Importer.Import(E->getLocStart()), E->getTrait(),
+        llvm::makeArrayRef(ToArgTypesArray, NumArgs),
+        Importer.Import(E->getLocEnd()), E->getValue());
 }
 
 Expr *ASTNodeImporter::VisitBinaryOperator(BinaryOperator *E) {
