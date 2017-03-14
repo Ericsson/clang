@@ -45,3 +45,12 @@
 // CHECK: struct2.c:76:5: error: external variable 'x13' declared with incompatible types in different translation units ('S13' vs. 'S13')
 // CHECK: struct1.c:79:5: note: declared here with type 'S13'
 // CHECK: 9 warnings and 8 errors generated
+// CHECK: struct1.c:114:7: warning: type 'struct DeepUnnamedError::(anonymous at [[PATH_TO_INPUTS:.+]]/struct1.c:114:7)' has incompatible definitions in different translation units
+// CHECK: struct1.c:115:14: note: field 'i' has type 'long' here
+// CHECK: struct2.c:112:15: note: field 'i' has type 'float' here
+// CHECK: struct1.c:113:5: warning: type 'union DeepUnnamedError::(anonymous at [[PATH_TO_INPUTS]]/struct1.c:113:5)' has incompatible definitions in different translation units
+// CHECK: struct1.c:116:9: note: field 'S' has type 'struct (anonymous struct at [[PATH_TO_INPUTS]]/struct1.c:114:7)' here
+// CHECK: struct2.c:113:9: note: field 'S' has type 'struct (anonymous struct at [[PATH_TO_INPUTS]]/struct2.c:111:7)' here
+// CHECK: struct2.c:122:3: error: external variable 'x14' declared with incompatible types in different translation units ('struct DeepUnnamedError' vs. 'struct DeepUnnamedError')
+// CHECK: struct1.c:125:3: note: declared here with type 'struct DeepUnnamedError'
+// CHECK: 10 warnings and 8 errors generated
