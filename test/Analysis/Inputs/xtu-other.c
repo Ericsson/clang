@@ -1,8 +1,13 @@
+enum B {x = 42,l,s};
 
 typedef struct {
   int a;
   int b;
 } foobar;
+
+int enumcheck(void) {
+  return x;
+}
 
 foobar fb;
 

@@ -137,7 +137,8 @@ namespace clang {
                            bool Complain = true);
     bool IsStructuralMatch(VarDecl *FromVar, VarDecl *ToVar,
                            bool Complain = true);
-    bool IsStructuralMatch(EnumDecl *FromEnum, EnumDecl *ToRecord);
+    bool IsStructuralMatch(EnumDecl *FromEnum, EnumDecl *ToRecord,
+                           bool Complain = true);
     bool IsStructuralMatch(EnumConstantDecl *FromEC, EnumConstantDecl *ToEC);
     bool IsStructuralMatch(ClassTemplateDecl *From, ClassTemplateDecl *To);
     bool IsStructuralMatch(VarTemplateDecl *From, VarTemplateDecl *To);
@@ -1232,10 +1233,12 @@ bool ASTNodeImporter::IsStructuralMatch(VarDecl *FromVar, VarDecl *ToVar,
   return Ctx.IsStructurallyEquivalent(FromVar, ToVar);
 }
 
-bool ASTNodeImporter::IsStructuralMatch(EnumDecl *FromEnum, EnumDecl *ToEnum) {
+bool ASTNodeImporter::IsStructuralMatch(EnumDecl *FromEnum, EnumDecl *ToEnum,
+                                        bool Complain) {
   StructuralEquivalenceContext Ctx(Importer.getFromContext(),
                                    Importer.getToContext(),
-                                   Importer.getNonEquivalentDecls());
+                                   Importer.getNonEquivalentDecls(),
+                                   false, Complain);
   return Ctx.IsStructurallyEquivalent(FromEnum, ToEnum);
 }
 
@@ -1244,6 +1247,11 @@ bool ASTNodeImporter::IsStructuralMatch(EnumConstantDecl *FromEC,
 {
   const llvm::APSInt &FromVal = FromEC->getInitVal();
   const llvm::APSInt &ToVal = ToEC->getInitVal();
+
+  EnumDecl* ToDC = cast<EnumDecl>(ToEC->getDeclContext());
+  EnumDecl* FromDC = cast<EnumDecl>(FromEC->getDeclContext());
+  if(!IsStructuralMatch(FromDC,ToDC,false))
+    return false;
 
   return FromVal.isSigned() == ToVal.isSigned() &&
          FromVal.getBitWidth() == ToVal.getBitWidth() &&
@@ -4733,16 +4741,16 @@ Expr *ASTNodeImporter::VisitTypeTraitExpr(TypeTraitExpr *E) {
 
   unsigned NumArgs = E->getNumArgs();
   llvm::SmallVector<TypeSourceInfo *, 2> ToArgTypes(NumArgs);
-  for (unsigned AI = 0, AE = NumArgs; AI != AE; ++AI) {
+  for (unsigned AI = 0; AI != NumArgs; ++AI) {
     TypeSourceInfo *FromArgType = E->getArg(AI);
     TypeSourceInfo *ToArgType = Importer.Import(FromArgType);
-    if (!ToArgType)
+    if (!ToArgType && FromArgType)
       return nullptr;
     ToArgTypes[AI] = ToArgType;
   }
   TypeSourceInfo **ToArgTypesArray = new (Importer.getToContext())
       TypeSourceInfo*[NumArgs];
-  for (unsigned AI = 0, AE = NumArgs; AI != AE; ++AI)
+  for (unsigned AI = 0; AI != NumArgs; ++AI)
     ToArgTypesArray[AI] = ToArgTypes[AI];
 
   return TypeTraitExpr::Create(Importer.getToContext(), T,
