@@ -1561,12 +1561,12 @@ static void processCoverageInfo(const CFGBlock &Block, SourceManager &SM,
       continue;
     }
     assert(S);
-    SourceLocation SpellingStartLoc = SM.getSpellingLoc(S->getLocStart());
-    if (SpellingStartLoc.isInvalid())
+    SourceLocation ExpansionStartLoc = SM.getExpansionLoc(S->getLocStart());
+    if (ExpansionStartLoc.isInvalid())
       continue;
-    if (SM.isInSystemHeader(SpellingStartLoc))
+    if (SM.isInSystemHeader(ExpansionStartLoc))
       return;
-    FileID FID = SM.getFileID(SpellingStartLoc);
+    FileID FID = SM.getFileID(ExpansionStartLoc);
     if (FID.isInvalid())
       continue;
     if (FE) {
@@ -1583,15 +1583,15 @@ static void processCoverageInfo(const CFGBlock &Block, SourceManager &SM,
         CoverageInfo.insert(std::make_pair(FE, std::vector<int>(Lines, 0)));
       }
     }
-    SourceLocation SpellingEndLoc = SM.getSpellingLoc(S->getLocEnd());
-    if (SpellingEndLoc.isInvalid() ||
-        SM.getFileID(SpellingStartLoc) != SM.getFileID(SpellingEndLoc))
+    SourceLocation ExpansionEndLoc = SM.getExpansionLoc(S->getLocEnd());
+    if (ExpansionEndLoc.isInvalid() ||
+        SM.getFileID(ExpansionStartLoc) != SM.getFileID(ExpansionEndLoc))
       continue;
     bool Invalid = false;
-    unsigned LineBegin = SM.getSpellingLineNumber(SpellingStartLoc, &Invalid);
+    unsigned LineBegin = SM.getExpansionLineNumber(ExpansionStartLoc, &Invalid);
     if (Invalid)
       continue;
-    unsigned LineEnd = SM.getSpellingLineNumber(SpellingEndLoc, &Invalid);
+    unsigned LineEnd = SM.getExpansionLineNumber(ExpansionEndLoc, &Invalid);
     if (Invalid)
       continue;
     for (unsigned Line = LineBegin; Line <= LineEnd; ++Line) {
