@@ -171,7 +171,7 @@ if mainargs.record_memprof:
     # can call it instead of clang.
     memprof_path = os.path.abspath(os.path.join(mainargs.xtuoutdir,
                                                 "memprof"))
-    memprof_command = os.path.join(os.path.dirname(__file__),
+    memprof_command = os.path.join(os.path.abspath(os.path.dirname(__file__)),
                                    'lib', 'memprof_analyze.py')
 
 analyzer_params += ['-analyzer-stats']
