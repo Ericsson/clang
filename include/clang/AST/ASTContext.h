@@ -39,7 +39,6 @@
 #include "clang/Basic/SanitizerBlacklist.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/Specifiers.h"
-#include "clang/Basic/VersionTuple.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
@@ -1900,16 +1899,11 @@ public:
   //                         Cross-translation unit support
   //===--------------------------------------------------------------------===//
 private:
-  typedef llvm::StringMap<std::string> FunctionFileMapping;
-  typedef llvm::StringMap<clang::ASTUnit *> FunctionAstUnitMapping;
-  typedef llvm::StringMap<clang::ASTUnit *> FileASTUnitMapping;
-  typedef std::map<TranslationUnitDecl *, ASTImporter *> ASTUnitImporterMapping;
-  typedef std::map<const FunctionDecl *, const FunctionDecl *> ImportMapping;
-  FileASTUnitMapping FileASTUnitMap;
-  FunctionAstUnitMapping FunctionAstUnitMap;
-  FunctionFileMapping FunctionFileMap;
-  ASTUnitImporterMapping ASTUnitImporterMap;
-  ImportMapping ImportMap;
+  llvm::StringMap<clang::ASTUnit *> FileASTUnitMap;
+  llvm::StringMap<clang::ASTUnit *> FunctionAstUnitMap;
+  llvm::StringMap<std::string> FunctionFileMap;
+  llvm::DenseMap<TranslationUnitDecl *, ASTImporter *> ASTUnitImporterMap;
+  llvm::DenseMap<const FunctionDecl *, const FunctionDecl *> ImportMap;
   ASTImporter &getOrCreateASTImporter(ASTContext &From);
 
 public:

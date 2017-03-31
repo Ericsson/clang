@@ -165,10 +165,6 @@ private:
   void Release() const;
 
 protected:
-  typedef llvm::StringMap<std::string> FunctionFileMapping;
-  typedef llvm::StringMap<clang::ASTUnit*> FunctionAstUnitMapping;
-  typedef llvm::StringMap<clang::ASTUnit*> FileASTUnitMapping;
-
   friend class CallEventManager;
 
   CallEvent(const Expr *E, ProgramStateRef state, const LocationContext *lctx)
@@ -389,11 +385,6 @@ public:
 private:
   typedef std::const_mem_fun_t<QualType, ParmVarDecl> get_type_fun;
   
-protected:
-  static FileASTUnitMapping FileASTUnitMap;
-  static FunctionAstUnitMapping FunctionAstUnitMap;
-  static FunctionFileMapping FunctionFileMap;
-
 public:
   /// Return call's formal parameters.
   ///
