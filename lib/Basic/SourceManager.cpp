@@ -2025,8 +2025,8 @@ InBeforeInTUCacheEntry &SourceManager::getInBeforeInTUCache(FileID LFID,
 }
 
 /// \brief Determines the order of 2 source locations in the translation unit.
-/// FIXME: It also works when two locations are from different translation unit.
-///        In that case it will return *some* order.
+/// FIXME: It also works when two locations are from different translation
+///        units. In that case it will return *some* order.
 ///
 /// \returns true if LHS source location comes before RHS, false otherwise.
 bool SourceManager::isBeforeInTranslationUnit(SourceLocation LHS,
@@ -2123,7 +2123,7 @@ bool SourceManager::isBeforeInTranslationUnit(SourceLocation LHS,
       return LIsScratch;
     return LOffs.second < ROffs.second;
   }
-  // FIXME: Source locations from different translation unit.
+  // FIXME: Source locations from different translation units.
   return LOffs.first < ROffs.first;
 }
 
