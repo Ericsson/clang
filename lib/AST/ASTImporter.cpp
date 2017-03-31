@@ -1782,7 +1782,6 @@ Decl *ASTNodeImporter::VisitEnumConstantDecl(EnumConstantDecl *D) {
   DeclarationName Name;
   SourceLocation Loc;
   NamedDecl *ToD;
-
   if (ImportDeclParts(D, DC, LexicalDC, Name, ToD, Loc))
     return nullptr;
   if (ToD)
