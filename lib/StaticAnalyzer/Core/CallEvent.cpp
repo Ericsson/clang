@@ -28,10 +28,6 @@
 using namespace clang;
 using namespace ento;
 
-CallEvent::FileASTUnitMapping CallEvent::FileASTUnitMap;
-CallEvent::FunctionAstUnitMapping CallEvent::FunctionAstUnitMap;
-CallEvent::FunctionFileMapping CallEvent::FunctionFileMap;
-
 QualType CallEvent::getResultType() const {
   const Expr *E = getOriginExpr();
   assert(E && "Calls without origin expressions do not have results");
