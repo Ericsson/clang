@@ -52,7 +52,7 @@ private:
   ASTContext &Context;
   DiagnosticsEngine &Diags;
   const ManglerKind Kind;
-  // Used for cross tranlsation unit analysis.
+  // Used for cross translation unit analysis.
   // To reduce the risk of function name collision in C projects, we force
   // name mangling for C functions when generating lookup identifiers for
   // the static analyzer.

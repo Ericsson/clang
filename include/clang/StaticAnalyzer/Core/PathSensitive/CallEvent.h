@@ -165,10 +165,6 @@ private:
   void Release() const;
 
 protected:
-  typedef llvm::StringMap<std::string> FunctionFileMapping;
-  typedef llvm::StringMap<clang::ASTUnit*> FunctionAstUnitMapping;
-  typedef llvm::StringMap<clang::ASTUnit*> FileASTUnitMapping;
-
   friend class CallEventManager;
 
   CallEvent(const Expr *E, ProgramStateRef state, const LocationContext *lctx)
@@ -390,11 +386,6 @@ private:
   struct GetTypeFn {
     QualType operator()(ParmVarDecl *PD) const { return PD->getType(); }
   };
-
-protected:
-  static FileASTUnitMapping FileASTUnitMap;
-  static FunctionAstUnitMapping FunctionAstUnitMap;
-  static FunctionFileMapping FunctionFileMap;
 
 public:
   /// Return call's formal parameters.
