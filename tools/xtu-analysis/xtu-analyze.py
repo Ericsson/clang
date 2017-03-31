@@ -26,7 +26,7 @@ try:
 except:
     raise
 
-threading_factor = int(multiprocessing.cpu_count() * 1.5)
+threading_factor = int(multiprocessing.cpu_count() * 1.0)
 analyser_output_formats = ['plist-multi-file', 'plist', 'plist-html',
                            'html', 'text']
 analyser_output_format = analyser_output_formats[0]
