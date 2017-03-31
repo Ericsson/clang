@@ -10,7 +10,7 @@ import signal
 import subprocess
 import string
 
-threading_factor = int(multiprocessing.cpu_count() * 1.5)
+threading_factor = int(multiprocessing.cpu_count() * 1.0)
 timeout = 86400
 
 parser = argparse.ArgumentParser(
