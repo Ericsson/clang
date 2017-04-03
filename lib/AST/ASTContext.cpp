@@ -1473,7 +1473,7 @@ const FunctionDecl* iterateContextDecls(const DeclContext *DC,
   //FIXME: Use ASTMatcher instead.
   if (!DC)
     return nullptr;
-  for (Decl *D : DC->decls()) {
+  for (const Decl *D : DC->decls()) {
     const auto *SubDC = dyn_cast<DeclContext>(D);
     if (const auto *FD = iterateContextDecls(SubDC, MangledFnName, MangleCtx))
       return FD;
@@ -1503,7 +1503,7 @@ ASTContext::getXTUDefinition(const FunctionDecl *FD, CompilerInstance &CI,
     NumNotEvenMangle++;
     return nullptr; // Cannot even mangle that.
   }
-  ImportMapping::const_iterator FoundImport = ImportMap.find(FD);
+  auto FoundImport = ImportMap.find(FD);
   if (FoundImport != ImportMap.end()){
     NumGetXTUSuccess++;
     return FoundImport->second;
@@ -1513,13 +1513,12 @@ ASTContext::getXTUDefinition(const FunctionDecl *FD, CompilerInstance &CI,
       ItaniumMangleContext::create(FD->getASTContext(), Diags));
   MangleCtx->setShouldForceMangleProto(true);
   std::string MangledFnName = getMangledName(FD, MangleCtx.get());
-  std::string ExternalFunctionMap = (XTUDir + "/externalFnMap.txt").str();
   ASTUnit *Unit = nullptr;
   StringRef ASTFileName;
-  FunctionAstUnitMapping::const_iterator FnUnitCacheEntry =
-      FunctionAstUnitMap.find(MangledFnName);
+  auto FnUnitCacheEntry = FunctionAstUnitMap.find(MangledFnName);
   if (FnUnitCacheEntry == FunctionAstUnitMap.end()) {
     if (FunctionFileMap.empty()) {
+      std::string ExternalFunctionMap = (XTUDir + "/externalFnMap.txt").str();
       std::ifstream ExternalFnMapFile(ExternalFunctionMap);
       std::string FunctionName, FileName;
       while (ExternalFnMapFile >> FunctionName >> FileName)
@@ -1527,16 +1526,15 @@ ASTContext::getXTUDefinition(const FunctionDecl *FD, CompilerInstance &CI,
       ExternalFnMapFile.close();
     }
 
-    FunctionFileMapping::iterator it = FunctionFileMap.find(MangledFnName);
-    if (it != FunctionFileMap.end())
-      ASTFileName = it->second;
+    auto It = FunctionFileMap.find(MangledFnName);
+    if (It != FunctionFileMap.end())
+      ASTFileName = It->second;
     else // No definition found even in some other build unit.
     {
       NumNotInOtherTU++;
       return nullptr;
     }
-      FileASTUnitMapping::iterator ASTCacheEntry =
-        FileASTUnitMap.find(ASTFileName);
+    auto ASTCacheEntry = FileASTUnitMap.find(ASTFileName);
     if (ASTCacheEntry == FileASTUnitMap.end()) {
       Unit = Loader(ASTFileName);
       FileASTUnitMap[ASTFileName] = Unit;
@@ -1574,8 +1572,7 @@ ASTContext::getXTUDefinition(const FunctionDecl *FD, CompilerInstance &CI,
 }
 
 ASTImporter &ASTContext::getOrCreateASTImporter(ASTContext &From) {
-  ASTUnitImporterMapping::iterator I = ASTUnitImporterMap.find(
-        From.getTranslationUnitDecl());
+  auto I = ASTUnitImporterMap.find(From.getTranslationUnitDecl());
   if (I != ASTUnitImporterMap.end())
     return *I->second;
   ASTImporter *NewImporter = new ASTImporter(

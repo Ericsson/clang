@@ -150,19 +150,20 @@ void MapFunctionNamesConsumer::handleDecl(const Decl *D) {
           std::string("/ast/") + getTripleSuffix(Ctx) + CurrentFileName;
       std::string FullName = MangledName + Triple;
 
-      if (!FileName.empty())
-        switch (FD->getLinkageInternal()) {
-        case ExternalLinkage:
-        case VisibleNoLinkage:
-        case UniqueExternalLinkage:
-          if (SM.isInMainFile(Body->getLocStart()))
-            DefinedFuncsStr << "!";
-          DefinedFuncsStr << FullName << " " << FileName <<  " " <<
-          (SM.getSpellingLineNumber(FD->getSourceRange().getEnd())
-          - SM.getSpellingLineNumber(FD->getSourceRange().getBegin())) << "\n";
-        default:
-          break;
-        }
+      switch (FD->getLinkageInternal()) {
+      case ExternalLinkage:
+      case VisibleNoLinkage:
+      case UniqueExternalLinkage:
+        if (SM.isInMainFile(Body->getLocStart()))
+          DefinedFuncsStr << "!";
+        DefinedFuncsStr
+            << FullName << " " << FileName << " "
+            << (SM.getSpellingLineNumber(FD->getSourceRange().getEnd()) -
+                SM.getSpellingLineNumber(FD->getSourceRange().getBegin()))
+            << "\n";
+      default:
+        break;
+      }
 
       WalkAST Walker(*this, FullName, ItaniumCtx, Triple);
       Walker.Visit(Body);
@@ -192,7 +193,7 @@ MapFunctionNamesConsumer::~MapFunctionNamesConsumer() {
   std::string BuildDir = XTUDir;
   lockedWrite(BuildDir + "/externalFns.txt", ExternFuncStr.str());
   lockedWrite(BuildDir + "/definedFns.txt", DefinedFuncsStr.str());
-  std::stringstream CFGStr;
+  std::ostringstream CFGStr;
   for (auto &Entry : CG) {
     CFGStr << CurrentFileName << Triple << "::" << Entry.getKey().data();
     for (auto &E : Entry.getValue())
@@ -256,4 +257,5 @@ int main(int argc, const char **argv) {
   }
   ClangTool Tool(OptionsParser.getCompilations(), Sources);
   Tool.run(newFrontendActionFactory<MapFunctionNamesAction>().get());
+  return 0;
 }
