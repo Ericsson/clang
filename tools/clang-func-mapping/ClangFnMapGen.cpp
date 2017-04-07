@@ -41,10 +41,10 @@ typedef StringSet<> StrSet;
 typedef StringMap<StrSet> CallGraph;
 
 static cl::OptionCategory ClangFnMapGenCategory("clang-fnmapgen options");
-static cl::opt<std::string> XTUDir(
-    "xtu-dir",
+static cl::opt<std::string> CTUDir(
+    "ctu-dir",
     cl::desc(
-        "Directory that contains the XTU related files (e.g.: AST dumps)."),
+        "Directory that contains the CTU related files (e.g.: AST dumps)."),
     cl::init(""), cl::cat(ClangFnMapGenCategory));
 
 static void lockedWrite(const std::string &fileName,
@@ -186,7 +186,7 @@ bool MapFunctionNamesConsumer::isCLibraryFunction(const FunctionDecl *FD) {
 
 MapFunctionNamesConsumer::~MapFunctionNamesConsumer() {
   // Flush results to files.
-  std::string BuildDir = XTUDir;
+  std::string BuildDir = CTUDir;
   lockedWrite(BuildDir + "/externalFns.txt", ExternFuncStr.str());
   lockedWrite(BuildDir + "/definedFns.txt", DefinedFuncsStr.str());
   std::ostringstream CFGStr;
@@ -238,8 +238,8 @@ int main(int argc, const char **argv) {
   CommonOptionsParser OptionsParser(argc, argv, ClangFnMapGenCategory,
                                     cl::ZeroOrMore);
 
-  if (XTUDir.getNumOccurrences() != 1) {
-    errs() << "Exactly one XTU dir should be provided\n";
+  if (CTUDir.getNumOccurrences() != 1) {
+    errs() << "Exactly one CTU dir should be provided\n";
     return 1;
   }
   const StringRef cppFile = ".cpp", ccFile = ".cc", cFile = ".c",

@@ -386,7 +386,7 @@ private:
   struct GetTypeFn {
     QualType operator()(ParmVarDecl *PD) const { return PD->getType(); }
   };
-  
+
 public:
   /// Return call's formal parameters.
   ///
