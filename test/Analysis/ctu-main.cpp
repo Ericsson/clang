@@ -1,8 +1,8 @@
-// RUN: mkdir -p %T/xtudir
-// RUN: %clang_cc1 -triple x86_64-pc-linux-gnu -emit-pch -o %T/xtudir/xtu-other.cpp.ast %S/Inputs/xtu-other.cpp
-// RUN: %clang_cc1 -triple x86_64-pc-linux-gnu -emit-pch -o %T/xtudir/xtu-chain.cpp.ast %S/Inputs/xtu-chain.cpp
-// RUN: cp %S/Inputs/externalFnMap.txt %T/xtudir/
-// RUN: %clang_cc1 -triple x86_64-pc-linux-gnu -fsyntax-only -analyze -analyzer-checker=core,debug.ExprInspection -analyzer-config xtu-dir=%T/xtudir -analyzer-config reanalyze-xtu-visited=true -verify %s
+// RUN: mkdir -p %T/ctudir
+// RUN: %clang_cc1 -triple x86_64-pc-linux-gnu -emit-pch -o %T/ctudir/ctu-other.cpp.ast %S/Inputs/ctu-other.cpp
+// RUN: %clang_cc1 -triple x86_64-pc-linux-gnu -emit-pch -o %T/ctudir/ctu-chain.cpp.ast %S/Inputs/ctu-chain.cpp
+// RUN: cp %S/Inputs/externalFnMap.txt %T/ctudir/
+// RUN: %clang_cc1 -triple x86_64-pc-linux-gnu -fsyntax-only -analyze -analyzer-checker=core,debug.ExprInspection -analyzer-config ctu-dir=%T/ctudir -analyzer-config reanalyze-ctu-visited=true -verify %s
 
 void clang_analyzer_eval(int);
 

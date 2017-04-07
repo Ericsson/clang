@@ -1910,7 +1910,8 @@ Decl *ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
   QualType FromTy = D->getType();
   bool usedDifferentExceptionSpec = false;
 
-  if (const auto *FromFPT = D->getType()->getAs<FunctionProtoType>()) {
+  if (const FunctionProtoType *
+        FromFPT = D->getType()->getAs<FunctionProtoType>()) {
     FunctionProtoType::ExtProtoInfo FromEPI = FromFPT->getExtProtoInfo();
     // FunctionProtoType::ExtProtoInfo's ExceptionSpecDecl can point to the
     // FunctionDecl that we are importing the FunctionProtoType for.
@@ -1945,7 +1946,7 @@ Decl *ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
   TypeSourceInfo *TInfo = Importer.Import(D->getTypeSourceInfo());
   FunctionDecl *ToFunction = nullptr;
   SourceLocation InnerLocStart = Importer.Import(D->getInnerLocStart());
-  if (auto *FromConstructor = dyn_cast<CXXConstructorDecl>(D)) {
+  if (CXXConstructorDecl *FromConstructor = dyn_cast<CXXConstructorDecl>(D)) {
     ToFunction = CXXConstructorDecl::Create(Importer.getToContext(),
                                             cast<CXXRecordDecl>(DC),
                                             InnerLocStart,
@@ -1977,7 +1978,8 @@ Decl *ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
                                            NameInfo, T, TInfo,
                                            D->isInlineSpecified(),
                                            D->isImplicit());
-  } else if (auto *FromConversion = dyn_cast<CXXConversionDecl>(D)) {
+  } else if (CXXConversionDecl *FromConversion
+                                           = dyn_cast<CXXConversionDecl>(D)) {
     ToFunction = CXXConversionDecl::Create(Importer.getToContext(), 
                                            cast<CXXRecordDecl>(DC),
                                            InnerLocStart,
@@ -1986,7 +1988,7 @@ Decl *ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
                                            FromConversion->isExplicit(),
                                            D->isConstexpr(),
                                            Importer.Import(D->getLocEnd()));
-  } else if (auto *Method = dyn_cast<CXXMethodDecl>(D)) {
+  } else if (CXXMethodDecl *Method = dyn_cast<CXXMethodDecl>(D)) {
     ToFunction = CXXMethodDecl::Create(Importer.getToContext(), 
                                        cast<CXXRecordDecl>(DC),
                                        InnerLocStart,

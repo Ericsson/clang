@@ -16,13 +16,16 @@
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclObjC.h"
+#include "clang/AST/Mangle.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Analysis/Analyses/LiveVariables.h"
 #include "clang/Analysis/CFG.h"
 #include "clang/Analysis/CallGraph.h"
 #include "clang/Analysis/CodeInjector.h"
 #include "clang/Basic/SourceManager.h"
+#include "clang/Basic/TargetInfo.h"
 #include "clang/Frontend/CompilerInstance.h"
+#include "clang/Frontend/TextDiagnosticPrinter.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/StaticAnalyzer/Checkers/LocalCheckers.h"
 #include "clang/StaticAnalyzer/Core/AnalyzerOptions.h"
@@ -40,17 +43,11 @@
 #include "llvm/Support/Program.h"
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
-#include <assert.h>
+#include <cassert>
 #include <memory>
 #include <queue>
 #include <utility>
-#include <sys/file.h>
-#include <unistd.h>
 #include <fstream>
-#include <time.h>
-#include "clang/Frontend/TextDiagnosticPrinter.h"
-#include "clang/AST/Mangle.h"
-#include "clang/Basic/TargetInfo.h"
 
 using namespace clang;
 using namespace ento;
@@ -424,20 +421,7 @@ void AnalysisConsumer::storeTopLevelDecls(DeclGroupRef DG) {
   }
 }
 
-extern std::string getMangledName(const NamedDecl *ND,
-                                  MangleContext *MangleCtx);
-
-void lockedWrite(const std::string &fileName, const std::string &content) {
-  if (content.empty()) 
-    return;
-  int fd = open(fileName.c_str(), O_CREAT|O_WRONLY|O_APPEND, 0666);
-  flock(fd, LOCK_EX);
-  ssize_t written = write(fd, content.c_str(), content.length());
-  assert(written == static_cast<ssize_t>(content.length()));
-  (void)written;
-  flock(fd, LOCK_UN);
-  close(fd);
-}
+std::string getMangledName(const NamedDecl *ND, MangleContext *MangleCtx);
 
 static bool shouldSkipFunction(const Decl *D,
                                const SetOfConstDecls &Visited,

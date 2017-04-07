@@ -14,14 +14,14 @@ threading_factor = int(multiprocessing.cpu_count() * 1.0)
 timeout = 86400
 
 parser = argparse.ArgumentParser(
-    description='Executes 1st pass of XTU analysis')
+    description='Executes 1st pass of CTU analysis')
 parser.add_argument('-b', required=True, dest='buildlog',
                     metavar='build.json',
                     help='Use a JSON Compilation Database')
-parser.add_argument('-p', metavar='preanalyze-dir', dest='xtuindir',
+parser.add_argument('-p', metavar='preanalyze-dir', dest='ctuindir',
                     help='Use directory for generating preanalyzation data '
-                         '(default=".xtu")',
-                    default='.xtu')
+                         '(default=".ctu")',
+                    default='.ctu')
 parser.add_argument('-j', metavar='threads', dest='threads',
                     help='Number of threads used (default=' +
                     str(threading_factor) + ')',
@@ -43,7 +43,7 @@ if mainargs.clang_path is None:
 else:
     clang_path = os.path.abspath(mainargs.clang_path)
 if mainargs.verbose:
-    print 'XTU uses clang dir: ' + \
+    print 'CTU uses clang dir: ' + \
         (clang_path if clang_path != '' else '<taken from PATH>')
 
 buildlog_file = open(mainargs.buildlog, 'r')
@@ -97,7 +97,7 @@ def generate_ast(source):
         print arch_command
     arch_output = subprocess.check_output(arch_command, shell=True)
     arch = arch_output[arch_output.rfind('@')+1:].strip()
-    ast_joined_path = os.path.join(mainargs.xtuindir,
+    ast_joined_path = os.path.join(mainargs.ctuindir,
                                    os.path.join('/ast/' + arch,
                                                 os.path.realpath(source)[1:] +
                                                 '.ast')[1:])
@@ -122,16 +122,16 @@ def map_functions(command):
     sources = cmd_2_src[command]
     dir_command = 'cd ' + src_2_dir[sources[0]]
     funcmap_command = os.path.join(clang_path, 'clang-func-mapping') + \
-        ' --xtu-dir ' + os.path.abspath(mainargs.xtuindir) + ' ' + \
+        ' --ctu-dir ' + os.path.abspath(mainargs.ctuindir) + ' ' + \
         string.join(sources, ' ') + ' -- ' + string.join(args, ' ')
     if mainargs.verbose:
         print funcmap_command
     subprocess.call(dir_command + " && " + funcmap_command, shell=True)
 
-clear_file(os.path.join(mainargs.xtuindir, 'cfg.txt'))
-clear_file(os.path.join(mainargs.xtuindir, 'definedFns.txt'))
-clear_file(os.path.join(mainargs.xtuindir, 'externalFns.txt'))
-clear_file(os.path.join(mainargs.xtuindir, 'externalFnMap.txt'))
+clear_file(os.path.join(mainargs.ctuindir, 'cfg.txt'))
+clear_file(os.path.join(mainargs.ctuindir, 'definedFns.txt'))
+clear_file(os.path.join(mainargs.ctuindir, 'externalFns.txt'))
+clear_file(os.path.join(mainargs.ctuindir, 'externalFnMap.txt'))
 
 original_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
 ast_workers = multiprocessing.Pool(processes=int(mainargs.threads))
@@ -169,7 +169,7 @@ func_2_file = {}
 extfunc_2_file = {}
 func_2_fileset = {}
 
-defined_fns_filename = os.path.join(mainargs.xtuindir, 'definedFns.txt')
+defined_fns_filename = os.path.join(mainargs.ctuindir, 'definedFns.txt')
 with open(defined_fns_filename,  'r') as defined_fns_file:
     for line in defined_fns_file:
         funcname, filename = line.strip().split(' ')
@@ -181,14 +181,14 @@ with open(defined_fns_filename,  'r') as defined_fns_file:
             func_2_fileset[funcname].add(filename)
         func_2_file[funcname] = filename
 
-extern_fns_filename = os.path.join(mainargs.xtuindir, 'externalFns.txt')
+extern_fns_filename = os.path.join(mainargs.ctuindir, 'externalFns.txt')
 with open(extern_fns_filename,  'r') as extern_fns_file:
     for line in extern_fns_file:
         line = line.strip()
         if line in func_2_file and line not in extfunc_2_file:
             extfunc_2_file[line] = func_2_file[line]
 
-extern_fns_map_filename = os.path.join(mainargs.xtuindir, 'externalFnMap.txt')
+extern_fns_map_filename = os.path.join(mainargs.ctuindir, 'externalFnMap.txt')
 with open(extern_fns_map_filename, 'w') as out_file:
     for func, fname in extfunc_2_file.items():
         if len(func_2_fileset[func]) == 1:
