@@ -384,15 +384,14 @@ RuntimeDefinition AnyFunctionCall::getRuntimeDefinition() const {
         new DiagnosticsEngine(DiagID, &*DiagOpts, DiagClient));
     return ASTUnit::LoadFromASTFile(
                ASTFileName, CI.getPCHContainerOperations()->getRawReader(),
-               Diags, CI.getFileSystemOpts())
-        .release();
+               Diags, CI.getFileSystemOpts());
   };
 
-  const FunctionDecl *XTUDecl = AD->getASTContext().getXTUDefinition(
-      FD, CI, Engine->getAnalysisManager().options.getXTUDir(),
+  const FunctionDecl *CTUDecl = AD->getASTContext().getCTUDefinition(
+      FD, CI, Engine->getAnalysisManager().options.getCTUDir(),
       CI.getDiagnostics(), ASTLoader);
 
-  return RuntimeDefinition(XTUDecl);
+  return RuntimeDefinition(CTUDecl);
 }
 
 

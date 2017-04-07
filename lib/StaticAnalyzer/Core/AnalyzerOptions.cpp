@@ -371,9 +371,8 @@ bool AnalyzerOptions::shouldDisplayNotesAsEvents() {
   return DisplayNotesAsEvents.getValue();
 }
 
-StringRef AnalyzerOptions::getXTUDir() {
-  if (!XTUDir.hasValue())
-    XTUDir = getOptionAsString("xtu-dir", "");
-  return XTUDir.getValue();
+StringRef AnalyzerOptions::getCTUDir() {
+  if (!CTUDir.hasValue() || !llvm::sys::fs::is_directory(*CTUDir))
+    CTUDir = getOptionAsString("ctu-dir", "");
+  return CTUDir.getValue();
 }
-
