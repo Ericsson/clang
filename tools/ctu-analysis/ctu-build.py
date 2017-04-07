@@ -128,7 +128,6 @@ def map_functions(command):
         print funcmap_command
     subprocess.call(dir_command + " && " + funcmap_command, shell=True)
 
-clear_file(os.path.join(mainargs.ctuindir, 'cfg.txt'))
 clear_file(os.path.join(mainargs.ctuindir, 'definedFns.txt'))
 clear_file(os.path.join(mainargs.ctuindir, 'externalFns.txt'))
 clear_file(os.path.join(mainargs.ctuindir, 'externalFnMap.txt'))
