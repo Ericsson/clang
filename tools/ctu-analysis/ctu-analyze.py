@@ -21,17 +21,17 @@ analyser_output_formats = ['plist-multi-file', 'plist', 'plist-html',
 analyser_output_format = analyser_output_formats[0]
 
 parser = argparse.ArgumentParser(
-            description='Executes 2nd pass of XTU analysis')
+            description='Executes 2nd pass of CTU analysis')
 parser.add_argument('-b', required=True, dest='buildlog', metavar='build.json',
                     help='Use a JSON Compilation Database')
-parser.add_argument('-p', metavar='preanalyze-dir', dest='xtuindir',
+parser.add_argument('-p', metavar='preanalyze-dir', dest='ctuindir',
                     help='Use directory for reading preanalyzation data '
-                         '(default=".xtu")',
-                    default='.xtu')
-parser.add_argument('-o', metavar='output-dir', dest='xtuoutdir',
+                         '(default=".ctu")',
+                    default='.ctu')
+parser.add_argument('-o', metavar='output-dir', dest='ctuoutdir',
                     help='Use directory for output analyzation results '
-                         '(default=".xtu-out")',
-                    default='.xtu-out')
+                         '(default=".ctu-out")',
+                    default='.ctu-out')
 parser.add_argument('-e', metavar='enabled-checker', nargs='+',
                     dest='enabled_checkers',
                     help='List all enabled checkers')
@@ -61,8 +61,8 @@ parser.add_argument('--output-format', metavar='format',
                          '(one of %s; default is "%s").' %
                     (', '.join(analyser_output_formats),
                      analyser_output_format))
-parser.add_argument('--no-xtu', dest='no_xtu', action='store_true',
-                    help='Do not use XTU at all, '
+parser.add_argument('--no-ctu', dest='no_ctu', action='store_true',
+                    help='Do not use CTU at all, '
                          'only do normal static analysis')
 mainargs = parser.parse_args()
 
@@ -75,7 +75,7 @@ if mainargs.clang_path is None:
 else:
     clang_path = os.path.abspath(mainargs.clang_path)
 if mainargs.verbose:
-    print 'XTU uses clang dir: ' + (clang_path if clang_path != ''
+    print 'CTU uses clang dir: ' + (clang_path if clang_path != ''
                                     else '<taken from PATH>')
 
 if mainargs.analyze_path is None:
@@ -83,7 +83,7 @@ if mainargs.analyze_path is None:
 else:
     analyze_path = os.path.abspath(mainargs.analyze_path)
 if mainargs.verbose:
-    print 'XTU uses analyze-cc dir: ' + (analyze_path if analyze_path != ''
+    print 'CTU uses analyze-cc dir: ' + (analyze_path if analyze_path != ''
                                          else '<taken from PATH>')
 
 analyzer_params = []
@@ -91,10 +91,10 @@ if mainargs.enabled_checkers:
     analyzer_params += ['-analyzer-checker', mainargs.enabled_checkers]
 if mainargs.disabled_checkers:
     analyzer_params += ['-analyzer-disable-checker', mainargs.disable_checkers]
-if not mainargs.no_xtu:
+if not mainargs.no_ctu:
     analyzer_params += ['-analyzer-config',
-                        'xtu-dir=' + os.path.abspath(mainargs.xtuindir)]
-analyzer_params += ['-analyzer-config', 'reanalyze-xtu-visited=true']
+                        'ctu-dir=' + os.path.abspath(mainargs.ctuindir)]
+analyzer_params += ['-analyzer-config', 'reanalyze-ctu-visited=true']
 analyzer_params += ['-analyzer-stats']
 # analyzer_params += ['-analyzer-output ' + mainargs.output_format]
 passthru_analyzer_params = []
@@ -105,7 +105,7 @@ passthru_analyzer_params += ['--analyzer-output ' + mainargs.output_format]
 
 analyzer_env = os.environ.copy()
 analyzer_env['ANALYZE_BUILD_CLANG'] = os.path.join(clang_path, 'clang')
-analyzer_env['ANALYZE_BUILD_REPORT_DIR'] = os.path.abspath(mainargs.xtuoutdir)
+analyzer_env['ANALYZE_BUILD_REPORT_DIR'] = os.path.abspath(mainargs.ctuoutdir)
 analyzer_env['ANALYZE_BUILD_PARAMETERS'] = ' '.join(passthru_analyzer_params)
 analyzer_env['ANALYZE_BUILD_REPORT_FORMAT'] = mainargs.output_format
 # analyzer_env['ANALYZE_BUILD_VERBOSE'] = 'DEBUG'
@@ -181,9 +181,9 @@ def analyze(directory, command):
     if mainargs.verbose:
         sys.stdout.write(out)
     if not runOK:
-        prefix = os.path.join(os.path.abspath(mainargs.xtuoutdir), "fails")
+        prefix = os.path.join(os.path.abspath(mainargs.ctuoutdir), "fails")
     else:
-        prefix = os.path.join(os.path.abspath(mainargs.xtuoutdir), "passes")
+        prefix = os.path.join(os.path.abspath(mainargs.ctuoutdir), "passes")
     with open(os.path.join(prefix, "%s.out" % tu_name), "w") as f:
         f.write("%s\n%s" % (analyze_cmd, out))
 
@@ -237,14 +237,14 @@ def analyze_work():
             time.sleep(0.125)
 
 try:
-    os.makedirs(os.path.abspath(mainargs.xtuoutdir))
+    os.makedirs(os.path.abspath(mainargs.ctuoutdir))
 except OSError:
     print 'Output directory %s already exists!' % \
-        os.path.abspath(mainargs.xtuoutdir)
+        os.path.abspath(mainargs.ctuoutdir)
     sys.exit(1)
 
-os.makedirs(os.path.join(os.path.abspath(mainargs.xtuoutdir), "passes"))
-os.makedirs(os.path.join(os.path.abspath(mainargs.xtuoutdir), "fails"))
+os.makedirs(os.path.join(os.path.abspath(mainargs.ctuoutdir), "passes"))
+os.makedirs(os.path.join(os.path.abspath(mainargs.ctuoutdir), "fails"))
 
 original_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
 signal.signal(signal.SIGINT, original_handler)
@@ -261,9 +261,9 @@ except KeyboardInterrupt:
     exit(1)
 
 try:
-    os.removedirs(os.path.abspath(mainargs.xtuoutdir))
+    os.removedirs(os.path.abspath(mainargs.ctuoutdir))
     print 'Removing directory %s because it contains no reports' % \
-        os.path.abspath(mainargs.xtuoutdir)
+        os.path.abspath(mainargs.ctuoutdir)
 except OSError:
     pass
 
