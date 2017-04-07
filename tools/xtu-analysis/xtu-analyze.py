@@ -14,24 +14,11 @@ import sys
 import threading
 import time
 import uuid
-import sys
-
-reload(sys)
-sys.setdefaultencoding('utf8')
-
-sys.path.append(os.path.join(os.path.dirname(__file__),
-                             '..', '..', 'utils', 'analyzer'))
-try:
-    import MergeCoverage
-except:
-    raise
 
 threading_factor = int(multiprocessing.cpu_count() * 1.0)
 analyser_output_formats = ['plist-multi-file', 'plist', 'plist-html',
                            'html', 'text']
 analyser_output_format = analyser_output_formats[0]
-gcov_outdir = 'gcov'
-gcov_tmpdir = gcov_outdir + '_tmp'
 
 parser = argparse.ArgumentParser(
             description='Executes 2nd pass of XTU analysis')
@@ -77,9 +64,6 @@ parser.add_argument('--output-format', metavar='format',
 parser.add_argument('--no-xtu', dest='no_xtu', action='store_true',
                     help='Do not use XTU at all, '
                          'only do normal static analysis')
-parser.add_argument('--record-coverage', dest='record_coverage',
-                    action='store_true',
-                    help='Generate coverage information during analysis')
 mainargs = parser.parse_args()
 
 concurrent_threads = 0
@@ -111,14 +95,6 @@ if not mainargs.no_xtu:
     analyzer_params += ['-analyzer-config',
                         'xtu-dir=' + os.path.abspath(mainargs.xtuindir)]
 analyzer_params += ['-analyzer-config', 'reanalyze-xtu-visited=true']
-if mainargs.record_coverage:
-    gcov_tmppath = os.path.abspath(os.path.join(mainargs.xtuoutdir,
-                                                gcov_tmpdir))
-    gcov_finalpath = os.path.abspath(os.path.join(mainargs.xtuoutdir,
-                                                  gcov_outdir))
-    shutil.rmtree(gcov_tmppath, True)
-    # analyzer_params += ['-analyzer-config',
-    #                     'record-coverage=' + gcov_tmppath]
 analyzer_params += ['-analyzer-stats']
 # analyzer_params += ['-analyzer-output ' + mainargs.output_format]
 passthru_analyzer_params = []
@@ -181,10 +157,6 @@ def analyze(directory, command):
     cmdenv = analyzer_env.copy()
     cmdenv['ANALYZE_BUILD_CC'] = compiler
     cmdenv['ANALYZE_BUILD_CXX'] = compiler
-    if mainargs.record_coverage:
-        cmdenv['ANALYZE_BUILD_PARAMETERS'] += \
-            ' -Xanalyzer -analyzer-config -Xanalyzer record-coverage=' + \
-            os.path.join(gcov_tmppath, tu_name)
     analyze_cmd = os.path.join(analyze_path, 'analyze-cc') + \
         ' ' + string.join(args, ' ')
     if mainargs.verbose:
@@ -294,10 +266,6 @@ try:
         os.path.abspath(mainargs.xtuoutdir)
 except OSError:
     pass
-
-if mainargs.record_coverage:
-    MergeCoverage.main(gcov_tmppath, gcov_finalpath)
-    shutil.rmtree(gcov_tmppath, True)
 
 assert concurrent_threads == 0
 concurrent_thread_times[0] += time.time() - concurrent_thread_last_clock
