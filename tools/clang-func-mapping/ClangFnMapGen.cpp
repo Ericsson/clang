@@ -75,7 +75,6 @@ private:
   ItaniumMangleContext *ItaniumCtx;
   std::stringstream DefinedFuncsStr;
   std::stringstream ExternFuncStr;
-  CallGraph CG;
   const std::string Triple;
 
 public:
@@ -90,42 +89,22 @@ public:
   }
 
 private:
-  std::string getMangledName(const FunctionDecl *FD, MangleContext *Ctx);
-  std::string getMangledName(const FunctionDecl *FD) {
-    return getMangledName(FD, ItaniumCtx);
-  }
+  std::string getMangledName(const FunctionDecl *FD);
 
   bool isCLibraryFunction(const FunctionDecl *FD);
   void handleDecl(const Decl *D);
-
-  class WalkAST : public ConstStmtVisitor<WalkAST> {
-    MapFunctionNamesConsumer &Parent;
-    std::string CurrentFuncName;
-    MangleContext *MangleCtx;
-    const std::string Triple;
-
-  public:
-    WalkAST(MapFunctionNamesConsumer &parent, const std::string &FuncName,
-            MangleContext *Ctx, const std::string &triple)
-        : Parent(parent), CurrentFuncName(FuncName), MangleCtx(Ctx),
-          Triple(triple) {}
-    void VisitCallExpr(const CallExpr *CE);
-    void VisitStmt(const Stmt *S) { VisitChildren(S); }
-    void VisitChildren(const Stmt *S);
-  };
 };
 
-std::string MapFunctionNamesConsumer::getMangledName(const FunctionDecl *FD,
-                                                     MangleContext *Ctx) {
+std::string MapFunctionNamesConsumer::getMangledName(const FunctionDecl *FD) {
   std::string MangledName;
   llvm::raw_string_ostream os(MangledName);
   if (const auto *CCD = dyn_cast<CXXConstructorDecl>(FD))
     // FIXME: Use correct Ctor/DtorType.
-    Ctx->mangleCXXCtor(CCD, Ctor_Complete, os);
+    ItaniumCtx->mangleCXXCtor(CCD, Ctor_Complete, os);
   else if (const auto *CDD = dyn_cast<CXXDestructorDecl>(FD))
-    Ctx->mangleCXXDtor(CDD, Dtor_Complete, os);
+    ItaniumCtx->mangleCXXDtor(CDD, Dtor_Complete, os);
   else
-    Ctx->mangleName(FD, os);
+    ItaniumCtx->mangleName(FD, os);
   os.flush();
   return MangledName;
 }
@@ -160,9 +139,6 @@ void MapFunctionNamesConsumer::handleDecl(const Decl *D) {
       default:
         break;
       }
-
-      WalkAST Walker(*this, FullName, ItaniumCtx, Triple);
-      Walker.Visit(Body);
     } else if (!FD->getBody() && !FD->getBuiltinID()) {
       std::string MangledName = getMangledName(FD);
       ExternFuncStr << MangledName << Triple << "\n";
@@ -189,31 +165,12 @@ MapFunctionNamesConsumer::~MapFunctionNamesConsumer() {
   std::string BuildDir = CTUDir;
   lockedWrite(BuildDir + "/externalFns.txt", ExternFuncStr.str());
   lockedWrite(BuildDir + "/definedFns.txt", DefinedFuncsStr.str());
-  std::ostringstream CFGStr;
-  for (auto &Entry : CG) {
-    CFGStr << CurrentFileName << Triple << "::" << Entry.getKey().data();
-    for (auto &E : Entry.getValue())
-      CFGStr << ' ' << E.getKey().data();
-    CFGStr << '\n';
-  }
-
-  lockedWrite(BuildDir + "/cfg.txt", CFGStr.str());
 }
 
 void MapFunctionNamesConsumer::WalkAST::VisitChildren(const Stmt *S) {
   for (const Stmt *CS : S->children())
     if (CS)
       Visit(CS);
-}
-
-void MapFunctionNamesConsumer::WalkAST::VisitCallExpr(const CallExpr *CE) {
-  const auto *FD = dyn_cast_or_null<FunctionDecl>(CE->getCalleeDecl());
-  if (FD && !FD->getBuiltinID()) {
-    std::string FuncName = (FD->hasBody() ? "::" : "") +
-                           Parent.getMangledName(FD, MangleCtx) + Triple;
-    Parent.CG[CurrentFuncName].insert(FuncName);
-  }
-  VisitChildren(CE);
 }
 
 class MapFunctionNamesAction : public ASTFrontendAction {
