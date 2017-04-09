@@ -167,12 +167,6 @@ MapFunctionNamesConsumer::~MapFunctionNamesConsumer() {
   lockedWrite(BuildDir + "/definedFns.txt", DefinedFuncsStr.str());
 }
 
-void MapFunctionNamesConsumer::WalkAST::VisitChildren(const Stmt *S) {
-  for (const Stmt *CS : S->children())
-    if (CS)
-      Visit(CS);
-}
-
 class MapFunctionNamesAction : public ASTFrontendAction {
 protected:
   std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
