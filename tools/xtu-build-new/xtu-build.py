@@ -9,6 +9,7 @@ import re
 import signal
 import subprocess
 import string
+import shlex
 
 threading_factor = int(multiprocessing.cpu_count() * 1.5)
 timeout = 86400
@@ -119,15 +120,28 @@ def get_command_arguments(cmd):
     return args
 
 
+def get_triple_arch(clang_path, clang_args,source):
+    """Returns the architecture part of the target triple in a compilation command """
+    arch = ""
+    clang_cmd = []
+    clang_cmd.append(os.path.join(clang_path, 'clang'))
+    clang_cmd.append("-###")
+    clang_cmd.extend(clang_args)
+    clang_cmd.append(source)    
+    clang_out = subprocess.check_output(clang_cmd, stderr=subprocess.STDOUT, shell=False)    
+    clang_params=shlex.split(clang_out)
+    i=0
+    while i<len(clang_params) and clang_params[i]!="-triple":        
+        i=i+1
+    if i<(len(clang_params) - 1):
+        arch=clang_params[i+1].split("-")[0]              
+    return arch
+    
+
 def generate_ast(source):
     cmd = src_2_cmd[source]
-    args = get_command_arguments(cmd)
-    arch_command = os.path.join(clang_path, 'clang-cmdline-arch-extractor') + \
-        ' ' + string.join(args, ' ') + ' ' + source
-    if mainargs.verbose:
-        print arch_command
-    arch_output = subprocess.check_output(arch_command, shell=True)
-    arch = arch_output[arch_output.rfind('@')+1:].strip()
+    args = get_command_arguments(cmd)        
+    arch=get_triple_arch(clang_path,args,source)    
     ast_path = os.path.abspath(os.path.join(mainargs.xtuindir,
                                os.path.join('/ast/' + arch,
                                             os.path.realpath(source)[1:] +
