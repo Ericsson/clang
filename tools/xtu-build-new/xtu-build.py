@@ -122,10 +122,8 @@ def get_command_arguments(cmd):
 
 def get_triple_arch(clang_path, clang_args,source):
     """Returns the architecture part of the target triple in a compilation command """
-    arch=""
-    #clang_cmd = os.path.join(clang_path, 'clang') + \
-    #    ' ' + "-### " + string.join(clang_args, ' ') + ' ' + source
-    clang_cmd=[]
+    arch = ""
+    clang_cmd = []
     clang_cmd.append(os.path.join(clang_path, 'clang'))
     clang_cmd.append("-###")
     clang_cmd.extend(clang_args)
