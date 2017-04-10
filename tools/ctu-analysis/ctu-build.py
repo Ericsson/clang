@@ -53,7 +53,7 @@ def get_args():
     logging.info('CTU uses clang dir: ' +
                  (clang_path if clang_path != '' else '<taken from PATH>'))
 
-    return (mainargs, clang_path)
+    return mainargs, clang_path
 
 
 def process_buildlog(buildlog_filename, src_2_dir, src_2_cmd, src_order,
