@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from __future__ import print_function
 import argparse
 import io
 import json
@@ -75,16 +76,16 @@ if mainargs.clang_path is None:
 else:
     clang_path = os.path.abspath(mainargs.clang_path)
 if mainargs.verbose:
-    print 'CTU uses clang dir: ' + (clang_path if clang_path != ''
-                                    else '<taken from PATH>')
+    print('CTU uses clang dir: ' + (clang_path if clang_path != ''
+                                    else '<taken from PATH>'))
 
 if mainargs.analyze_path is None:
     analyze_path = ''
 else:
     analyze_path = os.path.abspath(mainargs.analyze_path)
 if mainargs.verbose:
-    print 'CTU uses analyze-cc dir: ' + (analyze_path if analyze_path != ''
-                                         else '<taken from PATH>')
+    print('CTU uses analyze-cc dir: ' + (analyze_path if analyze_path != ''
+                                         else '<taken from PATH>'))
 
 analyzer_params = []
 if mainargs.enabled_checkers:
@@ -96,11 +97,9 @@ if not mainargs.no_ctu:
                         'ctu-dir=' + os.path.abspath(mainargs.ctuindir)]
 analyzer_params += ['-analyzer-config', 'reanalyze-ctu-visited=true']
 analyzer_params += ['-analyzer-stats']
-# analyzer_params += ['-analyzer-output ' + mainargs.output_format]
 passthru_analyzer_params = []
 for param in analyzer_params:
-    passthru_analyzer_params += ['-Xanalyzer']
-    passthru_analyzer_params += [param]
+    passthru_analyzer_params += ['-Xanalyzer', param]
 passthru_analyzer_params += ['--analyzer-output ' + mainargs.output_format]
 
 analyzer_env = os.environ.copy()
@@ -163,7 +162,7 @@ def analyze(directory, command):
     analyze_cmd = os.path.join(analyze_path, 'analyze-cc') + \
         ' ' + string.join(args, ' ')
     if mainargs.verbose:
-        print analyze_cmd
+        print(analyze_cmd)
 
     # Buffer output of subprocess and dump it out at the end, so that
     # the subprocess doesn't continue to write output after the user
@@ -242,8 +241,8 @@ def analyze_work():
 try:
     os.makedirs(os.path.abspath(mainargs.ctuoutdir))
 except OSError:
-    print 'Output directory %s already exists!' % \
-        os.path.abspath(mainargs.ctuoutdir)
+    print ('Output directory %s already exists!' %
+           os.path.abspath(mainargs.ctuoutdir))
     sys.exit(1)
 
 os.makedirs(os.path.join(os.path.abspath(mainargs.ctuoutdir), "passes"))
@@ -265,8 +264,8 @@ except KeyboardInterrupt:
 
 try:
     os.removedirs(os.path.abspath(mainargs.ctuoutdir))
-    print 'Removing directory %s because it contains no reports' % \
-        os.path.abspath(mainargs.ctuoutdir)
+    print ('Removing directory %s because it contains no reports' %
+           os.path.abspath(mainargs.ctuoutdir))
 except OSError:
     pass
 
@@ -275,9 +274,10 @@ concurrent_thread_times[0] += time.time() - concurrent_thread_last_clock
 sumtime = 0.0
 for i in range(len(concurrent_thread_times)):
     sumtime += concurrent_thread_times[i]
-print '--- Total running time: %.2fs' % sumtime
+print ('--- Total running time: %.2fs' % sumtime)
 for i in range(len(concurrent_thread_times)):
-    print '----- ' + \
-        (('using %d processes' % i) if i != 0 else 'self time') + \
-        ' for %.2fs (%.0f%%)' % (concurrent_thread_times[i],
-                                 concurrent_thread_times[i] * 100.0 / sumtime)
+    print ('----- ' +
+           (('using %d processes' % i) if i != 0 else 'self time') +
+           ' for %.2fs (%.0f%%)' % (concurrent_thread_times[i],
+                                    concurrent_thread_times[
+                                        i] * 100.0 / sumtime))

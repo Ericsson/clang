@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from __future__ import print_function
 import argparse
 import io
 import json
@@ -43,8 +44,8 @@ if mainargs.clang_path is None:
 else:
     clang_path = os.path.abspath(mainargs.clang_path)
 if mainargs.verbose:
-    print 'CTU uses clang dir: ' + \
-        (clang_path if clang_path != '' else '<taken from PATH>')
+    print('CTU uses clang dir: ' + \
+          (clang_path if clang_path != '' else '<taken from PATH>'))
 
 buildlog_file = open(mainargs.buildlog, 'r')
 buildlog = json.load(buildlog_file)
@@ -94,7 +95,7 @@ def generate_ast(source):
     arch_command = os.path.join(clang_path, 'clang-cmdline-arch-extractor') + \
         ' ' + string.join(args, ' ') + ' ' + source
     if mainargs.verbose:
-        print arch_command
+        print(arch_command)
     arch_output = subprocess.check_output(arch_command, shell=True)
     arch = arch_output[arch_output.rfind('@')+1:].strip()
     ast_joined_path = os.path.join(mainargs.ctuindir,
@@ -113,7 +114,7 @@ def generate_ast(source):
     ast_command = os.path.join(clang_path, 'clang') + ' -emit-ast ' + \
         string.join(args, ' ') + ' -w ' + source + ' -o ' + ast_path
     if mainargs.verbose:
-        print dir_command + " && " + ast_command
+        print(dir_command + " && " + ast_command)
     subprocess.call(dir_command + " && " + ast_command, shell=True)
 
 
@@ -125,7 +126,7 @@ def map_functions(command):
         ' --ctu-dir ' + os.path.abspath(mainargs.ctuindir) + ' ' + \
         string.join(sources, ' ') + ' -- ' + string.join(args, ' ')
     if mainargs.verbose:
-        print funcmap_command
+        print(funcmap_command)
     subprocess.call(dir_command + " && " + funcmap_command, shell=True)
 
 clear_file(os.path.join(mainargs.ctuindir, 'definedFns.txt'))
@@ -175,7 +176,7 @@ with open(defined_fns_filename,  'r') as defined_fns_file:
         if funcname.startswith('!'):
             funcname = funcname[1:]  # main function
         if funcname not in func_2_file.keys():
-            func_2_fileset[funcname] = set([filename])
+            func_2_fileset[funcname] = {filename}
         else:
             func_2_fileset[funcname].add(filename)
         func_2_file[funcname] = filename
