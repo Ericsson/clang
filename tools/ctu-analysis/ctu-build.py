@@ -146,8 +146,9 @@ def map_functions(params):
     args = get_command_arguments(command)
     dir_command = ['cd', directory]
     funcmap_command = [os.path.join(clang_path, 'clang-func-mapping'),
-                       '--ctu-dir', os.path.abspath(ctuindir), '--']
+                       '--ctu-dir', os.path.abspath(ctuindir)]
     funcmap_command.extend(sources)
+    funcmap_command.append('--')
     funcmap_command.extend(args)
     funcmap_command_str = ' '.join(dir_command) + \
         " && " + ' '.join(funcmap_command)
