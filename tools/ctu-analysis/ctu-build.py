@@ -145,11 +145,9 @@ def map_functions(params):
     command, sources, directory, clang_path, ctuindir = params
     args = get_command_arguments(command)
     dir_command = ['cd', directory]
-    funcmap_command = [os.path.join(clang_path, 'clang-func-mapping')]
-    funcmap_command.append('--ctu-dir')
-    funcmap_command.append(os.path.abspath(ctuindir))
+    funcmap_command = [os.path.join(clang_path, 'clang-func-mapping'),
+                       '--ctu-dir', os.path.abspath(ctuindir), '--']
     funcmap_command.extend(sources)
-    funcmap_command.append('--')
     funcmap_command.extend(args)
     funcmap_command_str = ' '.join(dir_command) + \
         " && " + ' '.join(funcmap_command)
@@ -185,7 +183,7 @@ def generate_external_funcmap(mainargs):
             if funcname.startswith('!'):
                 funcname = funcname[1:]  # main function
             if funcname not in func_2_file.keys():
-                func_2_fileset[funcname] = set([filename])
+                func_2_fileset[funcname] = {filename}
             else:
                 func_2_fileset[funcname].add(filename)
             func_2_file[funcname] = filename
