@@ -8,6 +8,7 @@ import os
 import re
 import signal
 import subprocess
+import shlex
 
 
 SOURCE_PATTERN = re.compile('.*\.(C|c|cc|cpp|cxx|ii|m|mm)$', re.IGNORECASE)
@@ -96,17 +97,28 @@ def get_command_arguments(cmd):
             had_command = True
     return args
 
+def get_triple_arch(clang_path, clang_args,source):
+    """Returns the architecture part of the target triple in a compilation command. """
+    arch = ""
+    clang_cmd = []
+    clang_cmd.append(os.path.join(clang_path, 'clang'))
+    clang_cmd.append("-###")
+    clang_cmd.extend(clang_args)
+    clang_cmd.append(source)    
+    clang_out = subprocess.check_output(clang_cmd, stderr = subprocess.STDOUT, shell = False)    
+    clang_params = shlex.split(clang_out)
+    i=0
+    while i < len(clang_params) and clang_params[i] != "-triple":        
+        i += 1
+    if i<(len(clang_params) - 1):
+        arch = clang_params[i + 1].split("-")[0]              
+    return arch
+    
 
 def generate_ast(params):
     source, command, directory, clang_path, ctuindir = params
     args = get_command_arguments(command)
-    arch_command = [os.path.join(clang_path, 'clang-cmdline-arch-extractor')]
-    arch_command.extend(args)
-    arch_command.append(source)
-    arch_command_str = ' '.join(arch_command)
-    logging.info(arch_command_str)
-    arch_output = subprocess.check_output(arch_command_str, shell=True)
-    arch = arch_output[arch_output.rfind('@')+1:].strip()
+    arch=get_triple_arch(clang_path,args,source) 
     ast_joined_path = os.path.join(ctuindir, 'ast', arch,
                                    os.path.realpath(source)[1:] + '.ast')
     ast_path = os.path.abspath(ast_joined_path)
