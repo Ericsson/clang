@@ -10,7 +10,6 @@ import signal
 import subprocess
 import shlex
 
-
 SOURCE_PATTERN = re.compile('.*\.(C|c|cc|cpp|cxx|ii|m|mm)$', re.IGNORECASE)
 TIMEOUT = 86400
 DEFINED_FUNCTIONS_FILENAME = 'definedFns.txt'
@@ -97,28 +96,29 @@ def get_command_arguments(cmd):
             had_command = True
     return args
 
-def get_triple_arch(clang_path, clang_args,source):
-    """Returns the architecture part of the target triple in a compilation command. """
+
+def get_triple_arch(clang_path, clang_args, source):
+    """Returns the architecture part of the target triple in a compilation 
+    command. """
     arch = ""
-    clang_cmd = []
-    clang_cmd.append(os.path.join(clang_path, 'clang'))
-    clang_cmd.append("-###")
+    clang_cmd = [os.path.join(clang_path, 'clang'), "-###"]
     clang_cmd.extend(clang_args)
-    clang_cmd.append(source)    
-    clang_out = subprocess.check_output(clang_cmd, stderr = subprocess.STDOUT, shell = False)    
+    clang_cmd.append(source)
+    clang_out = subprocess.check_output(clang_cmd, stderr=subprocess.STDOUT,
+                                        shell=False)
     clang_params = shlex.split(clang_out)
-    i=0
-    while i < len(clang_params) and clang_params[i] != "-triple":        
+    i = 0
+    while i < len(clang_params) and clang_params[i] != "-triple":
         i += 1
-    if i<(len(clang_params) - 1):
-        arch = clang_params[i + 1].split("-")[0]              
+    if i < (len(clang_params) - 1):
+        arch = clang_params[i + 1].split("-")[0]
     return arch
-    
+
 
 def generate_ast(params):
     source, command, directory, clang_path, ctuindir = params
     args = get_command_arguments(command)
-    arch=get_triple_arch(clang_path,args,source) 
+    arch = get_triple_arch(clang_path, args, source)
     ast_joined_path = os.path.join(ctuindir, 'ast', arch,
                                    os.path.realpath(source)[1:] + '.ast')
     ast_path = os.path.abspath(ast_joined_path)
@@ -151,7 +151,7 @@ def map_functions(params):
     funcmap_command.append('--')
     funcmap_command.extend(args)
     funcmap_command_str = ' '.join(dir_command) + \
-        " && " + ' '.join(funcmap_command)
+                          " && " + ' '.join(funcmap_command)
     logging.info(funcmap_command_str)
     subprocess.call(funcmap_command_str, shell=True)
 
