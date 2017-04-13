@@ -42,6 +42,7 @@
 #include "llvm/ADT/Triple.h"
 #include "llvm/Support/Capacity.h"
 #include "llvm/Support/MathExtras.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
 #include <fstream>
 #include <map>
@@ -1497,11 +1498,15 @@ const FunctionDecl *ASTContext::getCTUDefinition(
   auto FnUnitCacheEntry = FunctionAstUnitMap.find(MangledFnName);
   if (FnUnitCacheEntry == FunctionAstUnitMap.end()) {
     if (FunctionFileMap.empty()) {
-      std::string ExternalFunctionMap = (CTUDir + "/externalFnMap.txt").str();
-      std::ifstream ExternalFnMapFile(ExternalFunctionMap);
+      SmallString<128> ExternalFunctionMap = CTUDir;
+      llvm::sys::path::append(ExternalFunctionMap, "externalFnMap.txt");
+      std::ifstream ExternalFnMapFile(ExternalFunctionMap.c_str());
       std::string FunctionName, FileName;
-      while (ExternalFnMapFile >> FunctionName >> FileName)
-        FunctionFileMap[FunctionName] = (CTUDir + "/" + FileName).str();
+      while (ExternalFnMapFile >> FunctionName >> FileName) {
+        SmallString<128> FilePath = CTUDir;
+        llvm::sys::path::append(FilePath, FileName);
+        FunctionFileMap[FunctionName] = FilePath.str().str();
+      }
     }
 
     auto It = FunctionFileMap.find(MangledFnName);

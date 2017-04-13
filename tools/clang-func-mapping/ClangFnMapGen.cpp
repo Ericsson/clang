@@ -47,13 +47,12 @@ static cl::opt<std::string> CTUDir(
         "Directory that contains the CTU related files (e.g.: AST dumps)."),
     cl::init(""), cl::cat(ClangFnMapGenCategory));
 
-static void lockedWrite(const std::string &fileName,
-                        const std::string &content) {
+static void lockedWrite(StringRef fileName, StringRef content) {
   if (!content.empty()) {
-    int fd = open(fileName.c_str(), O_CREAT | O_WRONLY | O_APPEND, 0666);
+    int fd = open(fileName.data(), O_CREAT | O_WRONLY | O_APPEND, 0666);
     flock(fd, LOCK_EX);
-    ssize_t written = write(fd, content.c_str(), content.length());
-    assert(written == static_cast<ssize_t>(content.length()));
+    ssize_t written = write(fd, content.data(), content.size());
+    assert(written == static_cast<ssize_t>(content.size()));
     (void)written;
     flock(fd, LOCK_UN);
     close(fd);
@@ -125,8 +124,8 @@ void MapFunctionNamesConsumer::handleDecl(const Decl *D) {
         free(Path);
       }
 
-      std::string FileName =
-          std::string("/ast/") + getTripleSuffix(Ctx) + CurrentFileName;
+      SmallString<128> FileName("ast");
+      llvm::sys::path::append(FileName, getTripleSuffix(Ctx), CurrentFileName);
       std::string FullName = MangledName + Triple;
 
       switch (FD->getLinkageInternal()) {
@@ -135,7 +134,7 @@ void MapFunctionNamesConsumer::handleDecl(const Decl *D) {
       case UniqueExternalLinkage:
         if (SM.isInMainFile(Body->getLocStart()))
           DefinedFuncsStr << "!";
-        DefinedFuncsStr << FullName << " " << FileName << "\n";
+        DefinedFuncsStr << FullName << " " << FileName.c_str() << "\n";
       default:
         break;
       }
@@ -162,9 +161,12 @@ bool MapFunctionNamesConsumer::isCLibraryFunction(const FunctionDecl *FD) {
 
 MapFunctionNamesConsumer::~MapFunctionNamesConsumer() {
   // Flush results to files.
-  std::string BuildDir = CTUDir;
-  lockedWrite(BuildDir + "/externalFns.txt", ExternFuncStr.str());
-  lockedWrite(BuildDir + "/definedFns.txt", DefinedFuncsStr.str());
+  SmallString<128> ExternalFns(CTUDir);
+  SmallString<128> DefinedFns(CTUDir);
+  llvm::sys::path::append(ExternalFns, "externalFns.txt");
+  llvm::sys::path::append(DefinedFns, "definedFns.txt");
+  lockedWrite(ExternalFns, ExternFuncStr.str());
+  lockedWrite(DefinedFns, DefinedFuncsStr.str());
 }
 
 class MapFunctionNamesAction : public ASTFrontendAction {
