@@ -52,10 +52,12 @@ private:
   ASTContext &Context;
   DiagnosticsEngine &Diags;
   const ManglerKind Kind;
-  // Used for cross translation unit analysis.
+  // FIXME: Used for cross translation unit analysis.
   // To reduce the risk of function name collision in C projects, we force
   // name mangling for C functions when generating lookup identifiers for
   // the static analyzer.
+  // We will no longer need this once link commands are also considered during
+  // analysis (or when we switching to use USRs instead of mangled names).
   bool ShouldForceMangleProto;
 
   llvm::DenseMap<const BlockDecl*, unsigned> GlobalBlockIds;
