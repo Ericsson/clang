@@ -144,17 +144,35 @@ def generate_ast(params):
 def map_functions(params):
     command, sources, directory, clang_path, ctuindir = params
     args = get_command_arguments(command)
+    print "map_funcions command:"+command
+    print "sources:"
+    print sources
+    arch=get_triple_arch(clang_path,args,sources[0])
     dir_command = ['cd', directory]
-    funcmap_command = [os.path.join(clang_path, 'clang-func-mapping'),
-                       '--ctu-dir', os.path.abspath(ctuindir)]
+    funcmap_command = [os.path.join(clang_path, 'clang-func-mapping')]
     funcmap_command.extend(sources)
     funcmap_command.append('--')
     funcmap_command.extend(args)
     funcmap_command_str = ' '.join(dir_command) + \
                           " && " + ' '.join(funcmap_command)
     logging.info(funcmap_command_str)
-    subprocess.call(funcmap_command_str, shell=True)
-
+    print "Calling function map:"+funcmap_command_str
+    output=[]
+    fnOut=subprocess.check_output(funcmap_command_str, shell=True)
+    fnList=fnOut.splitlines()
+    for fnTxt in fnList :
+        d=fnTxt.find(" ")
+        mangledName=fnTxt[0:d]
+        path=fnTxt[d+1:]            
+        astPath=os.path.join("ast",arch,path[1:]+".ast")                    
+        output.append(mangledName+"@"+arch+" "+astPath)    
+    extern_fns_map_filename = os.path.join(ctuindir,
+                                           EXTERNAL_FUNCTION_MAP_FILENAME)
+    print("functionmap:")
+    print(output)
+    #FIXME: implement file locking here
+    with open(extern_fns_map_filename, 'a') as out_file:
+        out_file.write("\n".join(output)+"\n")
 
 def run_parallel(threads, workfunc, funcparams):
     original_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -170,37 +188,6 @@ def run_parallel(threads, workfunc, funcparams):
     else:
         workers.close()
         workers.join()
-
-
-def generate_external_funcmap(mainargs):
-    func_2_file = {}
-    extfunc_2_file = {}
-    func_2_fileset = {}
-    defined_fns_filename = os.path.join(mainargs.ctuindir,
-                                        DEFINED_FUNCTIONS_FILENAME)
-    with open(defined_fns_filename, 'r') as defined_fns_file:
-        for line in defined_fns_file:
-            funcname, filename = line.strip().split(' ')
-            if funcname.startswith('!'):
-                funcname = funcname[1:]  # main function
-            if funcname not in func_2_file.keys():
-                func_2_fileset[funcname] = {filename}
-            else:
-                func_2_fileset[funcname].add(filename)
-            func_2_file[funcname] = filename
-    extern_fns_filename = os.path.join(mainargs.ctuindir,
-                                       EXTERNAL_FUNCTIONS_FILENAME)
-    with open(extern_fns_filename, 'r') as extern_fns_file:
-        for line in extern_fns_file:
-            line = line.strip()
-            if line in func_2_file and line not in extfunc_2_file:
-                extfunc_2_file[line] = func_2_file[line]
-    extern_fns_map_filename = os.path.join(mainargs.ctuindir,
-                                           EXTERNAL_FUNCTION_MAP_FILENAME)
-    with open(extern_fns_map_filename, 'w') as out_file:
-        for func, fname in extfunc_2_file.items():
-            if len(func_2_fileset[func]) == 1:
-                out_file.write('%s %s.ast\n' % (func, fname))
 
 
 def main():
@@ -223,7 +210,6 @@ def main():
                  [(cmd, cmd_2_src[cmd], src_2_dir[cmd_2_src[cmd][0]],
                    clang_path, mainargs.ctuindir) for cmd in cmd_order])
 
-    generate_external_funcmap(mainargs)
 
 
 if __name__ == "__main__":
