@@ -1485,9 +1485,8 @@ const FunctionDecl *ASTContext::getCTUDefinition(
   assert(!FD->hasBody() && "FD has a definition in current translation unit!");
   if (!FD->getType()->getAs<FunctionProtoType>())
     return nullptr; // Cannot even mangle that.
-  auto FoundImport = ImportMap.find(FD);
-  if (FoundImport != ImportMap.end())
-    return FoundImport->second;
+  assert(ImportMap.find(FD) == ImportMap.end() &&
+         "Functions already imported should have a body.");
 
   std::unique_ptr<MangleContext> MangleCtx(
       ItaniumMangleContext::create(FD->getASTContext(), Diags));
