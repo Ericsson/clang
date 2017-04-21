@@ -23,14 +23,12 @@
 #include "clang/Frontend/FrontendActions.h"
 #include "clang/Tooling/CommonOptionsParser.h"
 #include "clang/Tooling/Tooling.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Signals.h"
-#include <assert.h>
-#include <fstream>
+#include <iostream>
 #include <sstream>
 #include <string>
-#include <sys/file.h>
-#include <unistd.h>
 #include <vector>
 
 using namespace llvm;
@@ -41,45 +39,16 @@ typedef StringSet<> StrSet;
 typedef StringMap<StrSet> CallGraph;
 
 static cl::OptionCategory ClangFnMapGenCategory("clang-fnmapgen options");
-static cl::opt<std::string> CTUDir(
-    "ctu-dir",
-    cl::desc(
-        "Directory that contains the CTU related files (e.g.: AST dumps)."),
-    cl::init(""), cl::cat(ClangFnMapGenCategory));
-
-static void lockedWrite(StringRef fileName, StringRef content) {
-  if (!content.empty()) {
-    int fd = open(fileName.data(), O_CREAT | O_WRONLY | O_APPEND, 0666);
-    flock(fd, LOCK_EX);
-    ssize_t written = write(fd, content.data(), content.size());
-    assert(written == static_cast<ssize_t>(content.size()));
-    (void)written;
-    flock(fd, LOCK_UN);
-    close(fd);
-  }
-}
-
-static std::string getTripleSuffix(ASTContext &Ctx) {
-  // We are not going to support vendor and don't support OS and environment.
-  // FIXME: support OS and environment correctly.
-  Triple::ArchType T = Ctx.getTargetInfo().getTriple().getArch();
-  if (T == Triple::thumb)
-    T = Triple::arm;
-  return Ctx.getTargetInfo().getTriple().getArchTypeName(T);
-}
 
 class MapFunctionNamesConsumer : public ASTConsumer {
 private:
   ASTContext &Ctx;
   ItaniumMangleContext *ItaniumCtx;
   std::stringstream DefinedFuncsStr;
-  std::stringstream ExternFuncStr;
-  const std::string Triple;
 
 public:
   MapFunctionNamesConsumer(ASTContext &Context, ItaniumMangleContext *MangleCtx)
-      : Ctx(Context), ItaniumCtx(MangleCtx),
-        Triple(std::string("@") + getTripleSuffix(Context)) {}
+      : Ctx(Context), ItaniumCtx(MangleCtx){}
   std::string CurrentFileName;
 
   ~MapFunctionNamesConsumer();
@@ -89,8 +58,6 @@ public:
 
 private:
   std::string getMangledName(const FunctionDecl *FD);
-
-  bool isCLibraryFunction(const FunctionDecl *FD);
   void handleDecl(const Decl *D);
 };
 
@@ -113,34 +80,30 @@ void MapFunctionNamesConsumer::handleDecl(const Decl *D) {
     return;
 
   if (const auto *FD = dyn_cast<FunctionDecl>(D)) {
-    if (const Stmt *Body = FD->getBody()) {
-      std::string MangledName = getMangledName(FD);
-      const SourceManager &SM = Ctx.getSourceManager();
-      if (CurrentFileName.empty()) {
-        StringRef SMgrName =
-            SM.getFileEntryForID(SM.getMainFileID())->getName();
-        char *Path = realpath(SMgrName.str().c_str(), nullptr);
-        CurrentFileName = Path;
-        free(Path);
-      }
+    if (FD->isThisDeclarationADefinition()) {
+      if (const Stmt *Body = FD->getBody()) {
+        std::string MangledName = getMangledName(FD);
+        const SourceManager &SM = Ctx.getSourceManager();
+        if (CurrentFileName.empty()) {
+          StringRef SMgrName =
+              SM.getFileEntryForID(SM.getMainFileID())->getName();
+          char *Path = realpath(SMgrName.str().c_str(), nullptr);
+          CurrentFileName = Path;
+          free(Path);
+        }
 
-      SmallString<128> FileName("ast");
-      llvm::sys::path::append(FileName, getTripleSuffix(Ctx), CurrentFileName);
-      std::string FullName = MangledName + Triple;
-
-      switch (FD->getLinkageInternal()) {
-      case ExternalLinkage:
-      case VisibleNoLinkage:
-      case UniqueExternalLinkage:
-        if (SM.isInMainFile(Body->getLocStart()))
-          DefinedFuncsStr << "!";
-        DefinedFuncsStr << FullName << " " << FileName.c_str() << "\n";
-      default:
-        break;
+        switch (FD->getLinkageInternal()) {
+        case ExternalLinkage:
+        case VisibleNoLinkage:
+        case UniqueExternalLinkage:
+          if (SM.isInMainFile(Body->getLocStart())) {
+            // DefinedFuncsStr << "!";
+            DefinedFuncsStr << MangledName << " " << CurrentFileName << "\n";
+          }
+        default:
+          break;
+        }
       }
-    } else if (!FD->getBody() && !FD->getBuiltinID()) {
-      std::string MangledName = getMangledName(FD);
-      ExternFuncStr << MangledName << Triple << "\n";
     }
   }
 
@@ -149,24 +112,9 @@ void MapFunctionNamesConsumer::handleDecl(const Decl *D) {
       handleDecl(D);
 }
 
-bool MapFunctionNamesConsumer::isCLibraryFunction(const FunctionDecl *FD) {
-  SourceManager &SM = Ctx.getSourceManager();
-  if (!FD)
-    return false;
-  SourceLocation Loc = FD->getLocation();
-  if (Loc.isValid())
-    return SM.isInSystemHeader(Loc);
-  return true;
-}
-
 MapFunctionNamesConsumer::~MapFunctionNamesConsumer() {
   // Flush results to files.
-  SmallString<128> ExternalFns(CTUDir);
-  SmallString<128> DefinedFns(CTUDir);
-  llvm::sys::path::append(ExternalFns, "externalFns.txt");
-  llvm::sys::path::append(DefinedFns, "definedFns.txt");
-  lockedWrite(ExternalFns, ExternFuncStr.str());
-  lockedWrite(DefinedFns, DefinedFuncsStr.str());
+  std::cout << DefinedFuncsStr.str();
 }
 
 class MapFunctionNamesAction : public ASTFrontendAction {
@@ -182,19 +130,20 @@ protected:
   }
 };
 
+static cl::extrahelp CommonHelp(CommonOptionsParser::HelpMessage);
+
 int main(int argc, const char **argv) {
   // Print a stack trace if we signal out.
   sys::PrintStackTraceOnErrorSignal(argv[0], false);
   PrettyStackTraceProgram X(argc, argv);
 
   SmallVector<std::string, 4> Sources;
+  const char *overview =
+      "\nThis tool collects the mangled name and location of definition "
+      "of all functions defined in the given compilation command.\n";
   CommonOptionsParser OptionsParser(argc, argv, ClangFnMapGenCategory,
-                                    cl::ZeroOrMore);
+                                    cl::ZeroOrMore, overview);
 
-  if (CTUDir.getNumOccurrences() != 1) {
-    errs() << "Exactly one CTU dir should be provided\n";
-    return 1;
-  }
   const StringRef cppFile = ".cpp", ccFile = ".cc", cFile = ".c",
                   cxxFile = ".cxx";
   for (int i = 1; i < argc; i++) {
