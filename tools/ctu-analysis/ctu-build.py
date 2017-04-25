@@ -12,8 +12,6 @@ import shlex
 
 SOURCE_PATTERN = re.compile('.*\.(C|c|cc|cpp|cxx|ii|m|mm)$', re.IGNORECASE)
 TIMEOUT = 86400
-DEFINED_FUNCTIONS_FILENAME = 'definedFns.txt'
-EXTERNAL_FUNCTIONS_FILENAME = 'externalFns.txt'
 EXTERNAL_FUNCTION_MAP_FILENAME = 'externalFnMap.txt'
 
 
@@ -81,8 +79,6 @@ def clear_file(filename):
 
 
 def clear_workspace(ctuindir):
-    clear_file(os.path.join(ctuindir, DEFINED_FUNCTIONS_FILENAME))
-    clear_file(os.path.join(ctuindir, EXTERNAL_FUNCTIONS_FILENAME))
     clear_file(os.path.join(ctuindir, EXTERNAL_FUNCTION_MAP_FILENAME))
 
 
@@ -98,7 +94,7 @@ def get_command_arguments(cmd):
 
 
 def get_triple_arch(clang_path, clang_args, source):
-    """Returns the architecture part of the target triple in a compilation 
+    """Returns the architecture part of the target triple in a compilation
     command. """
     arch = ""
     clang_cmd = [os.path.join(clang_path, 'clang'), "-###"]
@@ -144,8 +140,8 @@ def generate_ast(params):
 def map_functions(params):
     command, sources, directory, clang_path, ctuindir = params
     args = get_command_arguments(command)
-    logging.info("map_funcions command " + command)
-    logging.info("sources: " + sources)
+    logging.info("map_functions command: " + command)
+    logging.info("sources: " + ' '.join(sources))
     arch = get_triple_arch(clang_path, args, sources[0])
     dir_command = ['cd', directory]
     funcmap_command = [os.path.join(clang_path, 'clang-func-mapping')]
@@ -154,22 +150,22 @@ def map_functions(params):
     funcmap_command.extend(args)
     funcmap_command_str = ' '.join(dir_command) + \
                           " && " + ' '.join(funcmap_command)
-    logging.info(funcmap_command_str)
-    logging.info("Calling function map:" + funcmap_command_str)
+    logging.info("Calling function map: " + funcmap_command_str)
     output = []
-    fnOut = subprocess.check_output(funcmap_command_str, shell=True)
-    fnList = fnOut.splitlines()
-    for fnTxt in fnList:
-        d = fnTxt.find(" ")
-        mangledName = fnTxt[0:d]
-        path = fnTxt[d + 1:]
-        astPath = os.path.join("ast", arch, path[1:] + ".ast")
-        output.append(mangledName + "@" + arch + " " + astPath)
+    fn_out = subprocess.check_output(funcmap_command_str, shell=True)
+    fn_list = fn_out.splitlines()
+    for fn_txt in fn_list:
+        dpos = fn_txt.find(" ")
+        mangled_name = fn_txt[0:dpos]
+        path = fn_txt[dpos + 1:]
+        ast_path = os.path.join("ast", arch, path[1:] + ".ast")
+        output.append(mangled_name + "@" + arch + " " + ast_path)
     extern_fns_map_filename = os.path.join(ctuindir,
                                            EXTERNAL_FUNCTION_MAP_FILENAME)
-    logging.info("functionmap: " + output)
-    with open(extern_fns_map_filename, 'a') as out_file:
-        out_file.write("\n".join(output) + "\n")
+    logging.info("functionmap: " + ' '.join(output))
+    if output:
+        with open(extern_fns_map_filename, 'a') as out_file:
+            out_file.write("\n".join(output) + "\n")
 
 
 def run_parallel(threads, workfunc, funcparams):
