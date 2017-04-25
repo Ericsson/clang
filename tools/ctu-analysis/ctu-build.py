@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import glob
 import logging
 import multiprocessing
 import os
@@ -9,10 +10,13 @@ import re
 import signal
 import subprocess
 import shlex
+import shutil
+import tempfile
 
 SOURCE_PATTERN = re.compile('.*\.(C|c|cc|cpp|cxx|ii|m|mm)$', re.IGNORECASE)
 TIMEOUT = 86400
 EXTERNAL_FUNCTION_MAP_FILENAME = 'externalFnMap.txt'
+TEMP_EXTERNAL_FNMAP_FOLDER = 'tmpExternalFnMaps'
 
 
 def get_args():
@@ -78,7 +82,17 @@ def clear_file(filename):
         pass
 
 
+def init_temp_stuff(ctuindir):
+    os.mkdir(os.path.join(ctuindir, TEMP_EXTERNAL_FNMAP_FOLDER))
+
+
+def clear_temp_stuff(ctuindir):
+    shutil.rmtree(os.path.join(ctuindir, TEMP_EXTERNAL_FNMAP_FOLDER),
+                  ignore_errors=True)
+
+
 def clear_workspace(ctuindir):
+    clear_temp_stuff(ctuindir)
     clear_file(os.path.join(ctuindir, EXTERNAL_FUNCTION_MAP_FILENAME))
 
 
@@ -160,12 +174,24 @@ def map_functions(params):
         path = fn_txt[dpos + 1:]
         ast_path = os.path.join("ast", arch, path[1:] + ".ast")
         output.append(mangled_name + "@" + arch + " " + ast_path)
-    extern_fns_map_filename = os.path.join(ctuindir,
-                                           EXTERNAL_FUNCTION_MAP_FILENAME)
+    extern_fns_map_folder = os.path.join(ctuindir,
+                                         TEMP_EXTERNAL_FNMAP_FOLDER)
     logging.info("functionmap: " + ' '.join(output))
     if output:
-        with open(extern_fns_map_filename, 'a') as out_file:
+        with tempfile.NamedTemporaryFile(dir=extern_fns_map_folder,
+                                         delete=False) as out_file:
             out_file.write("\n".join(output) + "\n")
+
+
+def merge_external_fn_maps(ctuindir):
+    files = glob.glob(os.path.join(ctuindir, TEMP_EXTERNAL_FNMAP_FOLDER,
+                                   '*'))
+    extern_fns_map_file = os.path.join(ctuindir,
+                                       EXTERNAL_FUNCTION_MAP_FILENAME)
+    with open(extern_fns_map_file, 'wb') as out_file:
+        for filename in files:
+            with open(filename, 'rb') as in_file:
+                shutil.copyfileobj(in_file, out_file)
 
 
 def run_parallel(threads, workfunc, funcparams):
@@ -200,10 +226,13 @@ def main():
                  [(src, src_2_cmd[src], src_2_dir[src], clang_path,
                    mainargs.ctuindir) for src in src_order])
 
-    # Run on one thread so no locking needed.
-    run_parallel(1, map_functions,
+    init_temp_stuff(mainargs.ctuindir)
+    run_parallel(mainargs.threads, map_functions,
                  [(cmd, cmd_2_src[cmd], src_2_dir[cmd_2_src[cmd][0]],
                    clang_path, mainargs.ctuindir) for cmd in cmd_order])
+
+    merge_external_fn_maps(mainargs.ctuindir)
+    clear_temp_stuff(mainargs.ctuindir)
 
 
 if __name__ == "__main__":
