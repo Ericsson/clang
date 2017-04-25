@@ -1493,7 +1493,6 @@ const FunctionDecl *ASTContext::getCTUDefinition(
   MangleCtx->setShouldForceMangleProto(true);
   std::string MangledFnName = getMangledName(FD, MangleCtx.get());
   ASTUnit *Unit = nullptr;
-  StringRef ASTFileName;
   auto FnUnitCacheEntry = FunctionAstUnitMap.find(MangledFnName);
   if (FnUnitCacheEntry == FunctionAstUnitMap.end()) {
     if (FunctionFileMap.empty()) {
@@ -1508,11 +1507,11 @@ const FunctionDecl *ASTContext::getCTUDefinition(
       }
     }
 
+    StringRef ASTFileName;
     auto It = FunctionFileMap.find(MangledFnName);
-    if (It != FunctionFileMap.end())
-      ASTFileName = It->second;
-    else // No definition found even in some other build unit.
-      return nullptr;
+    if (It == FunctionFileMap.end())
+      return nullptr; // No definition found even in some other build unit.
+    ASTFileName = It->second;
     auto ASTCacheEntry = FileASTUnitMap.find(ASTFileName);
     if (ASTCacheEntry == FileASTUnitMap.end()) {
       std::unique_ptr<ASTUnit> LoadedUnit(Loader(ASTFileName));

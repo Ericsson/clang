@@ -37,17 +37,15 @@ using namespace clang::tooling;
 static cl::OptionCategory ClangFnMapGenCategory("clang-fnmapgen options");
 
 class MapFunctionNamesConsumer : public ASTConsumer {
-private:
-  ASTContext &Ctx;
-  ItaniumMangleContext *ItaniumCtx;
-  std::stringstream DefinedFuncsStr;
-
 public:
   MapFunctionNamesConsumer(ASTContext &Context, ItaniumMangleContext *MangleCtx)
       : Ctx(Context), ItaniumCtx(MangleCtx) {}
-  std::string CurrentFileName;
 
-  ~MapFunctionNamesConsumer();
+  ~MapFunctionNamesConsumer() {
+    // Flush results to standard output.
+    llvm::outs() << DefinedFuncsStr.str();
+  }
+
   virtual void HandleTranslationUnit(ASTContext &Ctx) {
     handleDecl(Ctx.getTranslationUnitDecl());
   }
@@ -55,6 +53,11 @@ public:
 private:
   std::string getMangledName(const FunctionDecl *FD);
   void handleDecl(const Decl *D);
+
+  ASTContext &Ctx;
+  ItaniumMangleContext *ItaniumCtx;
+  std::stringstream DefinedFuncsStr;
+  std::string CurrentFileName;
 };
 
 std::string MapFunctionNamesConsumer::getMangledName(const FunctionDecl *FD) {
@@ -104,11 +107,6 @@ void MapFunctionNamesConsumer::handleDecl(const Decl *D) {
   if (const auto *DC = dyn_cast<DeclContext>(D))
     for (const Decl *D : DC->decls())
       handleDecl(D);
-}
-
-MapFunctionNamesConsumer::~MapFunctionNamesConsumer() {
-  // Flush results to standard output.
-  llvm::outs() << DefinedFuncsStr.str();
 }
 
 class MapFunctionNamesAction : public ASTFrontendAction {
