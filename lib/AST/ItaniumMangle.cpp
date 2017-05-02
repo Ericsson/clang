@@ -79,6 +79,17 @@ static const DeclContext *getEffectiveDeclContext(const Decl *D) {
     if (FD->isExternC())
       return FD->getASTContext().getTranslationUnitDecl();
 
+  // Avoid infinite recursion with code like:
+  //   void f(struct S* p);
+  // Where this is the first declaration of S. This is only valid for C.
+  // For some tools it makes sense to mangle C functions (e.g. avoid collisions
+  // when indexing). It might be nicer to check whether the Decl is in
+  // FunctionPrototypeScope, but this information is lost after the Sema is
+  // done.
+  if (!D->getASTContext().getLangOpts().CPlusPlus && DC->isFunctionOrMethod() &&
+      isa<TagDecl>(D))
+    return D->getASTContext().getTranslationUnitDecl();
+
   return DC->getRedeclContext();
 }
 
@@ -653,7 +664,9 @@ void CXXNameMangler::mangleFunctionEncoding(const FunctionDecl *FD) {
   // <encoding> ::= <function name> <bare-function-type>
 
   // Don't mangle in the type if this isn't a decl we should typically mangle.
-  if (!Context.shouldMangleDeclName(FD)) {
+  if (!Context.shouldMangleDeclName(FD) &&
+      !(Context.shouldForceMangleProto() &&
+        FD->getType()->getAs<FunctionProtoType>())) {
     mangleName(FD);
     return;
   }
@@ -1455,10 +1468,12 @@ void CXXNameMangler::mangleNestedName(const NamedDecl *ND,
   Out << 'N';
   if (const CXXMethodDecl *Method = dyn_cast<CXXMethodDecl>(ND)) {
     Qualifiers MethodQuals =
-        Qualifiers::fromCVRMask(Method->getTypeQualifiers());
+        Qualifiers::fromCVRUMask(Method->getTypeQualifiers());
     // We do not consider restrict a distinguishing attribute for overloading
     // purposes so we must not mangle it.
     MethodQuals.removeRestrict();
+    // __unaligned is not currently mangled in any way, so remove it.
+    MethodQuals.removeUnaligned();
     mangleQualifiers(MethodQuals);
     mangleRefQualifier(Method->getRefQualifier());
   }

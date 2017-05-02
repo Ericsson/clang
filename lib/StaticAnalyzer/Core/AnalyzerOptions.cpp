@@ -370,3 +370,9 @@ bool AnalyzerOptions::shouldDisplayNotesAsEvents() {
         getBooleanOption("notes-as-events", /*Default=*/false);
   return DisplayNotesAsEvents.getValue();
 }
+
+StringRef AnalyzerOptions::getCTUDir() {
+  if (!CTUDir.hasValue() || !llvm::sys::fs::is_directory(*CTUDir))
+    CTUDir = getOptionAsString("ctu-dir", "");
+  return CTUDir.getValue();
+}

@@ -13,6 +13,7 @@
 
 #include "clang/AST/ASTContext.h"
 #include "CXXABI.h"
+#include "clang/AST/ASTImporter.h"
 #include "clang/AST/ASTMutationListener.h"
 #include "clang/AST/Attr.h"
 #include "clang/AST/CharUnits.h"
@@ -34,11 +35,16 @@
 #include "clang/Basic/Builtins.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetInfo.h"
+#include "clang/Frontend/ASTUnit.h"
+#include "clang/Frontend/CompilerInstance.h"
+#include "clang/StaticAnalyzer/Core/AnalyzerOptions.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/Support/Capacity.h"
 #include "llvm/Support/MathExtras.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
+#include <fstream>
 #include <map>
 
 using namespace clang;
@@ -703,6 +709,7 @@ static const LangAS::Map *getAddressSpaceMap(const TargetInfo &T,
     // The fake address space map must have a distinct entry for each
     // language-specific address space.
     static const unsigned FakeAddrSpaceMap[] = {
+      0, // Default
       1, // opencl_global
       3, // opencl_local
       2, // opencl_constant
@@ -1418,6 +1425,133 @@ const llvm::fltSemantics &ASTContext::getFloatTypeSemantics(QualType T) const {
   case BuiltinType::LongDouble: return Target->getLongDoubleFormat();
   case BuiltinType::Float128:   return Target->getFloat128Format();
   }
+}
+
+
+//===----------------------------------------------------------------------===//
+//                         Cross-translation unit support
+//===----------------------------------------------------------------------===//
+
+std::string getMangledName(const NamedDecl *ND, MangleContext *MangleCtx) {
+  std::string MangledName;
+  llvm::raw_string_ostream OS(MangledName);
+  if (const auto *CCD = dyn_cast<CXXConstructorDecl>(ND))
+    // FIXME: Use correct Ctor/DtorType
+    MangleCtx->mangleCXXCtor(CCD, Ctor_Complete, OS);
+  else if (const auto *CDD = dyn_cast<CXXDestructorDecl>(ND))
+    MangleCtx->mangleCXXDtor(CDD, Dtor_Complete, OS);
+  else
+    MangleCtx->mangleName(ND, OS);
+  ASTContext &Ctx = ND->getASTContext();
+  // We are not going to support vendor and don't support OS and environment.
+  // FIXME: support OS and environment correctly
+  llvm::Triple::ArchType T = Ctx.getTargetInfo().getTriple().getArch();
+  if (T == llvm::Triple::thumb)
+    T = llvm::Triple::arm;
+  OS << "@" << Ctx.getTargetInfo().getTriple().getArchTypeName(T);
+  return OS.str();
+}
+
+/// Recursively visit the funtion decls of a DeclContext, and looks up a
+/// function based on mangled name.
+static const FunctionDecl *
+findFunctionInDeclContext(const DeclContext *DC, StringRef MangledFnName,
+                          std::unique_ptr<MangleContext> &MangleCtx) {
+  if (!DC)
+    return nullptr;
+  for (const Decl *D : DC->decls()) {
+    const auto *SubDC = dyn_cast<DeclContext>(D);
+    if (const auto *FD =
+            findFunctionInDeclContext(SubDC, MangledFnName, MangleCtx))
+      return FD;
+
+    const auto *ND = dyn_cast<FunctionDecl>(D);
+    const FunctionDecl *ResultDecl;
+    if (!ND || !ND->hasBody(ResultDecl))
+      continue;
+    std::string LookupMangledName = getMangledName(ResultDecl, MangleCtx.get());
+    // We are already sure that the triple is correct here.
+    if (LookupMangledName != MangledFnName)
+      continue;
+    return ResultDecl;
+  }
+  return nullptr;
+}
+
+const FunctionDecl *ASTContext::getCTUDefinition(
+    const FunctionDecl *FD, CompilerInstance &CI, StringRef CTUDir,
+    DiagnosticsEngine &Diags,
+    std::function<std::unique_ptr<clang::ASTUnit>(StringRef)> Loader) {
+  assert(!FD->hasBody() && "FD has a definition in current translation unit!");
+  if (!FD->getType()->getAs<FunctionProtoType>())
+    return nullptr; // Cannot even mangle that.
+  assert(ImportMap.find(FD) == ImportMap.end() &&
+         "Functions already imported should have a body.");
+
+  std::unique_ptr<MangleContext> MangleCtx(
+      ItaniumMangleContext::create(FD->getASTContext(), Diags));
+  MangleCtx->setShouldForceMangleProto(true);
+  std::string MangledFnName = getMangledName(FD, MangleCtx.get());
+  ASTUnit *Unit = nullptr;
+  auto FnUnitCacheEntry = FunctionAstUnitMap.find(MangledFnName);
+  if (FnUnitCacheEntry == FunctionAstUnitMap.end()) {
+    if (FunctionFileMap.empty()) {
+      SmallString<128> ExternalFunctionMap = CTUDir;
+      llvm::sys::path::append(ExternalFunctionMap, "externalFnMap.txt");
+      std::ifstream ExternalFnMapFile(ExternalFunctionMap.c_str());
+      std::string FunctionName, FileName;
+      while (ExternalFnMapFile >> FunctionName >> FileName) {
+        SmallString<128> FilePath = CTUDir;
+        llvm::sys::path::append(FilePath, FileName);
+        FunctionFileMap[FunctionName] = FilePath.str().str();
+      }
+    }
+
+    StringRef ASTFileName;
+    auto It = FunctionFileMap.find(MangledFnName);
+    if (It == FunctionFileMap.end())
+      return nullptr; // No definition found even in some other build unit.
+    ASTFileName = It->second;
+    auto ASTCacheEntry = FileASTUnitMap.find(ASTFileName);
+    if (ASTCacheEntry == FileASTUnitMap.end()) {
+      std::unique_ptr<ASTUnit> LoadedUnit(Loader(ASTFileName));
+      Unit = LoadedUnit.get();
+      FileASTUnitMap[ASTFileName] = std::move(LoadedUnit);
+    } else {
+      Unit = ASTCacheEntry->second.get();
+    }
+    FunctionAstUnitMap[MangledFnName] = Unit;
+  } else {
+    Unit = FnUnitCacheEntry->second;
+  }
+
+  if (!Unit)
+    return nullptr;
+  assert(&Unit->getFileManager() ==
+         &Unit->getASTContext().getSourceManager().getFileManager());
+  ASTImporter &Importer = getOrCreateASTImporter(Unit->getASTContext());
+  TranslationUnitDecl *TU = Unit->getASTContext().getTranslationUnitDecl();
+  if (const FunctionDecl *ResultDecl =
+            findFunctionInDeclContext(TU, MangledFnName, MangleCtx)) {
+    // FIXME: Refactor const_cast
+    auto *ToDecl = cast<FunctionDecl>(
+        Importer.Import(const_cast<FunctionDecl *>(ResultDecl)));
+    assert(ToDecl->hasBody());
+    ImportMap[FD] = ToDecl;
+    return ToDecl;
+  }
+  return nullptr;
+}
+
+ASTImporter &ASTContext::getOrCreateASTImporter(ASTContext &From) {
+  auto I = ASTUnitImporterMap.find(From.getTranslationUnitDecl());
+  if (I != ASTUnitImporterMap.end())
+    return *I->second;
+  ASTImporter *NewImporter = new ASTImporter(
+        *this, getSourceManager().getFileManager(),
+        From, From.getSourceManager().getFileManager(), false);
+  ASTUnitImporterMap[From.getTranslationUnitDecl()].reset(NewImporter);
+  return *NewImporter;
 }
 
 CharUnits ASTContext::getDeclAlign(const Decl *D, bool ForAlignof) const {
@@ -7917,6 +8051,8 @@ QualType ASTContext::mergeFunctionTypes(QualType lhs, QualType rhs,
 
   if (lbaseInfo.getProducesResult() != rbaseInfo.getProducesResult())
     return QualType();
+  if (lbaseInfo.getNoCallerSavedRegs() != rbaseInfo.getNoCallerSavedRegs())
+    return QualType();
 
   // FIXME: some uses, e.g. conditional exprs, really want this to be 'both'.
   bool NoReturn = lbaseInfo.getNoReturn() || rbaseInfo.getNoReturn();
@@ -8727,7 +8863,8 @@ static QualType DecodeTypeFromStr(const char *&Str, const ASTContext &Context,
       char *End;
       unsigned AddrSpace = strtoul(Str, &End, 10);
       if (End != Str && AddrSpace != 0) {
-        Type = Context.getAddrSpaceQualType(Type, AddrSpace);
+        Type = Context.getAddrSpaceQualType(Type, AddrSpace +
+            LangAS::Count);
         Str = End;
       }
       if (c == '*')
@@ -8895,7 +9032,7 @@ GVALinkage ASTContext::GetGVALinkageForFunction(const FunctionDecl *FD) const {
       *this, basicGVALinkageForFunction(*this, FD), FD);
   auto EK = ExternalASTSource::EK_ReplyHazy;
   if (auto *Ext = getExternalSource())
-    EK = Ext->hasExternalDefinitions(FD->getOwningModuleID());
+    EK = Ext->hasExternalDefinitions(FD);
   switch (EK) {
   case ExternalASTSource::EK_Never:
     if (L == GVA_DiscardableODR)
@@ -8991,7 +9128,7 @@ GVALinkage ASTContext::GetGVALinkageForVariable(const VarDecl *VD) {
       *this, basicGVALinkageForVariable(*this, VD), VD);
 }
 
-bool ASTContext::DeclMustBeEmitted(const Decl *D, bool ForModularCodegen) {
+bool ASTContext::DeclMustBeEmitted(const Decl *D) {
   if (const VarDecl *VD = dyn_cast<VarDecl>(D)) {
     if (!VD->isFileVarDecl())
       return false;
@@ -9056,9 +9193,6 @@ bool ASTContext::DeclMustBeEmitted(const Decl *D, bool ForModularCodegen) {
     }
 
     GVALinkage Linkage = GetGVALinkageForFunction(FD);
-
-    if (Linkage == GVA_DiscardableODR && ForModularCodegen)
-      return true;
 
     // static, static inline, always_inline, and extern inline functions can
     // always be deferred.  Normal inline functions can be deferred in C99/C++.
@@ -9415,10 +9549,8 @@ createDynTypedNode(const NestedNameSpecifierLoc &Node) {
           if (!NodeOrVector.template is<ASTContext::ParentVector *>()) {
             auto *Vector = new ASTContext::ParentVector(
                 1, getSingleDynTypedNodeFromParentMap(NodeOrVector));
-            if (auto *Node =
-                    NodeOrVector
-                        .template dyn_cast<ast_type_traits::DynTypedNode *>())
-              delete Node;
+            delete NodeOrVector
+                    .template dyn_cast<ast_type_traits::DynTypedNode *>();
             NodeOrVector = Vector;
           }
 
@@ -9544,6 +9676,18 @@ uint64_t ASTContext::getTargetNullPointerValue(QualType QT) const {
     AS = QT->getPointeeType().getAddressSpace();
 
   return getTargetInfo().getNullPointerValue(AS);
+}
+
+unsigned ASTContext::getTargetAddressSpace(unsigned AS) const {
+  // For OpenCL, only function local variables are not explicitly marked with
+  // an address space in the AST, and these need to be the address space of
+  // alloca.
+  if (!AS && LangOpts.OpenCL)
+    return getTargetInfo().getDataLayout().getAllocaAddrSpace();
+  if (AS >= LangAS::Count)
+    return AS - LangAS::Count;
+  else
+    return (*AddrSpaceMap)[AS];
 }
 
 // Explicitly instantiate this in case a Redeclarable<T> is used from a TU that

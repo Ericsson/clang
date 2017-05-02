@@ -63,6 +63,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <iterator>
 #include <memory>
 #include <new>
@@ -78,12 +79,14 @@ struct fltSemantics;
 } // end namespace llvm
 
 namespace clang {
-
+class ASTImporter;
 class ASTMutationListener;
 class ASTRecordLayout;
+class ASTUnit;
 class AtomicExpr;
 class BlockExpr;
 class CharUnits;
+class CompilerInstance;
 class CXXABI;
 class DiagnosticsEngine;
 class Expr;
@@ -1902,6 +1905,24 @@ public:
   }
 
   //===--------------------------------------------------------------------===//
+  //                         Cross-translation unit support
+  //===--------------------------------------------------------------------===//
+private:
+  llvm::StringMap<std::unique_ptr<clang::ASTUnit>> FileASTUnitMap;
+  llvm::StringMap<clang::ASTUnit *> FunctionAstUnitMap;
+  llvm::StringMap<std::string> FunctionFileMap;
+  llvm::DenseMap<TranslationUnitDecl *, std::unique_ptr<ASTImporter>>
+      ASTUnitImporterMap;
+  llvm::DenseMap<const FunctionDecl *, const FunctionDecl *> ImportMap;
+  ASTImporter &getOrCreateASTImporter(ASTContext &From);
+
+public:
+  const FunctionDecl *getCTUDefinition(
+      const FunctionDecl *FD, CompilerInstance &CI, StringRef CTUDir,
+      DiagnosticsEngine &Diags,
+      std::function<std::unique_ptr<clang::ASTUnit>(StringRef)> Loader);
+
+  //===--------------------------------------------------------------------===//
   //                         Type Sizing and Analysis
   //===--------------------------------------------------------------------===//
 
@@ -2317,21 +2338,15 @@ public:
     return getTargetAddressSpace(Q.getAddressSpace());
   }
 
-  unsigned getTargetAddressSpace(unsigned AS) const {
-    if (AS < LangAS::Offset || AS >= LangAS::Offset + LangAS::Count)
-      return AS;
-    else
-      return (*AddrSpaceMap)[AS - LangAS::Offset];
-  }
+  unsigned getTargetAddressSpace(unsigned AS) const;
 
   /// Get target-dependent integer value for null pointer which is used for
   /// constant folding.
   uint64_t getTargetNullPointerValue(QualType QT) const;
 
   bool addressSpaceMapManglingFor(unsigned AS) const {
-    return AddrSpaceMapMangling ||
-           AS < LangAS::Offset ||
-           AS >= LangAS::Offset + LangAS::Count;
+    return AddrSpaceMapMangling || 
+           AS >= LangAS::Count;
   }
 
 private:
@@ -2516,7 +2531,7 @@ public:
   ///
   /// \returns true if the function/var must be CodeGen'ed/deserialized even if
   /// it is not used.
-  bool DeclMustBeEmitted(const Decl *D, bool ForModularCodegen = false);
+  bool DeclMustBeEmitted(const Decl *D);
 
   const CXXConstructorDecl *
   getCopyConstructorForExceptionObject(CXXRecordDecl *RD);
