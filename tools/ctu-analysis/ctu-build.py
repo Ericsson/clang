@@ -183,15 +183,24 @@ def map_functions(params):
             out_file.write("\n".join(output) + "\n")
 
 
-def merge_external_fn_maps(ctuindir):
+def create_external_fn_maps(ctuindir):
     files = glob.glob(os.path.join(ctuindir, TEMP_EXTERNAL_FNMAP_FOLDER,
                                    '*'))
     extern_fns_map_file = os.path.join(ctuindir,
                                        EXTERNAL_FUNCTION_MAP_FILENAME)
+    mangled_to_asts = {}
+    for filename in files:
+        with open(filename, 'rb') as in_file:
+            for line in in_file:
+                mangled_name, ast_file = line.strip().split(' ')
+                if mangled_name not in mangled_to_asts:
+                    mangled_to_asts[mangled_name] = {ast_file}
+                else:
+                    mangled_to_asts[mangled_name].add(ast_file)
     with open(extern_fns_map_file, 'wb') as out_file:
-        for filename in files:
-            with open(filename, 'rb') as in_file:
-                shutil.copyfileobj(in_file, out_file)
+        for mangled_name, ast_files in mangled_to_asts.iteritems():
+            if len(ast_files) == 1:
+                out_file.write('%s %s\n' % (mangled_name, ast_files.pop()))
 
 
 def run_parallel(threads, workfunc, funcparams):
@@ -231,7 +240,7 @@ def main():
                  [(cmd, cmd_2_src[cmd], src_2_dir[cmd_2_src[cmd][0]],
                    clang_path, mainargs.ctuindir) for cmd in cmd_order])
 
-    merge_external_fn_maps(mainargs.ctuindir)
+    create_external_fn_maps(mainargs.ctuindir)
     clear_temp_stuff(mainargs.ctuindir)
 
 
