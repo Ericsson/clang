@@ -1913,7 +1913,6 @@ private:
   llvm::StringMap<std::string> FunctionFileMap;
   llvm::DenseMap<TranslationUnitDecl *, std::unique_ptr<ASTImporter>>
       ASTUnitImporterMap;
-  llvm::DenseMap<const FunctionDecl *, const FunctionDecl *> ImportMap;
   ASTImporter &getOrCreateASTImporter(ASTContext &From);
 
 public:
