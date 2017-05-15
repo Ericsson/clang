@@ -43,6 +43,7 @@
 #include "llvm/ADT/Triple.h"
 #include "llvm/Support/Capacity.h"
 #include "llvm/Support/MathExtras.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
 #include <fstream>
 #include <map>
@@ -1467,22 +1468,23 @@ std::string getMangledName(const NamedDecl *ND, MangleContext *MangleCtx) {
   return OS.str();
 }
 
-const FunctionDecl* iterateContextDecls(const DeclContext *DC,
-                                const std::string &MangledFnName,
-                                std::unique_ptr<MangleContext> &MangleCtx) {
-  //FIXME: Use ASTMatcher instead.
+/// Recursively visit the funtion decls of a DeclContext, and looks up a
+/// function based on mangled name.
+static const FunctionDecl *
+findFunctionInDeclContext(const DeclContext *DC, StringRef MangledFnName,
+                          std::unique_ptr<MangleContext> &MangleCtx) {
   if (!DC)
     return nullptr;
   for (const Decl *D : DC->decls()) {
     const auto *SubDC = dyn_cast<DeclContext>(D);
-    if (const auto *FD = iterateContextDecls(SubDC, MangledFnName, MangleCtx))
+    if (const auto *FD =
+            findFunctionInDeclContext(SubDC, MangledFnName, MangleCtx))
       return FD;
 
     const auto *ND = dyn_cast<FunctionDecl>(D);
     const FunctionDecl *ResultDecl;
-    if (!ND || !ND->hasBody(ResultDecl)) {
+    if (!ND || !ND->hasBody(ResultDecl))
       continue;
-    }
     std::string LookupMangledName = getMangledName(ResultDecl, MangleCtx.get());
     // We are already sure that the triple is correct here.
     if (LookupMangledName != MangledFnName)
@@ -1492,10 +1494,10 @@ const FunctionDecl* iterateContextDecls(const DeclContext *DC,
   return nullptr;
 }
 
-const FunctionDecl *
-ASTContext::getXTUDefinition(const FunctionDecl *FD, CompilerInstance &CI,
-                             StringRef XTUDir, DiagnosticsEngine &Diags,
-                             std::function<ASTUnit *(StringRef)> Loader) {
+const FunctionDecl *ASTContext::getCTUDefinition(
+    const FunctionDecl *FD, CompilerInstance &CI, StringRef CTUDir,
+    DiagnosticsEngine &Diags,
+    std::function<std::unique_ptr<clang::ASTUnit>(StringRef)> Loader) {
   NumGetXTUCalled++;
   assert(!FD->hasBody() && "FD has a definition in current translation unit!");
   if (!FD->getType()->getAs<FunctionProtoType>())
@@ -1503,46 +1505,42 @@ ASTContext::getXTUDefinition(const FunctionDecl *FD, CompilerInstance &CI,
     NumNotEvenMangle++;
     return nullptr; // Cannot even mangle that.
   }
-  auto FoundImport = ImportMap.find(FD);
-  if (FoundImport != ImportMap.end()){
-    NumGetXTUSuccess++;
-    return FoundImport->second;
-  }
 
   std::unique_ptr<MangleContext> MangleCtx(
       ItaniumMangleContext::create(FD->getASTContext(), Diags));
   MangleCtx->setShouldForceMangleProto(true);
   std::string MangledFnName = getMangledName(FD, MangleCtx.get());
   ASTUnit *Unit = nullptr;
-  StringRef ASTFileName;
   auto FnUnitCacheEntry = FunctionAstUnitMap.find(MangledFnName);
   if (FnUnitCacheEntry == FunctionAstUnitMap.end()) {
     if (FunctionFileMap.empty()) {
-      std::string ExternalFunctionMap = (XTUDir + "/externalFnMap.txt").str();
-      std::ifstream ExternalFnMapFile(ExternalFunctionMap);
+      SmallString<128> ExternalFunctionMap = CTUDir;
+      llvm::sys::path::append(ExternalFunctionMap, "externalFnMap.txt");
+      std::ifstream ExternalFnMapFile(ExternalFunctionMap.c_str());
       std::string FunctionName, FileName;
-      while (ExternalFnMapFile >> FunctionName >> FileName)
-        FunctionFileMap[FunctionName] = (XTUDir + "/" + FileName).str();
-      ExternalFnMapFile.close();
+      while (ExternalFnMapFile >> FunctionName >> FileName) {
+        SmallString<128> FilePath = CTUDir;
+        llvm::sys::path::append(FilePath, FileName);
+        FunctionFileMap[FunctionName] = FilePath.str().str();
+      }
     }
 
+    StringRef ASTFileName;
     auto It = FunctionFileMap.find(MangledFnName);
-    if (It != FunctionFileMap.end())
-      ASTFileName = It->second;
-    else // No definition found even in some other build unit.
-    {
+    if (It == FunctionFileMap.end()) {
       NumNotInOtherTU++;
-      return nullptr;
+      return nullptr; // No definition found even in some other build unit.
     }
+    ASTFileName = It->second;
     auto ASTCacheEntry = FileASTUnitMap.find(ASTFileName);
     if (ASTCacheEntry == FileASTUnitMap.end()) {
-      Unit = Loader(ASTFileName);
-      FileASTUnitMap[ASTFileName] = Unit;
-      FunctionAstUnitMap[MangledFnName] = Unit;
+      std::unique_ptr<ASTUnit> LoadedUnit(Loader(ASTFileName));
+      Unit = LoadedUnit.get();
+      FileASTUnitMap[ASTFileName] = std::move(LoadedUnit);
     } else {
-      Unit = ASTCacheEntry->second;
-      FunctionAstUnitMap[MangledFnName] = Unit;
+      Unit = ASTCacheEntry->second.get();
     }
+    FunctionAstUnitMap[MangledFnName] = Unit;
   } else {
     Unit = FnUnitCacheEntry->second;
   }
@@ -1556,15 +1554,13 @@ ASTContext::getXTUDefinition(const FunctionDecl *FD, CompilerInstance &CI,
   ASTImporter &Importer = getOrCreateASTImporter(Unit->getASTContext());
   TranslationUnitDecl *TU = Unit->getASTContext().getTranslationUnitDecl();
   if (const FunctionDecl *ResultDecl =
-            iterateContextDecls(TU, MangledFnName, MangleCtx)) {
-    llvm::errs() << "Importing function " << MangledFnName << " from "
-                 << ASTFileName << "\n";
+            findFunctionInDeclContext(TU, MangledFnName, MangleCtx)) {
     // FIXME: Refactor const_cast
     auto *ToDecl = cast<FunctionDecl>(
         Importer.Import(const_cast<FunctionDecl *>(ResultDecl)));
     assert(ToDecl->hasBody());
-    ImportMap[FD] = ToDecl;
     NumGetXTUSuccess++;
+    assert(FD->hasBody() && "Functions already imported should have body.");
     return ToDecl;
   }
   NumIterateNotFound++;
@@ -1578,7 +1574,7 @@ ASTImporter &ASTContext::getOrCreateASTImporter(ASTContext &From) {
   ASTImporter *NewImporter = new ASTImporter(
         *this, getSourceManager().getFileManager(),
         From, From.getSourceManager().getFileManager(), false);
-  ASTUnitImporterMap[From.getTranslationUnitDecl()] = NewImporter;
+  ASTUnitImporterMap[From.getTranslationUnitDecl()].reset(NewImporter);
   return *NewImporter;
 }
 

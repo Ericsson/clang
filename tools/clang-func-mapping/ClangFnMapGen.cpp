@@ -41,19 +41,18 @@ typedef StringSet<> StrSet;
 typedef StringMap<StrSet> CallGraph;
 
 static cl::OptionCategory ClangFnMapGenCategory("clang-fnmapgen options");
-static cl::opt<std::string> XTUDir(
-    "xtu-dir",
+static cl::opt<std::string> CTUDir(
+    "ctu-dir",
     cl::desc(
-        "Directory that contains the XTU related files (e.g.: AST dumps)."),
+        "Directory that contains the CTU related files (e.g.: AST dumps)."),
     cl::init(""), cl::cat(ClangFnMapGenCategory));
 
-static void lockedWrite(const std::string &fileName,
-                        const std::string &content) {
-  if (!content.empty()) {
-    int fd = open(fileName.c_str(), O_CREAT | O_WRONLY | O_APPEND, 0666);
+static void lockedWrite(StringRef FileName, StringRef Content) {
+  if (!Content.empty()) {
+    int fd = open(FileName.str().c_str(), O_CREAT | O_WRONLY | O_APPEND, 0666);
     flock(fd, LOCK_EX);
-    ssize_t written = write(fd, content.c_str(), content.length());
-    assert(written == (ssize_t)content.length());
+    ssize_t written = write(fd, Content.data(), Content.size());
+    assert(written == (ssize_t)Content.size());
     (void)written;
     flock(fd, LOCK_UN);
     close(fd);
@@ -146,8 +145,8 @@ void MapFunctionNamesConsumer::handleDecl(const Decl *D) {
         free(Path);
       }
 
-      std::string FileName =
-          std::string("/ast/") + getTripleSuffix(Ctx) + CurrentFileName;
+      SmallString<128> FileName("ast");
+      llvm::sys::path::append(FileName, getTripleSuffix(Ctx), CurrentFileName);
       std::string FullName = MangledName + Triple;
 
       switch (FD->getLinkageInternal()) {
@@ -156,11 +155,7 @@ void MapFunctionNamesConsumer::handleDecl(const Decl *D) {
       case UniqueExternalLinkage:
         if (SM.isInMainFile(Body->getLocStart()))
           DefinedFuncsStr << "!";
-        DefinedFuncsStr
-            << FullName << " " << FileName << " "
-            << (SM.getSpellingLineNumber(FD->getSourceRange().getEnd()) -
-                SM.getSpellingLineNumber(FD->getSourceRange().getBegin()))
-            << "\n";
+        DefinedFuncsStr << FullName << " " << FileName.c_str() << "\n";
       default:
         break;
       }
@@ -190,9 +185,14 @@ bool MapFunctionNamesConsumer::isCLibraryFunction(const FunctionDecl *FD) {
 
 MapFunctionNamesConsumer::~MapFunctionNamesConsumer() {
   // Flush results to files.
-  std::string BuildDir = XTUDir;
-  lockedWrite(BuildDir + "/externalFns.txt", ExternFuncStr.str());
-  lockedWrite(BuildDir + "/definedFns.txt", DefinedFuncsStr.str());
+  SmallString<128> ExternalFns(CTUDir);
+  SmallString<128> DefinedFns(CTUDir);
+  SmallString<128> CfgFile(CTUDir);
+  llvm::sys::path::append(ExternalFns, "externalFns.txt");
+  llvm::sys::path::append(DefinedFns, "definedFns.txt");
+  llvm::sys::path::append(CfgFile, "cfg.txt");
+  lockedWrite(ExternalFns, ExternFuncStr.str());
+  lockedWrite(DefinedFns, DefinedFuncsStr.str());
   std::ostringstream CFGStr;
   for (auto &Entry : CG) {
     CFGStr << CurrentFileName << Triple << "::" << Entry.getKey().data();
@@ -201,7 +201,7 @@ MapFunctionNamesConsumer::~MapFunctionNamesConsumer() {
     CFGStr << '\n';
   }
 
-  lockedWrite(BuildDir + "/cfg.txt", CFGStr.str());
+  lockedWrite(CfgFile, CFGStr.str());
 }
 
 void MapFunctionNamesConsumer::WalkAST::VisitChildren(const Stmt *S) {
@@ -242,8 +242,8 @@ int main(int argc, const char **argv) {
   CommonOptionsParser OptionsParser(argc, argv, ClangFnMapGenCategory,
                                     cl::ZeroOrMore);
 
-  if (XTUDir.getNumOccurrences() != 1) {
-    errs() << "Exactly one XTU dir should be provided\n";
+  if (CTUDir.getNumOccurrences() != 1) {
+    errs() << "Exactly one CTU dir should be provided\n";
     return 1;
   }
   const StringRef cppFile = ".cpp", ccFile = ".cc", cFile = ".c",

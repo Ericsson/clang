@@ -281,8 +281,8 @@ private:
   /// \sa shouldDisplayNotesAsEvents
   Optional<bool> DisplayNotesAsEvents;
 
-  /// \sa getXTUDir
-  Optional<StringRef> XTUDir;
+  /// \sa getCTUDir
+  Optional<StringRef> CTUDir;
 
   /// \sa shouldReanalyzeXTUVisitedFns
   Optional<bool> ReanalyzeXTUVisitedFns;
@@ -584,8 +584,8 @@ public:
   /// to false when unset.
   bool shouldDisplayNotesAsEvents();
 
-  /// Returns the directory containing the XTU related files.
-  StringRef getXTUDir();
+  /// Returns the directory containing the CTU related files.
+  StringRef getCTUDir();
 
   /// Returns whether functions that were analyzed from another translation unit
   /// should be reanalyzed again as top level in case it is not called in its

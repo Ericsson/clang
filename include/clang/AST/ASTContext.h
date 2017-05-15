@@ -1912,18 +1912,18 @@ public:
   //                         Cross-translation unit support
   //===--------------------------------------------------------------------===//
 private:
-  llvm::StringMap<clang::ASTUnit *> FileASTUnitMap;
+  llvm::StringMap<std::unique_ptr<clang::ASTUnit>> FileASTUnitMap;
   llvm::StringMap<clang::ASTUnit *> FunctionAstUnitMap;
   llvm::StringMap<std::string> FunctionFileMap;
-  llvm::DenseMap<TranslationUnitDecl *, ASTImporter *> ASTUnitImporterMap;
-  llvm::DenseMap<const FunctionDecl *, const FunctionDecl *> ImportMap;
+  llvm::DenseMap<TranslationUnitDecl *, std::unique_ptr<ASTImporter>>
+      ASTUnitImporterMap;
   ASTImporter &getOrCreateASTImporter(ASTContext &From);
 
 public:
-  const FunctionDecl *
-  getXTUDefinition(const FunctionDecl *FD, CompilerInstance &CI,
-                   StringRef XTUDir, DiagnosticsEngine &Diags,
-                   std::function<ASTUnit *(StringRef)> Loader);
+  const FunctionDecl *getCTUDefinition(
+      const FunctionDecl *FD, CompilerInstance &CI, StringRef CTUDir,
+      DiagnosticsEngine &Diags,
+      std::function<std::unique_ptr<clang::ASTUnit>(StringRef)> Loader);
 
   //===--------------------------------------------------------------------===//
   //                         Type Sizing and Analysis

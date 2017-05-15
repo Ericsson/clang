@@ -16,13 +16,16 @@
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclObjC.h"
+#include "clang/AST/Mangle.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Analysis/Analyses/LiveVariables.h"
 #include "clang/Analysis/CFG.h"
 #include "clang/Analysis/CallGraph.h"
 #include "clang/Analysis/CodeInjector.h"
 #include "clang/Basic/SourceManager.h"
+#include "clang/Basic/TargetInfo.h"
 #include "clang/Frontend/CompilerInstance.h"
+#include "clang/Frontend/TextDiagnosticPrinter.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/StaticAnalyzer/Checkers/LocalCheckers.h"
 #include "clang/StaticAnalyzer/Core/AnalyzerOptions.h"
@@ -40,17 +43,14 @@
 #include "llvm/Support/Program.h"
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
-#include <assert.h>
+#include <cassert>
 #include <memory>
 #include <queue>
 #include <utility>
+#include <fstream>
+#include <fcntl.h>
 #include <sys/file.h>
 #include <unistd.h>
-#include <fstream>
-#include <time.h>
-#include "clang/Frontend/TextDiagnosticPrinter.h"
-#include "clang/AST/Mangle.h"
-#include "clang/Basic/TargetInfo.h"
 
 using namespace clang;
 using namespace ento;
@@ -442,7 +442,7 @@ void lockedWrite(const std::string &fileName, const std::string &content) {
 static bool shouldSkipFunction(const Decl *D,
                                const SetOfConstDecls &Visited,
                                const SetOfConstDecls &VisitedAsTopLevel,
-                               llvm::StringSet<> &VisitedAsXTU,
+                               llvm::StringSet<> &VisitedAsCTU,
                                MangleContext *MangleCtx,
                                const std::string &Triple) {
   if (VisitedAsTopLevel.count(D))
@@ -477,7 +477,7 @@ static bool shouldSkipFunction(const Decl *D,
 
   if (FD && FD->hasExternalFormalLinkage()) {
     std::string MangledFnName = getMangledName(FD, MangleCtx) + "@" + Triple;
-    if (VisitedAsXTU.count(MangledFnName))
+    if (VisitedAsCTU.count(MangledFnName))
       return true;
   }
   return false;
@@ -530,16 +530,16 @@ void AnalysisConsumer::HandleDeclsCallGraph(const unsigned LocalTUDeclsSize) {
 
   // The visitedFunc.txt collects all functions that were inlinded as callee or
   // top level caller these functions will not be visited as top level nodes.
-  llvm::StringSet<> VisitedAsXTU;
+  llvm::StringSet<> VisitedAsCTU;
   std::string VisitedFuncSetFile;
-  StringRef BuildDir = Opts->getXTUDir();
+  StringRef BuildDir = Opts->getCTUDir();
   if (!BuildDir.empty() && !Opts->shouldReanalyzeXTUVisitedFns()) {
     clock_t t1 = clock();
     VisitedFuncSetFile = (BuildDir + "/visitedFunc.txt").str();
     std::ifstream VisitedFuncSetStream(VisitedFuncSetFile);
     std::string FunctionName;
     while (VisitedFuncSetStream >> FunctionName)
-      VisitedAsXTU.insert(FunctionName);
+      VisitedAsCTU.insert(FunctionName);
     VisitedFuncSetStream.close();
     clock_t t2 = clock();
     llvm::errs() << "! Reading " << VisitedFuncSetFile << " took "
@@ -562,7 +562,7 @@ void AnalysisConsumer::HandleDeclsCallGraph(const unsigned LocalTUDeclsSize) {
     // Skip the functions which have been processed already or previously
     // inlined.
     if (shouldSkipFunction(D->getCanonicalDecl(), Visited, VisitedAsTopLevel,
-                           VisitedAsXTU, MangleCtx.get(), Triple))
+                           VisitedAsCTU, MangleCtx.get(), Triple))
       continue;
 
     // Analyze the function.
@@ -589,7 +589,7 @@ void AnalysisConsumer::HandleDeclsCallGraph(const unsigned LocalTUDeclsSize) {
       std::string MN =
           getMangledName(dyn_cast_or_null<FunctionDecl>(D), MangleCtx.get()) +
           '@' + Triple;
-      if (!VisitedAsXTU.count(MN))
+      if (!VisitedAsCTU.count(MN))
         NewVisited.insert(MN);
     }
 
@@ -597,7 +597,7 @@ void AnalysisConsumer::HandleDeclsCallGraph(const unsigned LocalTUDeclsSize) {
       std::string MN =
           getMangledName(dyn_cast_or_null<FunctionDecl>(D), MangleCtx.get()) +
           '@' + Triple;
-      if (!VisitedAsXTU.count(MN))
+      if (!VisitedAsCTU.count(MN))
         NewVisited.insert(MN);
     }
 
@@ -821,23 +821,6 @@ void AnalysisConsumer::ActionExprEngine(Decl *D, bool ObjCGCEnabled,
   // Execute the worklist algorithm.
   Eng.ExecuteWorkList(Mgr->getAnalysisDeclContextManager().getStackFrame(D),
                       Mgr->options.getMaxNodesPerTopLevelFunction());
-  if (const auto *FD = dyn_cast<FunctionDecl>(D)) {
-    IntrusiveRefCntPtr<DiagnosticOptions> DiagOpts = new DiagnosticOptions();
-    IntrusiveRefCntPtr<DiagnosticIDs> DiagID(new DiagnosticIDs());
-    TextDiagnosticPrinter *DiagClient =
-        new TextDiagnosticPrinter(llvm::errs(), &*DiagOpts);
-    DiagnosticsEngine Diags(DiagID, &*DiagOpts, DiagClient);
-    std::unique_ptr<MangleContext> MangleCtx(
-        ItaniumMangleContext::create(*Ctx, Diags));
-    MangleCtx->setShouldForceMangleProto(true);
-    llvm::errs() << getMangledName(FD, MangleCtx.get()) << " "
-                 << (Eng.hasEmptyWorkList() ? "empty" : "has_work") << "_wl "
-                 << (Eng.wasBlocksExhausted() ? "block_exhausted"
-                                              : "not_exhausted")
-                 << " "
-                 << (Eng.getCoreEngine().wasBlockAborted() ? "has" : "no")
-                 << "_block_aborted\n";
-  }
   // Release the auditor (if any) so that it doesn't monitor the graph
   // created BugReporter.
   ExplodedNode::SetAuditor(nullptr);

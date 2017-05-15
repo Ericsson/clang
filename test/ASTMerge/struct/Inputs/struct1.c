@@ -76,7 +76,7 @@ typedef struct {
   float f;
 } S13;
 
-S13 x13
+S13 x13;
 
 //Matches
 struct Unnamed {
