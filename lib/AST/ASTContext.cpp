@@ -1456,7 +1456,7 @@ std::string getMangledName(const NamedDecl *ND, MangleContext *MangleCtx) {
 /// function based on mangled name.
 static const FunctionDecl *
 findFunctionInDeclContext(const DeclContext *DC, StringRef MangledFnName,
-                          std::unique_ptr<MangleContext> &MangleCtx) {
+                          MangleContext *MangleCtx) {
   if (!DC)
     return nullptr;
   for (const Decl *D : DC->decls()) {
@@ -1469,7 +1469,7 @@ findFunctionInDeclContext(const DeclContext *DC, StringRef MangledFnName,
     const FunctionDecl *ResultDecl;
     if (!ND || !ND->hasBody(ResultDecl))
       continue;
-    std::string LookupMangledName = getMangledName(ResultDecl, MangleCtx.get());
+    std::string LookupMangledName = getMangledName(ResultDecl, MangleCtx);
     // We are already sure that the triple is correct here.
     if (LookupMangledName != MangledFnName)
       continue;
@@ -1530,7 +1530,7 @@ const FunctionDecl *ASTContext::getCTUDefinition(
   ASTImporter &Importer = getOrCreateASTImporter(Unit->getASTContext());
   TranslationUnitDecl *TU = Unit->getASTContext().getTranslationUnitDecl();
   if (const FunctionDecl *ResultDecl =
-            findFunctionInDeclContext(TU, MangledFnName, MangleCtx)) {
+            findFunctionInDeclContext(TU, MangledFnName, MangleCtx.get())) {
     // FIXME: Refactor const_cast
     auto *ToDecl = cast<FunctionDecl>(
         Importer.Import(const_cast<FunctionDecl *>(ResultDecl)));
