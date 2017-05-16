@@ -21,6 +21,7 @@
 #include "clang/Frontend/TextDiagnosticPrinter.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/DynamicTypeMap.h"
+#include "clang/Tooling/JSONCompilationDatabase.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/raw_ostream.h"
@@ -374,6 +375,7 @@ RuntimeDefinition AnyFunctionCall::getRuntimeDefinition() const {
   auto Engine = static_cast<ExprEngine *>(
       getState()->getStateManager().getOwningEngine());
   CompilerInstance &CI = Engine->getCompilerInstance();
+  AnalysisManager &AMgr = Engine->getAnalysisManager();
 
   auto ASTLoader = [&](StringRef ASTFileName) {
     IntrusiveRefCntPtr<DiagnosticOptions> DiagOpts = new DiagnosticOptions();
@@ -382,14 +384,42 @@ RuntimeDefinition AnyFunctionCall::getRuntimeDefinition() const {
     IntrusiveRefCntPtr<DiagnosticIDs> DiagID(new DiagnosticIDs());
     IntrusiveRefCntPtr<DiagnosticsEngine> Diags(
         new DiagnosticsEngine(DiagID, &*DiagOpts, DiagClient));
-    return ASTUnit::LoadFromASTFile(
-               ASTFileName, CI.getPCHContainerOperations()->getRawReader(),
-               Diags, CI.getFileSystemOpts());
+    StringRef CompilationDatabasePath = AMgr.options.getCTUReparseOnDemand();
+    if (CompilationDatabasePath.empty()) {
+      return ASTUnit::LoadFromASTFile(
+          ASTFileName, CI.getPCHContainerOperations()->getRawReader(), Diags,
+          CI.getFileSystemOpts());
+    } else {
+      using namespace tooling;
+      std::string Error;
+      std::unique_ptr<JSONCompilationDatabase> CompDb =
+          JSONCompilationDatabase::loadFromFile(
+              CompilationDatabasePath, Error,
+              JSONCommandLineSyntax::AutoDetect);
+      if (!CompDb) {
+        llvm::errs() << Error << "\n";
+        return std::unique_ptr<ASTUnit>();
+      }
+      // FIXME: Actual filename needs to be passed instead of AST file name.
+      //        Right now it is the script's responsibility to create correct
+      //        mapping.
+      std::vector<CompileCommand> Cmds =
+          CompDb->getCompileCommands(ASTFileName);
+      std::vector<const char*> RawCmds;
+      // FIXME: Assume one file is compiled only once.
+      for(auto Cmd : Cmds[0].CommandLine) {
+        RawCmds.push_back(Cmd.c_str());
+      }
+      // FIXME: Set working directory?
+      return std::unique_ptr<ASTUnit>(ASTUnit::LoadFromCommandLine(
+          RawCmds.data(), RawCmds.data() + RawCmds.size(),
+          CI.getPCHContainerOperations(), Diags,
+          CI.getInvocation().GetResourcesPath(RawCmds[0], (void *)isCallback)));
+    }
   };
 
   const FunctionDecl *CTUDecl = AD->getASTContext().getCTUDefinition(
-      FD, CI, Engine->getAnalysisManager().options.getCTUDir(),
-      CI.getDiagnostics(), ASTLoader);
+      FD, CI, AMgr.options.getCTUDir(), CI.getDiagnostics(), ASTLoader);
 
   return RuntimeDefinition(CTUDecl);
 }

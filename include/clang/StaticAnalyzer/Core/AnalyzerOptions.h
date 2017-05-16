@@ -284,6 +284,9 @@ private:
   /// \sa getCTUDir
   Optional<StringRef> CTUDir;
 
+  /// \sa getCTUReparseOnDemand
+  Optional<StringRef> CTUReparseOnDemand;
+
   /// \sa shouldReanalyzeXTUVisitedFns
   Optional<bool> ReanalyzeXTUVisitedFns;
 
@@ -586,6 +589,11 @@ public:
 
   /// Returns the directory containing the CTU related files.
   StringRef getCTUDir();
+ 
+  /// When a compilation database is passed, the analyzer will compile the
+  /// translation units during the CTU analysis on demand instead of reading
+  /// the binary representations from disk.
+  StringRef getCTUReparseOnDemand();
 
   /// Returns whether functions that were analyzed from another translation unit
   /// should be reanalyzed again as top level in case it is not called in its
