@@ -1472,20 +1472,23 @@ std::string getMangledName(const NamedDecl *ND, MangleContext *MangleCtx) {
 /// function based on mangled name.
 static const FunctionDecl *
 findFunctionInDeclContext(const DeclContext *DC, StringRef MangledFnName,
-                          std::unique_ptr<MangleContext> &MangleCtx) {
+                          MangleContext *MangleCtx,
+                          std::string getUSR(const Decl*)) {
   if (!DC)
     return nullptr;
   for (const Decl *D : DC->decls()) {
     const auto *SubDC = dyn_cast<DeclContext>(D);
     if (const auto *FD =
-            findFunctionInDeclContext(SubDC, MangledFnName, MangleCtx))
+            findFunctionInDeclContext(SubDC, MangledFnName, MangleCtx, getUSR))
       return FD;
 
     const auto *ND = dyn_cast<FunctionDecl>(D);
     const FunctionDecl *ResultDecl;
     if (!ND || !ND->hasBody(ResultDecl))
       continue;
-    std::string LookupMangledName = getMangledName(ResultDecl, MangleCtx.get());
+    std::string USR = getUSR(ResultDecl);
+    std::string LookupMangledName =
+        USR.empty() ? getMangledName(ResultDecl, MangleCtx) : USR;
     // We are already sure that the triple is correct here.
     if (LookupMangledName != MangledFnName)
       continue;
@@ -1496,7 +1499,7 @@ findFunctionInDeclContext(const DeclContext *DC, StringRef MangledFnName,
 
 const FunctionDecl *ASTContext::getCTUDefinition(
     const FunctionDecl *FD, CompilerInstance &CI, StringRef CTUDir,
-    DiagnosticsEngine &Diags,
+    std::string getUSR(const Decl*), DiagnosticsEngine &Diags,
     std::function<std::unique_ptr<clang::ASTUnit>(StringRef)> Loader) {
   NumGetXTUCalled++;
   assert(!FD->hasBody() && "FD has a definition in current translation unit!");
@@ -1509,7 +1512,9 @@ const FunctionDecl *ASTContext::getCTUDefinition(
   std::unique_ptr<MangleContext> MangleCtx(
       ItaniumMangleContext::create(FD->getASTContext(), Diags));
   MangleCtx->setShouldForceMangleProto(true);
-  std::string MangledFnName = getMangledName(FD, MangleCtx.get());
+  std::string USR = getUSR(FD);
+  std::string MangledFnName =
+      USR.empty() ? getMangledName(FD, MangleCtx.get()) : USR;
   ASTUnit *Unit = nullptr;
   auto FnUnitCacheEntry = FunctionAstUnitMap.find(MangledFnName);
   if (FnUnitCacheEntry == FunctionAstUnitMap.end()) {
@@ -1553,8 +1558,8 @@ const FunctionDecl *ASTContext::getCTUDefinition(
          &Unit->getASTContext().getSourceManager().getFileManager());
   ASTImporter &Importer = getOrCreateASTImporter(Unit->getASTContext());
   TranslationUnitDecl *TU = Unit->getASTContext().getTranslationUnitDecl();
-  if (const FunctionDecl *ResultDecl =
-            findFunctionInDeclContext(TU, MangledFnName, MangleCtx)) {
+  if (const FunctionDecl *ResultDecl = findFunctionInDeclContext(
+          TU, MangledFnName, MangleCtx.get(), getUSR)) {
     // FIXME: Refactor const_cast
     auto *ToDecl = cast<FunctionDecl>(
         Importer.Import(const_cast<FunctionDecl *>(ResultDecl)));

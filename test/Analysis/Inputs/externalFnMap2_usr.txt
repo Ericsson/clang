@@ -1,0 +1,4 @@
+c:@F@getkey xtu-other.c.ast
+c:@F@g xtu-other.c.ast
+c:@F@f xtu-other.c.ast
+c:@F@enumcheck xtu-other.c.ast

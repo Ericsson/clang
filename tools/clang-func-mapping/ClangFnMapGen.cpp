@@ -21,6 +21,7 @@
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendActions.h"
+#include "clang/Index/USRGeneration.h"
 #include "clang/Tooling/CommonOptionsParser.h"
 #include "clang/Tooling/Tooling.h"
 #include "llvm/Support/Path.h"
@@ -42,21 +43,23 @@ typedef StringMap<StrSet> CallGraph;
 
 static cl::OptionCategory ClangFnMapGenCategory("clang-fnmapgen options");
 static cl::opt<std::string> CTUDir(
-    "ctu-dir",
+    "xtu-dir",
     cl::desc(
         "Directory that contains the CTU related files (e.g.: AST dumps)."),
     cl::init(""), cl::cat(ClangFnMapGenCategory));
 
+static cl::opt<bool> UseUSR("use-usr",
+                            cl::desc("Use USR instead of name mangling."),
+                            cl::init(false), cl::cat(ClangFnMapGenCategory));
+
 static void lockedWrite(StringRef FileName, StringRef Content) {
-  if (!Content.empty()) {
-    int fd = open(FileName.str().c_str(), O_CREAT | O_WRONLY | O_APPEND, 0666);
-    flock(fd, LOCK_EX);
-    ssize_t written = write(fd, Content.data(), Content.size());
-    assert(written == (ssize_t)Content.size());
-    (void)written;
-    flock(fd, LOCK_UN);
-    close(fd);
-  }
+  int fd = open(FileName.str().c_str(), O_CREAT | O_WRONLY | O_APPEND, 0666);
+  flock(fd, LOCK_EX);
+  ssize_t written = write(fd, Content.data(), Content.size());
+  assert(written == (ssize_t)Content.size());
+  (void)written;
+  flock(fd, LOCK_UN);
+  close(fd);
 }
 
 static std::string getTripleSuffix(ASTContext &Ctx) {
@@ -147,7 +150,17 @@ void MapFunctionNamesConsumer::handleDecl(const Decl *D) {
 
       SmallString<128> FileName("ast");
       llvm::sys::path::append(FileName, getTripleSuffix(Ctx), CurrentFileName);
-      std::string FullName = MangledName + Triple;
+      std::string FullName;
+      if (UseUSR) {
+        SmallString<128> DeclUSR;
+        bool Res = index::generateUSRForDecl(D, DeclUSR);
+        if (Res)
+          D->dump();
+        assert(!Res);
+        FullName = DeclUSR.str().str();
+      } else {
+        FullName = MangledName + Triple;
+      }
 
       switch (FD->getLinkageInternal()) {
       case ExternalLinkage:
@@ -155,7 +168,7 @@ void MapFunctionNamesConsumer::handleDecl(const Decl *D) {
       case UniqueExternalLinkage:
         if (SM.isInMainFile(Body->getLocStart()))
           DefinedFuncsStr << "!";
-        DefinedFuncsStr << FullName << " " << FileName.c_str() << "\n";
+        DefinedFuncsStr << FullName << " " << FileName.c_str() << " 0\n";
       default:
         break;
       }
@@ -163,8 +176,19 @@ void MapFunctionNamesConsumer::handleDecl(const Decl *D) {
       WalkAST Walker(*this, FullName, ItaniumCtx, Triple);
       Walker.Visit(Body);
     } else if (!FD->getBody() && !FD->getBuiltinID()) {
-      std::string MangledName = getMangledName(FD);
-      ExternFuncStr << MangledName << Triple << "\n";
+      std::string MangledName;
+      if (UseUSR) {
+        SmallString<128> DeclUSR;
+        bool Res = index::generateUSRForDecl(D, DeclUSR);
+        if (Res)
+          D->dump();
+        assert(!Res);
+        MangledName = DeclUSR.str().str();
+      } else {
+        MangledName = getMangledName(FD) + Triple;
+      }
+
+      ExternFuncStr << MangledName << "\n";
     }
   }
 

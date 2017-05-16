@@ -400,6 +400,12 @@ StringRef AnalyzerOptions::getCTUReparseOnDemand() {
   return CTUReparseOnDemand.getValue();
 }
 
+bool AnalyzerOptions::getCTUUseUSR() {
+  if (!CTUUseUSR.hasValue())
+    CTUUseUSR = getBooleanOption("use-usr", false);
+  return CTUUseUSR.getValue();
+}
+
 bool AnalyzerOptions::shouldReanalyzeXTUVisitedFns() {
   if (!ReanalyzeXTUVisitedFns.hasValue())
     ReanalyzeXTUVisitedFns =

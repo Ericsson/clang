@@ -287,6 +287,9 @@ private:
   /// \sa getCTUReparseOnDemand
   Optional<StringRef> CTUReparseOnDemand;
 
+  /// \sa getCTUUseUSR
+  Optional<bool> CTUUseUSR;
+
   /// \sa shouldReanalyzeXTUVisitedFns
   Optional<bool> ReanalyzeXTUVisitedFns;
 
@@ -594,6 +597,10 @@ public:
   /// translation units during the CTU analysis on demand instead of reading
   /// the binary representations from disk.
   StringRef getCTUReparseOnDemand();
+
+  /// When true is returned USRs will be used to cross reference functions
+  /// instead of the mangled names.
+  bool getCTUUseUSR();
 
   /// Returns whether functions that were analyzed from another translation unit
   /// should be reanalyzed again as top level in case it is not called in its

@@ -19,6 +19,7 @@
 #include "clang/Frontend/ASTUnit.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/TextDiagnosticPrinter.h"
+#include "clang/Index/USRGeneration.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/DynamicTypeMap.h"
 #include "clang/Tooling/JSONCompilationDatabase.h"
@@ -418,8 +419,23 @@ RuntimeDefinition AnyFunctionCall::getRuntimeDefinition() const {
     }
   };
 
-  const FunctionDecl *CTUDecl = AD->getASTContext().getCTUDefinition(
-      FD, CI, AMgr.options.getCTUDir(), CI.getDiagnostics(), ASTLoader);
+  const FunctionDecl *CTUDecl = nullptr;
+  if (AMgr.options.getCTUUseUSR()) {
+    CTUDecl = AD->getASTContext().getCTUDefinition(
+        FD, CI, AMgr.options.getCTUDir(),
+        [](const Decl *D) {
+          SmallString<128> DeclUSR;
+          bool Ret = index::generateUSRForDecl(D, DeclUSR);
+          assert(!Ret);
+          return DeclUSR.str().str();
+        },
+        CI.getDiagnostics(), ASTLoader);
+  } else {
+    CTUDecl = AD->getASTContext().getCTUDefinition(
+        FD, CI, AMgr.options.getCTUDir(),
+        [](const Decl *) { return std::string{}; }, CI.getDiagnostics(),
+        ASTLoader);
+  }
 
   return RuntimeDefinition(CTUDecl);
 }

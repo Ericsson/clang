@@ -15,6 +15,7 @@ target_link_libraries(clang-func-mapping
   clangBasic
   clangFrontend
   clangRewriteFrontend
+  clangIndex
   )
 
 install(TARGETS clang-func-mapping

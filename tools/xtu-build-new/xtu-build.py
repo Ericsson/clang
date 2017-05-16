@@ -29,6 +29,8 @@ parser.add_argument('-j', metavar='threads', dest='threads',
                     default=threading_factor)
 parser.add_argument('-v', dest='verbose', action='store_true',
                     help='Verbose output of every command executed')
+parser.add_argument('--use-usr', dest='usr', action='store_true',
+                    help='Use Unified Symbol Resolution (USR) for cross-referencing')
 parser.add_argument('--clang-path', metavar='clang-path', dest='clang_path',
                     help='Set path of clang binaries to be used '
                          '(default taken from CLANG_PATH envvar)',
@@ -165,9 +167,13 @@ def map_functions(command):
     args = get_command_arguments(command)
     sources = cmd_2_src[command]
     dir_command = 'cd ' + src_2_dir[sources[0]]
+    
     funcmap_command = os.path.join(clang_path, 'clang-func-mapping') + \
         ' --xtu-dir ' + os.path.abspath(mainargs.xtuindir) + ' ' + \
-        string.join(sources, ' ') + ' -- ' + string.join(args, ' ')
+        string.join(sources, ' ')     
+    if mainargs.usr:
+        funcmap_command += " -use-usr"
+    funcmap_command += ' -- ' + string.join(args, ' ')
     if mainargs.verbose:
         print funcmap_command
     subprocess.call(dir_command + " && " + funcmap_command, shell=True)
@@ -247,4 +253,7 @@ script_dir = os.path.dirname(os.path.realpath(__file__))
 graph_script = os.path.join(script_dir, 'lib/xtu-build-graph.py')
 graph_script += ' -b ' + mainargs.buildlog + ' -o '
 graph_script += os.path.join(mainargs.xtuindir, 'build_dependency.json')
+graph_script += ' -d ' + defined_fns_filename
+graph_script += ' -e ' + extern_fns_filename
+graph_script += ' -c ' + os.path.join(mainargs.xtuindir, 'cfg.txt')
 subprocess.call(graph_script, shell=True)

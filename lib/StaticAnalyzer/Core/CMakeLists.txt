@@ -62,6 +62,7 @@ add_clang_library(clangStaticAnalyzerCore
   clangLex
   clangRewrite
   clangTooling
+  clangIndex
   ${Z3_LINK_FILES}
   )
 
