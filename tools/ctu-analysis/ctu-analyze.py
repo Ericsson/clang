@@ -95,10 +95,10 @@ def get_analyzer_env(mainargs, clang_path):
     analyzer_params = []
     if mainargs.enabled_checkers:
         analyzer_params.append('-analyzer-checker')
-        analyzer_params.append(mainargs.enabled_checkers)
+        analyzer_params.append(",".join(mainargs.enabled_checkers))
     if mainargs.disabled_checkers:
         analyzer_params.append('-analyzer-disable-checker')
-        analyzer_params.append(mainargs.disabled_checkers)
+        analyzer_params.append(",".join(mainargs.disabled_checkers))
     if not mainargs.no_ctu:
         analyzer_params.append('-analyzer-config')
         analyzer_params.append('ctu-dir=' + mainargs.ctuindir)
