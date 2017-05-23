@@ -61,6 +61,8 @@ parser.add_argument('-v', dest='verbose', action='store_true',
                     help='Verbose output of every command executed')
 parser.add_argument('--use-usr', dest='usr', action='store_true',
                     help='Use Unified Symbol Resolution (USR) for cross-referencing')
+parser.add_argument('--xtu-reparse', dest='reparse', action='store_true',
+                    help='Use on-demand reparsing of external TUs (and do not dump ASTs).')
 parser.add_argument('--clang-path', metavar='clang-path', dest='clang_path',
                     help='Set path of clang binaries to be used (default '
                          'taken from CLANG_PATH environment variable)',
@@ -159,6 +161,9 @@ if mainargs.disabled_checkers:
 if mainargs.usr:
     analyzer_params += ['-analyzer-config',
                         'use-usr=true']
+if mainargs.reparse:
+    analyzer_params += ['-analyzer-config',
+                        'xtu-reparse='+os.path.abspath(mainargs.buildlog)]
 if not mainargs.no_xtu:
     analyzer_params += ['-analyzer-config',
                         'xtu-dir=' + os.path.abspath(mainargs.xtuindir)]

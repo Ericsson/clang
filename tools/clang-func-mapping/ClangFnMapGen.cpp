@@ -51,6 +51,9 @@ static cl::opt<std::string> CTUDir(
 static cl::opt<bool> UseUSR("use-usr",
                             cl::desc("Use USR instead of name mangling."),
                             cl::init(false), cl::cat(ClangFnMapGenCategory));
+static cl::opt<bool> UseRP("use-realpath",
+                            cl::desc("Use real path of source files names in output files."),
+                            cl::init(false), cl::cat(ClangFnMapGenCategory));
 
 static void lockedWrite(StringRef FileName, StringRef Content) {
   int fd = open(FileName.str().c_str(), O_CREAT | O_WRONLY | O_APPEND, 0666);
@@ -148,8 +151,12 @@ void MapFunctionNamesConsumer::handleDecl(const Decl *D) {
         free(Path);
       }
 
-      SmallString<128> FileName("ast");
-      llvm::sys::path::append(FileName, getTripleSuffix(Ctx), CurrentFileName);
+      SmallString<128> FileName("");
+      if (!UseRP){
+        FileName="ast";
+        llvm::sys::path::append(FileName, getTripleSuffix(Ctx), CurrentFileName);
+      }else
+        FileName=CurrentFileName;
       std::string FullName;
       if (UseUSR) {
         SmallString<128> DeclUSR;

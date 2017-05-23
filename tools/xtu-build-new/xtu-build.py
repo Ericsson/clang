@@ -31,6 +31,8 @@ parser.add_argument('-v', dest='verbose', action='store_true',
                     help='Verbose output of every command executed')
 parser.add_argument('--use-usr', dest='usr', action='store_true',
                     help='Use Unified Symbol Resolution (USR) for cross-referencing')
+parser.add_argument('--xtu-reparse', dest='reparse', action='store_true',
+                    help='Use on-demand reparsing of external TUs (and do not dump ASTs).')
 parser.add_argument('--clang-path', metavar='clang-path', dest='clang_path',
                     help='Set path of clang binaries to be used '
                          '(default taken from CLANG_PATH envvar)',
@@ -173,30 +175,35 @@ def map_functions(command):
         string.join(sources, ' ')     
     if mainargs.usr:
         funcmap_command += " -use-usr"
+    if mainargs.reparse:
+        funcmap_command += " -use-realpath"    
     funcmap_command += ' -- ' + string.join(args, ' ')
     if mainargs.verbose:
         print funcmap_command
     subprocess.call(dir_command + " && " + funcmap_command, shell=True)
 
+if not os.path.exists(mainargs.xtuindir):
+    os.makedirs(mainargs.xtuindir)
 clear_file(os.path.join(mainargs.xtuindir, 'cfg.txt'))
 clear_file(os.path.join(mainargs.xtuindir, 'definedFns.txt'))
 clear_file(os.path.join(mainargs.xtuindir, 'externalFns.txt'))
 clear_file(os.path.join(mainargs.xtuindir, 'externalFnMap.txt'))
 
 original_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
-ast_workers = multiprocessing.Pool(processes=int(mainargs.threads))
-signal.signal(signal.SIGINT, original_handler)
-try:
-    res = ast_workers.map_async(generate_ast, src_order)
-    # Block with timeout so that signals don't get ignored, python bug 8296
-    res.get(mainargs.timeout)
-except KeyboardInterrupt:
-    ast_workers.terminate()
-    ast_workers.join()
-    exit(1)
-else:
-    ast_workers.close()
-    ast_workers.join()
+if not mainargs.reparse:   #only generate AST dumps is reparse is off     
+    ast_workers = multiprocessing.Pool(processes=int(mainargs.threads))
+    signal.signal(signal.SIGINT, original_handler)
+    try:
+        res = ast_workers.map_async(generate_ast, src_order)
+        # Block with timeout so that signals don't get ignored, python bug 8296
+        res.get(mainargs.timeout)
+    except KeyboardInterrupt:
+        ast_workers.terminate()
+        ast_workers.join()
+        exit(1)
+    else:
+        ast_workers.close()
+        ast_workers.join()
 
 original_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
 funcmap_workers = multiprocessing.Pool(processes=int(mainargs.threads))
@@ -244,7 +251,10 @@ extern_fns_map_filename = os.path.join(mainargs.xtuindir, 'externalFnMap.txt')
 with open(extern_fns_map_filename, 'w') as out_file:
     for func, fname in extfunc_2_file.items():
         if len(func_2_fileset[func]) == 1:
-            out_file.write('%s %s.ast\n' % (func, fname))
+            if not mainargs.reparse:
+                out_file.write('%s %s.ast\n' % (func, fname))
+            else:
+                out_file.write('%s %s\n' % (func, fname))
 
 
 # Build dependency graph

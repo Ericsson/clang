@@ -1524,7 +1524,10 @@ const FunctionDecl *ASTContext::getCTUDefinition(
       std::ifstream ExternalFnMapFile(ExternalFunctionMap.c_str());
       std::string FunctionName, FileName;
       while (ExternalFnMapFile >> FunctionName >> FileName) {
-        SmallString<128> FilePath = CTUDir;
+          SmallString<256> FilePath("");
+          //ast dumps are stored relative to CTU dir
+          if(FileName.length() > 4 && !FileName.compare(FileName.length() - 4, FileName.length(), ".ast"))
+            FilePath = CTUDir;
         llvm::sys::path::append(FilePath, FileName);
         FunctionFileMap[FunctionName] = FilePath.str().str();
       }

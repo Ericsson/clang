@@ -23,6 +23,7 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/DynamicTypeMap.h"
 #include "clang/Tooling/JSONCompilationDatabase.h"
+#include "clang/Tooling/Tooling.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/raw_ostream.h"
@@ -401,21 +402,13 @@ RuntimeDefinition AnyFunctionCall::getRuntimeDefinition() const {
         llvm::errs() << Error << "\n";
         return std::unique_ptr<ASTUnit>();
       }
-      // FIXME: Actual filename needs to be passed instead of AST file name.
-      //        Right now it is the script's responsibility to create correct
-      //        mapping.
-      std::vector<CompileCommand> Cmds =
-          CompDb->getCompileCommands(ASTFileName);
-      std::vector<const char*> RawCmds;
-      // FIXME: Assume one file is compiled only once.
-      for(auto Cmd : Cmds[0].CommandLine) {
-        RawCmds.push_back(Cmd.c_str());
-      }
-      // FIXME: Set working directory?
-      return std::unique_ptr<ASTUnit>(ASTUnit::LoadFromCommandLine(
-          RawCmds.data(), RawCmds.data() + RawCmds.size(),
-          CI.getPCHContainerOperations(), Diags,
-          CI.getInvocation().GetResourcesPath(RawCmds[0], (void *)isCallback)));
+      SmallVector<std::string, 1> Files;
+      Files.push_back(ASTFileName);
+      ClangTool Tool(*CompDb, Files, CI.getPCHContainerOperations());
+      std::vector<std::unique_ptr<ASTUnit>> ASTs;
+      Tool.buildASTs(ASTs);
+      assert(ASTs.size() == 1);
+      return std::move(ASTs[0]);
     }
   };
 
