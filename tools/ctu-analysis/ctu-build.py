@@ -99,7 +99,7 @@ def clear_workspace(ctuindir):
 def get_command_arguments(cmd):
     had_command = False
     args = []
-    for arg in cmd.split():
+    for arg in shlex.split(cmd):
         if had_command and not SOURCE_PATTERN.match(arg):
             args.append(arg)
         if not had_command and arg.find('=') == -1:
@@ -139,34 +139,30 @@ def generate_ast(params):
             pass
         else:
             raise
-    dir_command = ['cd', directory]
     ast_command = [os.path.join(clang_path, 'clang'), '-emit-ast']
     ast_command.extend(args)
     ast_command.append('-w')
     ast_command.append(source)
     ast_command.append('-o')
     ast_command.append(ast_path)
-    ast_command_str = ' '.join(dir_command) + " && " + ' '.join(ast_command)
-    logging.info(ast_command_str)
-    subprocess.call(ast_command_str, shell=True)
+    os.chdir(directory)
+    logging.info(ast_command)
+    subprocess.call(ast_command, shell=False)
 
 
 def map_functions(params):
     command, sources, directory, clang_path, ctuindir = params
     args = get_command_arguments(command)
-    logging.info("map_functions command: " + command)
-    logging.info("sources: " + ' '.join(sources))
     arch = get_triple_arch(clang_path, args, sources[0])
-    dir_command = ['cd', directory]
     funcmap_command = [os.path.join(clang_path, 'clang-func-mapping')]
     funcmap_command.extend(sources)
     funcmap_command.append('--')
-    funcmap_command.extend(args)
-    funcmap_command_str = ' '.join(dir_command) + \
-                          " && " + ' '.join(funcmap_command)
-    logging.info("Calling function map: " + funcmap_command_str)
+    funcmap_command.extend(args)    
     output = []
-    fn_out = subprocess.check_output(funcmap_command_str, shell=True)
+    os.chdir(directory);
+    logging.info("map_functions: ")
+    logging.info(funcmap_command)
+    fn_out = subprocess.check_output(funcmap_command)
     fn_list = fn_out.splitlines()
     for fn_txt in fn_list:
         dpos = fn_txt.find(" ")
@@ -176,7 +172,6 @@ def map_functions(params):
         output.append(mangled_name + "@" + arch + " " + ast_path)
     extern_fns_map_folder = os.path.join(ctuindir,
                                          TEMP_EXTERNAL_FNMAP_FOLDER)
-    logging.info("functionmap: " + ' '.join(output))
     if output:
         with tempfile.NamedTemporaryFile(dir=extern_fns_map_folder,
                                          delete=False) as out_file:
@@ -192,7 +187,7 @@ def create_external_fn_maps(ctuindir):
     for filename in files:
         with open(filename, 'rb') as in_file:
             for line in in_file:
-                mangled_name, ast_file = line.strip().split(' ')
+                mangled_name, ast_file = line.strip().split(' ',1)
                 if mangled_name not in mangled_to_asts:
                     mangled_to_asts[mangled_name] = {ast_file}
                 else:
