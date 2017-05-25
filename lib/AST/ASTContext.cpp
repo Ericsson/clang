@@ -1494,12 +1494,16 @@ const FunctionDecl *ASTContext::getCTUDefinition(
   auto FnUnitCacheEntry = FunctionAstUnitMap.find(MangledFnName);
   if (FnUnitCacheEntry == FunctionAstUnitMap.end()) {
     if (FunctionFileMap.empty()) {
-      SmallString<128> ExternalFunctionMap = CTUDir;
+      SmallString<256> ExternalFunctionMap = CTUDir;
       llvm::sys::path::append(ExternalFunctionMap, "externalFnMap.txt");
       std::ifstream ExternalFnMapFile(ExternalFunctionMap.c_str());
       std::string FunctionName, FileName;
-      while (ExternalFnMapFile >> FunctionName >> FileName) {
-        SmallString<128> FilePath = CTUDir;
+      std::string line;
+      while (std::getline(ExternalFnMapFile, line)) {
+        size_t pos=line.find(" ");
+        FunctionName=line.substr(0,pos);
+        FileName=line.substr(pos+1, std::string::npos );
+        SmallString<256> FilePath = CTUDir;
         llvm::sys::path::append(FilePath, FileName);
         FunctionFileMap[FunctionName] = FilePath.str().str();
       }

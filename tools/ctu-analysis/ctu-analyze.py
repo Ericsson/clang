@@ -116,6 +116,8 @@ def get_analyzer_env(mainargs, clang_path):
     analyzer_env['ANALYZE_BUILD_REPORT_DIR'] = mainargs.ctuoutdir
     analyzer_env['ANALYZE_BUILD_REPORT_FORMAT'] = mainargs.output_format
     analyzer_env['ANALYZE_BUILD_REPORT_FAILURES'] = 'yes'
+    if mainargs.verbose:
+        analyzer_env['ANALYZE_BUILD_FORCE_DEBUG'] = 'yes'
     analyzer_env['ANALYZE_BUILD_PARAMETERS'] = \
         ' '.join(passthru_analyzer_params)
     return analyzer_env
@@ -171,7 +173,7 @@ def analyze(mainargs, analyze_path, analyzer_env, directory, command):
     compiler, args = get_compiler_and_arguments(command)
     cmdenv = analyzer_env.copy()
     cmdenv['INTERCEPT_BUILD'] = json.dumps({
-        'verbose': 1 if mainargs.verbose else 0,
+        'verbose': 10 if mainargs.verbose else 1,
         'cc': [compiler],
         'cxx': [compiler]
         })
