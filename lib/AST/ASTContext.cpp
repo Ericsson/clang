@@ -1500,9 +1500,9 @@ const FunctionDecl *ASTContext::getCTUDefinition(
       std::string FunctionName, FileName;
       std::string line;
       while (std::getline(ExternalFnMapFile, line)) {
-        size_t pos=line.find(" ");
-        FunctionName=line.substr(0,pos);
-        FileName=line.substr(pos+1, std::string::npos );
+        size_t pos = line.find(" ");
+        FunctionName = line.substr(0, pos);
+        FileName = line.substr(pos + 1);
         SmallString<256> FilePath = CTUDir;
         llvm::sys::path::append(FilePath, FileName);
         FunctionFileMap[FunctionName] = FilePath.str().str();

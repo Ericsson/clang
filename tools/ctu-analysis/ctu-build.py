@@ -187,7 +187,7 @@ def create_external_fn_maps(ctuindir):
     for filename in files:
         with open(filename, 'rb') as in_file:
             for line in in_file:
-                mangled_name, ast_file = line.strip().split(' ',1)
+                mangled_name, ast_file = line.strip().split(' ', 1)
                 if mangled_name not in mangled_to_asts:
                     mangled_to_asts[mangled_name] = {ast_file}
                 else:
