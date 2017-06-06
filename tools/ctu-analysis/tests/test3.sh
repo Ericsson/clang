@@ -3,7 +3,7 @@
 PATH=../../scan-build-py/bin:../../clang-func-mapping/:../:$PATH
 echo "USING clang "`which clang`
 rm ./build.json
-~/work/codechecker/CodeChecker/bin/CodeChecker log -b "gcc -c ./caller.c ./lib.c" -o build.json
+intercept-build --cdb build.json /bin/bash -c  "gcc -c ./caller.c ./lib.c"
 rm -rf ./.ctu
 ctu-build.py -j1 -v -b build.json -p .ctu
 rm -rf ./.ctu-out
