@@ -21,6 +21,7 @@
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendActions.h"
+#include "clang/Index/USRGeneration.h"
 #include "clang/Tooling/CommonOptionsParser.h"
 #include "clang/Tooling/Tooling.h"
 #include "llvm/Support/CommandLine.h"
@@ -38,8 +39,7 @@ static cl::OptionCategory ClangFnMapGenCategory("clang-fnmapgen options");
 
 class MapFunctionNamesConsumer : public ASTConsumer {
 public:
-  MapFunctionNamesConsumer(ASTContext &Context, ItaniumMangleContext *MangleCtx)
-      : Ctx(Context), ItaniumCtx(MangleCtx) {}
+  MapFunctionNamesConsumer(ASTContext &Context) : Ctx(Context) {}
 
   ~MapFunctionNamesConsumer() {
     // Flush results to standard output.
@@ -51,28 +51,13 @@ public:
   }
 
 private:
-  std::string getMangledName(const FunctionDecl *FD);
+  std::string getLookupName(const FunctionDecl *FD);
   void handleDecl(const Decl *D);
 
   ASTContext &Ctx;
-  ItaniumMangleContext *ItaniumCtx;
   std::stringstream DefinedFuncsStr;
   std::string CurrentFileName;
 };
-
-std::string MapFunctionNamesConsumer::getMangledName(const FunctionDecl *FD) {
-  std::string MangledName;
-  llvm::raw_string_ostream os(MangledName);
-  if (const auto *CCD = dyn_cast<CXXConstructorDecl>(FD))
-    // FIXME: Use correct Ctor/DtorType.
-    ItaniumCtx->mangleCXXCtor(CCD, Ctor_Complete, os);
-  else if (const auto *CDD = dyn_cast<CXXDestructorDecl>(FD))
-    ItaniumCtx->mangleCXXDtor(CDD, Dtor_Complete, os);
-  else
-    ItaniumCtx->mangleName(FD, os);
-  os.flush();
-  return MangledName;
-}
 
 void MapFunctionNamesConsumer::handleDecl(const Decl *D) {
   if (!D)
@@ -81,7 +66,9 @@ void MapFunctionNamesConsumer::handleDecl(const Decl *D) {
   if (const auto *FD = dyn_cast<FunctionDecl>(D)) {
     if (FD->isThisDeclarationADefinition()) {
       if (const Stmt *Body = FD->getBody()) {
-        std::string MangledName = getMangledName(FD);
+        SmallString<128> LookupName;
+        bool Res = index::generateUSRForDecl(D, LookupName);
+        assert(!Res);
         const SourceManager &SM = Ctx.getSourceManager();
         if (CurrentFileName.empty()) {
           StringRef SMgrName =
@@ -96,7 +83,8 @@ void MapFunctionNamesConsumer::handleDecl(const Decl *D) {
         case VisibleNoLinkage:
         case UniqueExternalLinkage:
           if (SM.isInMainFile(Body->getLocStart()))
-            DefinedFuncsStr << MangledName << " " << CurrentFileName << "\n";
+            DefinedFuncsStr << LookupName.str().str() << " " << CurrentFileName
+                            << "\n";
         default:
           break;
         }
@@ -113,11 +101,8 @@ class MapFunctionNamesAction : public ASTFrontendAction {
 protected:
   std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
                                                  llvm::StringRef) {
-    ItaniumMangleContext *ItaniumCtx =
-        ItaniumMangleContext::create(CI.getASTContext(), CI.getDiagnostics());
-    ItaniumCtx->setShouldForceMangleProto(true);
     std::unique_ptr<ASTConsumer> PFC(
-        new MapFunctionNamesConsumer(CI.getASTContext(), ItaniumCtx));
+        new MapFunctionNamesConsumer(CI.getASTContext()));
     return PFC;
   }
 };
@@ -129,7 +114,7 @@ int main(int argc, const char **argv) {
   sys::PrintStackTraceOnErrorSignal(argv[0], false);
   PrettyStackTraceProgram X(argc, argv);
 
-  const char *Overview = "\nThis tool collects the mangled name and location "
+  const char *Overview = "\nThis tool collects the USR name and location "
                          "of all functions definitions in the source files "
                          "(excluding headers).\n";
   CommonOptionsParser OptionsParser(argc, argv, ClangFnMapGenCategory,

@@ -19,6 +19,7 @@
 #include "clang/Frontend/ASTUnit.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/TextDiagnosticPrinter.h"
+#include "clang/Index/USRGeneration.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/DynamicTypeMap.h"
 #include "llvm/ADT/SmallSet.h"
@@ -388,8 +389,14 @@ RuntimeDefinition AnyFunctionCall::getRuntimeDefinition() const {
   };
 
   const FunctionDecl *CTUDecl = AD->getASTContext().getCTUDefinition(
-      FD, CI, Engine->getAnalysisManager().options.getCTUDir(),
-      CI.getDiagnostics(), ASTLoader);
+      FD, Engine->getAnalysisManager().options.getCTUDir(),
+      [](const Decl *D) {
+        SmallString<128> DeclUSR;
+        bool Ret = index::generateUSRForDecl(D, DeclUSR);
+        assert(!Ret);
+        return DeclUSR.str().str();
+      },
+      ASTLoader);
 
   return RuntimeDefinition(CTUDecl);
 }

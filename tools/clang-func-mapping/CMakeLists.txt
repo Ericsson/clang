@@ -14,6 +14,7 @@ target_link_libraries(clang-func-mapping
   clangAST
   clangBasic
   clangFrontend
+  clangIndex
   clangRewriteFrontend
   )
 

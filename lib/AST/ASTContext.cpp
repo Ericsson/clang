@@ -36,8 +36,6 @@
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Frontend/ASTUnit.h"
-#include "clang/Frontend/CompilerInstance.h"
-#include "clang/StaticAnalyzer/Core/AnalyzerOptions.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/Support/Capacity.h"
@@ -1432,16 +1430,11 @@ const llvm::fltSemantics &ASTContext::getFloatTypeSemantics(QualType T) const {
 //                         Cross-translation unit support
 //===----------------------------------------------------------------------===//
 
-std::string getMangledName(const NamedDecl *ND, MangleContext *MangleCtx) {
-  std::string MangledName;
-  llvm::raw_string_ostream OS(MangledName);
-  if (const auto *CCD = dyn_cast<CXXConstructorDecl>(ND))
-    // FIXME: Use correct Ctor/DtorType
-    MangleCtx->mangleCXXCtor(CCD, Ctor_Complete, OS);
-  else if (const auto *CDD = dyn_cast<CXXDestructorDecl>(ND))
-    MangleCtx->mangleCXXDtor(CDD, Dtor_Complete, OS);
-  else
-    MangleCtx->mangleName(ND, OS);
+std::string getLookupName(const NamedDecl *ND,
+                          std::string getUSR(const Decl *)) {
+  std::string ExtendedUSR;
+  llvm::raw_string_ostream OS(ExtendedUSR);
+  OS << getUSR(ND);
   ASTContext &Ctx = ND->getASTContext();
   // We are not going to support vendor and don't support OS and environment.
   // FIXME: support OS and environment correctly
@@ -1455,23 +1448,22 @@ std::string getMangledName(const NamedDecl *ND, MangleContext *MangleCtx) {
 /// Recursively visit the funtion decls of a DeclContext, and looks up a
 /// function based on mangled name.
 static const FunctionDecl *
-findFunctionInDeclContext(const DeclContext *DC, StringRef MangledFnName,
-                          MangleContext *MangleCtx) {
+findFunctionInDeclContext(const DeclContext *DC, StringRef LookupFnName,
+                          std::string getUSR(const Decl *)) {
   if (!DC)
     return nullptr;
   for (const Decl *D : DC->decls()) {
     const auto *SubDC = dyn_cast<DeclContext>(D);
     if (const auto *FD =
-            findFunctionInDeclContext(SubDC, MangledFnName, MangleCtx))
+            findFunctionInDeclContext(SubDC, LookupFnName, getUSR))
       return FD;
 
     const auto *ND = dyn_cast<FunctionDecl>(D);
     const FunctionDecl *ResultDecl;
     if (!ND || !ND->hasBody(ResultDecl))
       continue;
-    std::string LookupMangledName = getMangledName(ResultDecl, MangleCtx);
     // We are already sure that the triple is correct here.
-    if (LookupMangledName != MangledFnName)
+    if (getLookupName(ResultDecl, getUSR) != LookupFnName)
       continue;
     return ResultDecl;
   }
@@ -1479,19 +1471,15 @@ findFunctionInDeclContext(const DeclContext *DC, StringRef MangledFnName,
 }
 
 const FunctionDecl *ASTContext::getCTUDefinition(
-    const FunctionDecl *FD, CompilerInstance &CI, StringRef CTUDir,
-    DiagnosticsEngine &Diags,
+    const FunctionDecl *FD, StringRef CTUDir, std::string getUSR(const Decl *),
     std::function<std::unique_ptr<clang::ASTUnit>(StringRef)> Loader) {
   assert(!FD->hasBody() && "FD has a definition in current translation unit!");
-  if (!FD->getType()->getAs<FunctionProtoType>())
-    return nullptr; // Cannot even mangle that.
 
-  std::unique_ptr<MangleContext> MangleCtx(
-      ItaniumMangleContext::create(FD->getASTContext(), Diags));
-  MangleCtx->setShouldForceMangleProto(true);
-  std::string MangledFnName = getMangledName(FD, MangleCtx.get());
+  std::string LookupFnName = getLookupName(FD, getUSR);
+  if (LookupFnName.empty())
+    return nullptr;
   ASTUnit *Unit = nullptr;
-  auto FnUnitCacheEntry = FunctionAstUnitMap.find(MangledFnName);
+  auto FnUnitCacheEntry = FunctionAstUnitMap.find(LookupFnName);
   if (FnUnitCacheEntry == FunctionAstUnitMap.end()) {
     if (FunctionFileMap.empty()) {
       SmallString<256> ExternalFunctionMap = CTUDir;
@@ -1510,7 +1498,7 @@ const FunctionDecl *ASTContext::getCTUDefinition(
     }
 
     StringRef ASTFileName;
-    auto It = FunctionFileMap.find(MangledFnName);
+    auto It = FunctionFileMap.find(LookupFnName);
     if (It == FunctionFileMap.end())
       return nullptr; // No definition found even in some other build unit.
     ASTFileName = It->second;
@@ -1522,7 +1510,7 @@ const FunctionDecl *ASTContext::getCTUDefinition(
     } else {
       Unit = ASTCacheEntry->second.get();
     }
-    FunctionAstUnitMap[MangledFnName] = Unit;
+    FunctionAstUnitMap[LookupFnName] = Unit;
   } else {
     Unit = FnUnitCacheEntry->second;
   }
@@ -1534,7 +1522,7 @@ const FunctionDecl *ASTContext::getCTUDefinition(
   ASTImporter &Importer = getOrCreateASTImporter(Unit->getASTContext());
   TranslationUnitDecl *TU = Unit->getASTContext().getTranslationUnitDecl();
   if (const FunctionDecl *ResultDecl =
-            findFunctionInDeclContext(TU, MangledFnName, MangleCtx.get())) {
+            findFunctionInDeclContext(TU, LookupFnName, getUSR)) {
     // FIXME: Refactor const_cast
     auto *ToDecl = cast<FunctionDecl>(
         Importer.Import(const_cast<FunctionDecl *>(ResultDecl)));

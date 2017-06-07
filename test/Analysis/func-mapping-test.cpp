@@ -1,7 +1,7 @@
-// RUN: %clang_func_map %s -- -target x86_64-unknown-linux-gnu | FileCheck %s
+// RUN: %clang_func_map %s -- | FileCheck %s
 
 int f(int) {
   return 0;
 }
 
-// CHECK: _Z1fi
+// CHECK: c:@F@f#I#
