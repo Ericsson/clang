@@ -1958,8 +1958,8 @@ private:
 
 public:
   const FunctionDecl *getCTUDefinition(
-      const FunctionDecl *FD, CompilerInstance &CI, StringRef CTUDir,
-      DiagnosticsEngine &Diags,
+      const FunctionDecl *FD, StringRef CTUDir,
+      std::string getUSR(const Decl *),
       std::function<std::unique_ptr<clang::ASTUnit>(StringRef)> Loader);
 
   //===--------------------------------------------------------------------===//
