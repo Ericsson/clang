@@ -1485,6 +1485,12 @@ const FunctionDecl *ASTContext::getCTUDefinition(
       SmallString<256> ExternalFunctionMap = CTUDir;
       llvm::sys::path::append(ExternalFunctionMap, "externalFnMap.txt");
       std::ifstream ExternalFnMapFile(ExternalFunctionMap.c_str());
+      if (!ExternalFnMapFile) {
+        llvm::errs() << "error: '" << ExternalFunctionMap
+                     << "' cannot be opened: falling back to non-CTU mode\n";
+        return nullptr;
+      }
+
       std::string FunctionName, FileName;
       std::string line;
       while (std::getline(ExternalFnMapFile, line)) {
