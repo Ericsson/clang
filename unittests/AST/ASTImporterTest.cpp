@@ -488,6 +488,29 @@ TEST(ImportType, ImportAtomicType) {
                                        has(atomicType()))))))))));
 }
 
+TEST(ImportDecl, ImportFunctionTemplateDecl) {
+  MatchVerifier<Decl> Verifier;
+  EXPECT_TRUE(
+        testImport(
+          "template <typename T> void declToImport() { };",
+          Lang_CXX, "", Lang_CXX, Verifier,
+          functionTemplateDecl()));
+}
+
+TEST(ImportExpr, ImportUnresolvedLookupExpr) {
+MatchVerifier<Decl> Verifier;
+EXPECT_TRUE(
+        testImport(
+        "template<typename T> int foo();"
+                "template <typename T> void declToImport() {"
+                "  ::foo<T>;"
+                "  ::template foo<T>;"
+                "}",
+        Lang_CXX, "", Lang_CXX, Verifier,
+        functionTemplateDecl(
+                has(functionDecl(
+                        has(compoundStmt(has(unresolvedLookupExpr()))))))));
+}
 
 } // end namespace ast_matchers
 } // end namespace clang
