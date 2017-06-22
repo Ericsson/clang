@@ -13,7 +13,6 @@
 
 #include "clang/AST/ASTContext.h"
 #include "CXXABI.h"
-#include "clang/AST/ASTImporter.h"
 #include "clang/AST/ASTMutationListener.h"
 #include "clang/AST/Attr.h"
 #include "clang/AST/CharUnits.h"
@@ -35,14 +34,11 @@
 #include "clang/Basic/Builtins.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetInfo.h"
-#include "clang/Frontend/ASTUnit.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/Support/Capacity.h"
 #include "llvm/Support/MathExtras.h"
-#include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
-#include <fstream>
 #include <map>
 
 using namespace clang;
@@ -1423,131 +1419,6 @@ const llvm::fltSemantics &ASTContext::getFloatTypeSemantics(QualType T) const {
   case BuiltinType::LongDouble: return Target->getLongDoubleFormat();
   case BuiltinType::Float128:   return Target->getFloat128Format();
   }
-}
-
-
-//===----------------------------------------------------------------------===//
-//                         Cross-translation unit support
-//===----------------------------------------------------------------------===//
-
-std::string getLookupName(const NamedDecl *ND,
-                          std::string getUSR(const Decl *)) {
-  std::string ExtendedUSR;
-  llvm::raw_string_ostream OS(ExtendedUSR);
-  OS << getUSR(ND);
-  ASTContext &Ctx = ND->getASTContext();
-  // We are not going to support vendor and don't support OS and environment.
-  // FIXME: support OS and environment correctly
-  llvm::Triple::ArchType T = Ctx.getTargetInfo().getTriple().getArch();
-  if (T == llvm::Triple::thumb)
-    T = llvm::Triple::arm;
-  OS << "@" << Ctx.getTargetInfo().getTriple().getArchTypeName(T);
-  return OS.str();
-}
-
-/// Recursively visit the funtion decls of a DeclContext, and looks up a
-/// function based on mangled name.
-static const FunctionDecl *
-findFunctionInDeclContext(const DeclContext *DC, StringRef LookupFnName,
-                          std::string getUSR(const Decl *)) {
-  if (!DC)
-    return nullptr;
-  for (const Decl *D : DC->decls()) {
-    const auto *SubDC = dyn_cast<DeclContext>(D);
-    if (const auto *FD =
-            findFunctionInDeclContext(SubDC, LookupFnName, getUSR))
-      return FD;
-
-    const auto *ND = dyn_cast<FunctionDecl>(D);
-    const FunctionDecl *ResultDecl;
-    if (!ND || !ND->hasBody(ResultDecl))
-      continue;
-    // We are already sure that the triple is correct here.
-    if (getLookupName(ResultDecl, getUSR) != LookupFnName)
-      continue;
-    return ResultDecl;
-  }
-  return nullptr;
-}
-
-const FunctionDecl *ASTContext::getCTUDefinition(
-    const FunctionDecl *FD, StringRef CTUDir, std::string getUSR(const Decl *),
-    std::function<std::unique_ptr<clang::ASTUnit>(StringRef)> Loader) {
-  assert(!FD->hasBody() && "FD has a definition in current translation unit!");
-
-  std::string LookupFnName = getLookupName(FD, getUSR);
-  if (LookupFnName.empty())
-    return nullptr;
-  ASTUnit *Unit = nullptr;
-  auto FnUnitCacheEntry = FunctionAstUnitMap.find(LookupFnName);
-  if (FnUnitCacheEntry == FunctionAstUnitMap.end()) {
-    if (FunctionFileMap.empty()) {
-      SmallString<256> ExternalFunctionMap = CTUDir;
-      llvm::sys::path::append(ExternalFunctionMap, "externalFnMap.txt");
-      std::ifstream ExternalFnMapFile(ExternalFunctionMap.c_str());
-      if (!ExternalFnMapFile) {
-        llvm::errs() << "error: '" << ExternalFunctionMap
-                     << "' cannot be opened: falling back to non-CTU mode\n";
-        return nullptr;
-      }
-
-      std::string FunctionName, FileName;
-      std::string line;
-      while (std::getline(ExternalFnMapFile, line)) {
-        size_t pos = line.find(" ");
-        FunctionName = line.substr(0, pos);
-        FileName = line.substr(pos + 1);
-        SmallString<256> FilePath = CTUDir;
-        llvm::sys::path::append(FilePath, FileName);
-        FunctionFileMap[FunctionName] = FilePath.str().str();
-      }
-    }
-
-    StringRef ASTFileName;
-    auto It = FunctionFileMap.find(LookupFnName);
-    if (It == FunctionFileMap.end())
-      return nullptr; // No definition found even in some other build unit.
-    ASTFileName = It->second;
-    auto ASTCacheEntry = FileASTUnitMap.find(ASTFileName);
-    if (ASTCacheEntry == FileASTUnitMap.end()) {
-      std::unique_ptr<ASTUnit> LoadedUnit(Loader(ASTFileName));
-      Unit = LoadedUnit.get();
-      FileASTUnitMap[ASTFileName] = std::move(LoadedUnit);
-    } else {
-      Unit = ASTCacheEntry->second.get();
-    }
-    FunctionAstUnitMap[LookupFnName] = Unit;
-  } else {
-    Unit = FnUnitCacheEntry->second;
-  }
-
-  if (!Unit)
-    return nullptr;
-  assert(&Unit->getFileManager() ==
-         &Unit->getASTContext().getSourceManager().getFileManager());
-  ASTImporter &Importer = getOrCreateASTImporter(Unit->getASTContext());
-  TranslationUnitDecl *TU = Unit->getASTContext().getTranslationUnitDecl();
-  if (const FunctionDecl *ResultDecl =
-            findFunctionInDeclContext(TU, LookupFnName, getUSR)) {
-    // FIXME: Refactor const_cast
-    auto *ToDecl = cast<FunctionDecl>(
-        Importer.Import(const_cast<FunctionDecl *>(ResultDecl)));
-    assert(ToDecl->hasBody());
-    assert(FD->hasBody() && "Functions already imported should have body.");
-    return ToDecl;
-  }
-  return nullptr;
-}
-
-ASTImporter &ASTContext::getOrCreateASTImporter(ASTContext &From) {
-  auto I = ASTUnitImporterMap.find(From.getTranslationUnitDecl());
-  if (I != ASTUnitImporterMap.end())
-    return *I->second;
-  ASTImporter *NewImporter = new ASTImporter(
-        *this, getSourceManager().getFileManager(),
-        From, From.getSourceManager().getFileManager(), false);
-  ASTUnitImporterMap[From.getTranslationUnitDecl()].reset(NewImporter);
-  return *NewImporter;
 }
 
 CharUnits ASTContext::getDeclAlign(const Decl *D, bool ForAlignof) const {

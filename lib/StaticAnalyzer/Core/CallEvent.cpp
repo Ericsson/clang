@@ -16,12 +16,9 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
 #include "clang/AST/ParentMap.h"
 #include "clang/Analysis/ProgramPoint.h"
-#include "clang/Frontend/ASTUnit.h"
-#include "clang/Frontend/CompilerInstance.h"
-#include "clang/Frontend/TextDiagnosticPrinter.h"
-#include "clang/Index/USRGeneration.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/DynamicTypeMap.h"
+#include "clang/Tooling/CrossTranslationUnit.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/raw_ostream.h"
@@ -374,29 +371,11 @@ RuntimeDefinition AnyFunctionCall::getRuntimeDefinition() const {
 
   auto Engine = static_cast<ExprEngine *>(
       getState()->getStateManager().getOwningEngine());
-  CompilerInstance &CI = Engine->getCompilerInstance();
 
-  auto ASTLoader = [&](StringRef ASTFileName) {
-    IntrusiveRefCntPtr<DiagnosticOptions> DiagOpts = new DiagnosticOptions();
-    TextDiagnosticPrinter *DiagClient =
-        new TextDiagnosticPrinter(llvm::errs(), &*DiagOpts);
-    IntrusiveRefCntPtr<DiagnosticIDs> DiagID(new DiagnosticIDs());
-    IntrusiveRefCntPtr<DiagnosticsEngine> Diags(
-        new DiagnosticsEngine(DiagID, &*DiagOpts, DiagClient));
-    return ASTUnit::LoadFromASTFile(
-               ASTFileName, CI.getPCHContainerOperations()->getRawReader(),
-               Diags, CI.getFileSystemOpts());
-  };
-
-  const FunctionDecl *CTUDecl = AD->getASTContext().getCTUDefinition(
-      FD, Engine->getAnalysisManager().options.getCTUDir(),
-      [](const Decl *D) {
-        SmallString<128> DeclUSR;
-        bool Ret = index::generateUSRForDecl(D, DeclUSR);
-        assert(!Ret);
-        return DeclUSR.str().str();
-      },
-      ASTLoader);
+  const FunctionDecl *CTUDecl =
+      Engine->getCrossTranslationUnit().getCTUDefinition(
+          FD, Engine->getAnalysisManager().options.getCTUDir(),
+          "externalFnMap.txt");
 
   return RuntimeDefinition(CTUDecl);
 }

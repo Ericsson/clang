@@ -16,16 +16,13 @@
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclObjC.h"
-#include "clang/AST/Mangle.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Analysis/Analyses/LiveVariables.h"
 #include "clang/Analysis/CFG.h"
 #include "clang/Analysis/CallGraph.h"
 #include "clang/Analysis/CodeInjector.h"
 #include "clang/Basic/SourceManager.h"
-#include "clang/Basic/TargetInfo.h"
 #include "clang/Frontend/CompilerInstance.h"
-#include "clang/Frontend/TextDiagnosticPrinter.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/StaticAnalyzer/Checkers/LocalCheckers.h"
 #include "clang/StaticAnalyzer/Core/AnalyzerOptions.h"
@@ -36,6 +33,7 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/AnalysisManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ExprEngine.h"
 #include "clang/StaticAnalyzer/Frontend/CheckerRegistration.h"
+#include "clang/Tooling/CrossTranslationUnit.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Support/FileSystem.h"
@@ -43,11 +41,9 @@
 #include "llvm/Support/Program.h"
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
-#include <cassert>
 #include <memory>
 #include <queue>
 #include <utility>
-#include <fstream>
 
 using namespace clang;
 using namespace ento;
@@ -173,7 +169,7 @@ public:
   AnalyzerOptionsRef Opts;
   ArrayRef<std::string> Plugins;
   CodeInjector *Injector;
-  CompilerInstance &CI;
+  tooling::CrossTranslationUnit CTU;
 
   /// \brief Stores the declarations from the local translation unit.
   /// Note, we pre-compute the local declarations at parse time as an
@@ -203,7 +199,7 @@ public:
                    ArrayRef<std::string> plugins, CodeInjector *injector)
       : RecVisitorMode(0), RecVisitorBR(nullptr), Ctx(nullptr), PP(pp),
         OutDir(outdir), Opts(std::move(opts)), Plugins(plugins),
-        Injector(injector), CI(CI) {
+        Injector(injector), CTU(CI) {
     DigestAnalyzerOptions();
     if (Opts->PrintStats) {
       llvm::EnableStatistics(false);
@@ -712,7 +708,7 @@ void AnalysisConsumer::ActionExprEngine(Decl *D, bool ObjCGCEnabled,
   if (!Mgr->getAnalysisDeclContext(D)->getAnalysis<RelaxedLiveVariables>())
     return;
 
-  ExprEngine Eng(CI, *Mgr, ObjCGCEnabled, VisitedCallees, &FunctionSummaries,
+  ExprEngine Eng(CTU, *Mgr, ObjCGCEnabled, VisitedCallees, &FunctionSummaries,
                  IMode);
 
   // Set the graph auditor.
