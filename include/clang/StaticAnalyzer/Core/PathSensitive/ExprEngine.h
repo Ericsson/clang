@@ -38,6 +38,10 @@ class CXXThisExpr;
 class MaterializeTemporaryExpr;
 class ObjCAtSynchronizedStmt;
 class ObjCForCollectionStmt;
+
+namespace tooling {
+class CrossTranslationUnit;
+}
   
 namespace ento {
 
@@ -56,7 +60,7 @@ public:
   };
 
 private:
-  CompilerInstance &CI;
+  tooling::CrossTranslationUnit &CTU;
 
   AnalysisManager &AMgr;
   
@@ -99,9 +103,9 @@ private:
   InliningModes HowToInline;
 
 public:
-  ExprEngine(CompilerInstance &CI, AnalysisManager &mgr, bool gcEnabled,
-             SetOfConstDecls *VisitedCalleesIn, FunctionSummariesTy *FS,
-             InliningModes HowToInlineIn);
+  ExprEngine(tooling::CrossTranslationUnit &CTU, AnalysisManager &mgr,
+             bool gcEnabled, SetOfConstDecls *VisitedCalleesIn,
+             FunctionSummariesTy *FS, InliningModes HowToInlineIn);
 
   ~ExprEngine() override;
 
@@ -133,7 +137,7 @@ public:
 
   BugReporter& getBugReporter() { return BR; }
 
-  CompilerInstance &getCompilerInstance() { return CI; }
+  tooling::CrossTranslationUnit &getCrossTranslationUnit() { return CTU; }
 
   const NodeBuilderContext &getBuilderContext() {
     assert(currBldrCtx);
