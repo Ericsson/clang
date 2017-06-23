@@ -69,6 +69,7 @@ void MapFunctionNamesConsumer::handleDecl(const Decl *D) {
         SmallString<128> LookupName;
         bool Res = index::generateUSRForDecl(D, LookupName);
         assert(!Res);
+        (void)Res;
         const SourceManager &SM = Ctx.getSourceManager();
         if (CurrentFileName.empty()) {
           StringRef SMgrName =
