@@ -37,6 +37,7 @@ std::string CrossTranslationUnit::getLookupName(const NamedDecl *ND) {
   SmallString<128> DeclUSR;
   bool Ret = index::generateUSRForDecl(ND, DeclUSR);
   assert(!Ret);
+  (void)Ret;
   llvm::raw_svector_ostream OS(DeclUSR);
   // To support cross compilation.
   llvm::Triple::ArchType T = Context.getTargetInfo().getTriple().getArch();
