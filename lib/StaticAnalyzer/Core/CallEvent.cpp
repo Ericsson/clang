@@ -372,6 +372,9 @@ RuntimeDefinition AnyFunctionCall::getRuntimeDefinition() const {
   auto Engine = static_cast<ExprEngine *>(
       getState()->getStateManager().getOwningEngine());
 
+  //Try to get CTU definition only if CTUDir is provided.
+  if (Engine->getAnalysisManager().options.getCTUDir().empty())
+    return RuntimeDefinition();
   const FunctionDecl *CTUDecl =
       Engine->getCrossTranslationUnit().getCTUDefinition(
           FD, Engine->getAnalysisManager().options.getCTUDir(),
