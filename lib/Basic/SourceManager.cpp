@@ -2051,10 +2051,6 @@ bool SourceManager::isBeforeInTranslationUnit(SourceLocation LHS,
   if (LOffs.first.isInvalid() || ROffs.first.isInvalid())
     return LOffs.first.isInvalid() && !ROffs.first.isInvalid();
 
-  // If the source locations are in the same file, just compare offsets.
-  if (LOffs.first == ROffs.first)
-    return LOffs.second < ROffs.second;
-
   std::pair<bool, bool> InSameTU = isInTheSameTranslationUnit(LOffs, ROffs);
   if (InSameTU.first)
     return InSameTU.second;
@@ -2098,6 +2094,10 @@ bool SourceManager::isBeforeInTranslationUnit(SourceLocation LHS,
 std::pair<bool, bool> SourceManager::isInTheSameTranslationUnit(
     std::pair<FileID, unsigned> &LOffs,
     std::pair<FileID, unsigned> &ROffs) const {
+  // If the source locations are in the same file, just compare offsets.
+  if (LOffs.first == ROffs.first)
+    return std::make_pair(true, LOffs.second < ROffs.second);
+
   // If we are comparing a source location with multiple locations in the same
   // file, we get a big win by caching the result.
   InBeforeInTUCacheEntry &IsBeforeInTUCache =
@@ -2111,8 +2111,7 @@ std::pair<bool, bool> SourceManager::isInTheSameTranslationUnit(
 
   // Okay, we missed in the cache, start updating the cache for this query.
   IsBeforeInTUCache.setQueryFIDs(LOffs.first, ROffs.first,
-                                 /*isLFIDBeforeRFID=*/LOffs.first.ID <
-                                     ROffs.first.ID);
+                          /*isLFIDBeforeRFID=*/LOffs.first.ID < ROffs.first.ID);
 
   // We need to find the common ancestor. The only way of doing this is to
   // build the complete include chain for one and then walking up the chain
@@ -2127,7 +2126,7 @@ std::pair<bool, bool> SourceManager::isInTheSameTranslationUnit(
     // quit early. The other way round unfortunately remains suboptimal.
   } while (LOffs.first != ROffs.first && !MoveUpIncludeHierarchy(LOffs, *this));
   LocSet::iterator I;
-  while ((I = LChain.find(ROffs.first)) == LChain.end()) {
+  while((I = LChain.find(ROffs.first)) == LChain.end()) {
     if (MoveUpIncludeHierarchy(ROffs, *this))
       break; // Met at topmost file.
   }
