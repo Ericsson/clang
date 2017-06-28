@@ -10,9 +10,9 @@ void f(AVFilterContext *ctx){
   SET_COMMON_FORMATS(ctx);
 }
 
-int div_struct(struct data_t{int a;int b;} *d){
+/*int div_struct(struct data_t{int a;int b;} *d){
   return d->a/d->b;
-}
+}*/
 
 int div_noproto(int d){
     return 100/d;
