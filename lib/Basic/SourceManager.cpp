@@ -2064,53 +2064,10 @@ std::pair<bool, bool> SourceManager::isInTheSameTranslationUnit(
   if (LOffs.first == ROffs.first)
     return std::make_pair(true, LOffs.second < ROffs.second);
 
-  std::pair<bool, bool> InSameTU = isInTheSameTranslationUnit(LOffs, ROffs);
-  if (InSameTU.first)
-    return InSameTU.second;
-
-  // If we arrived here, the location is either in a built-ins buffer or
-  // associated with global inline asm. PR5662 and PR22576 are examples.
-
-  StringRef LB = getBuffer(LOffs.first)->getBufferIdentifier();
-  StringRef RB = getBuffer(ROffs.first)->getBufferIdentifier();
-  bool LIsBuiltins = LB == "<built-in>";
-  bool RIsBuiltins = RB == "<built-in>";
-  // Sort built-in before non-built-in.
-  if (LIsBuiltins || RIsBuiltins) {
-    if (LIsBuiltins != RIsBuiltins)
-      return LIsBuiltins;
-    // Both are in built-in buffers, but from different files. We just claim that
-    // lower IDs come first.
-    return LOffs.first < ROffs.first;
-  }
-  bool LIsAsm = LB == "<inline asm>";
-  bool RIsAsm = RB == "<inline asm>";
-  // Sort assembler after built-ins, but before the rest.
-  if (LIsAsm || RIsAsm) {
-    if (LIsAsm != RIsAsm)
-      return RIsAsm;
-    assert(LOffs.first == ROffs.first);
-    return false;
-  }
-  bool LIsScratch = LB == "<scratch space>";
-  bool RIsScratch = RB == "<scratch space>";
-  // Sort scratch after inline asm, but before the rest.
-  if (LIsScratch || RIsScratch) {
-    if (LIsScratch != RIsScratch)
-      return LIsScratch;
-    return LOffs.second < ROffs.second;
-  }
-  // Source locations from different translation units.
-  llvm_unreachable("Unsortable locations found");
-}
-
-std::pair<bool, bool> SourceManager::isInTheSameTranslationUnit(
-    std::pair<FileID, unsigned> &LOffs,
-    std::pair<FileID, unsigned> &ROffs) const {
   // If we are comparing a source location with multiple locations in the same
   // file, we get a big win by caching the result.
   InBeforeInTUCacheEntry &IsBeforeInTUCache =
-      getInBeforeInTUCache(LOffs.first, ROffs.first);
+    getInBeforeInTUCache(LOffs.first, ROffs.first);
 
   // If we are comparing a source location with multiple locations in the same
   // file, we get a big win by caching the result.
@@ -2120,8 +2077,7 @@ std::pair<bool, bool> SourceManager::isInTheSameTranslationUnit(
 
   // Okay, we missed in the cache, start updating the cache for this query.
   IsBeforeInTUCache.setQueryFIDs(LOffs.first, ROffs.first,
-                                 /*isLFIDBeforeRFID=*/LOffs.first.ID <
-                                     ROffs.first.ID);
+                          /*isLFIDBeforeRFID=*/LOffs.first.ID < ROffs.first.ID);
 
   // We need to find the common ancestor. The only way of doing this is to
   // build the complete include chain for one and then walking up the chain
@@ -2136,7 +2092,7 @@ std::pair<bool, bool> SourceManager::isInTheSameTranslationUnit(
     // quit early. The other way round unfortunately remains suboptimal.
   } while (LOffs.first != ROffs.first && !MoveUpIncludeHierarchy(LOffs, *this));
   LocSet::iterator I;
-  while ((I = LChain.find(ROffs.first)) == LChain.end()) {
+  while((I = LChain.find(ROffs.first)) == LChain.end()) {
     if (MoveUpIncludeHierarchy(ROffs, *this))
       break; // Met at topmost file.
   }
@@ -2274,3 +2230,4 @@ size_t SourceManager::getDataStructureSizes() const {
 
   return size;
 }
+
