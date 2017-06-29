@@ -224,4 +224,6 @@ def err_invalid_vfs_overlay : Error<
 
 def warn_option_invalid_ocl_version : Warning<
   "OpenCL version %0 does not support the option '%1'">, InGroup<Deprecated>;
+
+def err_fnmap_parsing : Error<"error parsing CTU function map file'%0': %1">;
 }

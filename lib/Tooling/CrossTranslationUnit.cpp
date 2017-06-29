@@ -19,6 +19,7 @@
 #include "clang/Frontend/ASTUnit.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/TextDiagnosticPrinter.h"
+#include "clang/Frontend/FrontendDiagnostic.h"
 #include "clang/Index/USRGeneration.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/Support/Path.h"
@@ -87,20 +88,32 @@ CrossTranslationUnit::getCTUDefinition(const FunctionDecl *FD, StringRef CTUDir,
       llvm::sys::path::append(ExternalFunctionMap, IndexName);
       std::ifstream ExternalFnMapFile(ExternalFunctionMap.c_str());
       if (!ExternalFnMapFile) {
-        llvm::errs() << "error: '" << ExternalFunctionMap
-                     << "' cannot be opened: falling back to non-CTU mode\n";
+        Context.getSourceManager().getDiagnostics().Report(
+            diag::err_fe_error_opening)
+            << ExternalFunctionMap.c_str()
+            << "required by the CTU functionality.";
         return nullptr;
       }
 
       std::string FunctionName, FileName;
       std::string line;
+      unsigned LineNo=0;
       while (std::getline(ExternalFnMapFile, line)) {
         size_t pos = line.find(" ");
+        if (pos > 0 && pos < std::string::npos) {
         FunctionName = line.substr(0, pos);
         FileName = line.substr(pos + 1);
         SmallString<256> FilePath = CTUDir;
         llvm::sys::path::append(FilePath, FileName);
         FunctionFileMap[FunctionName] = FilePath.str().str();
+        } else {
+            std::string PosTxt = "line " + std::to_string(LineNo+1) +
+                                 " \"USR filename\" format expected.";
+            Context.getSourceManager().getDiagnostics().Report(
+                diag::err_fnmap_parsing)
+                << ExternalFunctionMap.c_str() << PosTxt;
+          }
+        LineNo++;
       }
     }
 
