@@ -565,7 +565,7 @@ def ctu_collect_phase(opts):
 
         args = opts['direct_args'] + opts['flags']
         funcmap_command = [opts['ctu'].func_map_cmd]
-        funcmap_command.append(opts['source'])
+        funcmap_command.append(opts['file'])
         funcmap_command.append('--')
         funcmap_command.extend(args)
         logging.debug("Generating function map using '%s'", funcmap_command)
