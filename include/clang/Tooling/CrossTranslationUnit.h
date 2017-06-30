@@ -44,8 +44,21 @@ public:
   CrossTranslationUnit(CompilerInstance &CI);
   ~CrossTranslationUnit();
 
-  const FunctionDecl *getCTUDefinition(const FunctionDecl *FD, StringRef CTUDir,
-                                       StringRef IndexName);
+  /// \brief This function can load a function definition from an external AST
+  ///        file and merge it into the original AST.
+  ///
+  /// This method should only be used on functions that have no definitions in
+  /// the current translation unit. A function definition with the same
+  /// declaration will be looked up in the index file which should be in the
+  /// \p CrossTUDir directory, called \p IndexName. In case the declaration is
+  /// found in the index the corresponding AST file will be loaded and the
+  /// definition of the function will be merged into the original AST using
+  /// the AST Importer. The declaration with the definition will be returned.
+  ///
+  /// Note that the AST files should also be in the \p CrossTUDir.
+  const FunctionDecl *getCrossTUDefinition(const FunctionDecl *FD,
+                                           StringRef CrossTUDir,
+                                           StringRef IndexName);
 
 private:
   ASTImporter &getOrCreateASTImporter(ASTContext &From);
