@@ -1,1 +1,0 @@
-int div_ext(int d);
