@@ -376,7 +376,7 @@ RuntimeDefinition AnyFunctionCall::getRuntimeDefinition() const {
   if (Engine->getAnalysisManager().options.getCTUDir().empty())
     return RuntimeDefinition();
   const FunctionDecl *CTUDecl =
-      Engine->getCrossTranslationUnit().getCTUDefinition(
+      Engine->getCrossTranslationUnit().getCrossTUDefinition(
           FD, Engine->getAnalysisManager().options.getCTUDir(),
           "externalFnMap.txt");
 

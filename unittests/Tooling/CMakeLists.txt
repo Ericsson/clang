@@ -14,6 +14,7 @@ add_clang_unittest(ToolingTests
   CastExprTest.cpp
   CommentHandlerTest.cpp
   CompilationDatabaseTest.cpp
+  CrossTranslationUnitTest.cpp
   FixItTest.cpp
   LookupTest.cpp
   QualTypeNamesTest.cpp
