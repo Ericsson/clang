@@ -22,22 +22,27 @@ import functools
 import subprocess
 import contextlib
 import datetime
+import shutil
+import glob
 
 from libscanbuild import command_entry_point, compiler_wrapper, \
-    wrapper_environment, run_build, run_command
+    wrapper_environment, run_build, run_command, CtuConfig
 from libscanbuild.arguments import parse_args_for_scan_build, \
     parse_args_for_analyze_build
 from libscanbuild.intercept import capture
 from libscanbuild.report import document
 from libscanbuild.compilation import split_command, classify_source, \
     compiler_language
-from libscanbuild.clang import get_version, get_arguments
+from libscanbuild.clang import get_version, get_arguments, get_triple_arch
 from libscanbuild.shell import decode
 
 __all__ = ['scan_build', 'analyze_build', 'analyze_compiler_wrapper']
 
 COMPILER_WRAPPER_CC = 'analyze-cc'
 COMPILER_WRAPPER_CXX = 'analyze-c++'
+
+CTU_FUNCTION_MAP_FILENAME = 'externalFnMap.txt'
+CTU_TEMP_FNMAP_FOLDER = 'tmpExternalFnMaps'
 
 
 @command_entry_point
@@ -56,7 +61,7 @@ def scan_build():
             exit_code = capture(args)
             # Run the analyzer against the captured commands.
             if need_analyzer(args.build):
-                run_analyzer_parallel(args)
+                run_analyzer_with_ctu(args)
         else:
             # Run build command and analyzer with compiler wrappers.
             environment = setup_environment(args)
@@ -75,7 +80,7 @@ def analyze_build():
     # will re-assign the report directory as new output
     with report_directory(args.output, args.keep_empty) as args.output:
         # Run the analyzer against a compilation db.
-        run_analyzer_parallel(args)
+        run_analyzer_with_ctu(args)
         # Cover report generation and bug counting.
         number_of_bugs = document(args)
         # Set exit status as it was requested.
@@ -95,6 +100,89 @@ def need_analyzer(args):
     return len(args) and not re.search('configure|autogen', args[0])
 
 
+def prefix_with(constant, pieces):
+    """ From a sequence create another sequence where every second element
+    is from the original sequence and the odd elements are the prefix.
+
+    eg.: prefix_with(0, [1,2,3]) creates [0, 1, 0, 2, 0, 3] """
+
+    return [elem for piece in pieces for elem in [constant, piece]]
+
+
+def get_ctu_config(args):
+    """ CTU configuration is created from the chosen phases and dir """
+
+    return (
+        CtuConfig(collect=args.ctu_phases.collect,
+                  analyze=args.ctu_phases.analyze,
+                  dir=args.ctu_dir,
+                  func_map_cmd=args.func_map_cmd)
+        if hasattr(args, 'ctu_phases') and hasattr(args.ctu_phases, 'dir')
+        else CtuConfig(collect=False, analyze=False, dir='', func_map_cmd=''))
+
+
+def create_global_ctu_function_map(func_map_lines):
+    """ Takes iterator of individual function maps and creates a global map
+    keeping only unique names. We leave conflicting names out of CTU.
+    A function map contains the id of a function (mangled name) and the
+    originating source (the corresponding AST file) name."""
+
+    mangled_to_asts = {}
+
+    for line in func_map_lines:
+        mangled_name, ast_file = line.strip().split(' ', 1)
+        # We collect all occurences of a function name into a list
+        if mangled_name not in mangled_to_asts:
+            mangled_to_asts[mangled_name] = {ast_file}
+        else:
+            mangled_to_asts[mangled_name].add(ast_file)
+
+    mangled_ast_pairs = []
+
+    for mangled_name, ast_files in mangled_to_asts.items():
+        if len(ast_files) == 1:
+            mangled_ast_pairs.append((mangled_name, ast_files.pop()))
+
+    return mangled_ast_pairs
+
+
+def merge_ctu_func_maps(ctudir):
+    """ Merge individual function maps into a global one.
+
+    As the collect phase runs parallel on multiple threads, all compilation
+    units are separately mapped into a temporary file in CTU_TEMP_FNMAP_FOLDER.
+    These function maps contain the mangled names of functions and the source
+    (AST generated from the source) which had them.
+    These files should be merged at the end into a global map file:
+    CTU_FUNCTION_MAP_FILENAME."""
+
+    def generate_func_map_lines(fnmap_dir):
+        """ Iterate over all lines of input files in random order. """
+
+        files = glob.glob(os.path.join(fnmap_dir, '*'))
+        for filename in files:
+            with open(filename, 'r') as in_file:
+                for line in in_file:
+                    yield line
+
+    def write_global_map(ctudir, mangled_ast_pairs):
+        """ Write (mangled function name, ast file) pairs into final file. """
+
+        extern_fns_map_file = os.path.join(ctudir, CTU_FUNCTION_MAP_FILENAME)
+        with open(extern_fns_map_file, 'w') as out_file:
+            for mangled_name, ast_file in mangled_ast_pairs:
+                out_file.write('%s %s\n' % (mangled_name, ast_file))
+
+    fnmap_dir = os.path.join(ctudir, CTU_TEMP_FNMAP_FOLDER)
+
+    func_map_lines = generate_func_map_lines(fnmap_dir)
+    mangled_ast_pairs = create_global_ctu_function_map(func_map_lines)
+    write_global_map(ctudir, mangled_ast_pairs)
+
+    # Remove all temporary files
+    shutil.rmtree(fnmap_dir, ignore_errors=True)
+
+
 def run_analyzer_parallel(args):
     """ Runs the analyzer against the given compilation database. """
 
@@ -109,7 +197,8 @@ def run_analyzer_parallel(args):
         'output_format': args.output_format,
         'output_failures': args.output_failures,
         'direct_args': analyzer_params(args),
-        'force_debug': args.force_debug
+        'force_debug': args.force_debug,
+        'ctu': get_ctu_config(args)
     }
 
     logging.debug('run analyzer against compilation database')
@@ -127,6 +216,30 @@ def run_analyzer_parallel(args):
         pool.join()
 
 
+def run_analyzer_with_ctu(args):
+    """ Governs multiple runs in CTU mode or runs once in normal mode. """
+
+    ctu_config = get_ctu_config(args)
+    if ctu_config.collect:
+        shutil.rmtree(ctu_config.dir, ignore_errors=True)
+        os.makedirs(os.path.join(ctu_config.dir, CTU_TEMP_FNMAP_FOLDER))
+    if ctu_config.collect and ctu_config.analyze:
+        # CTU strings are coming from args.ctu_dir and func_map_cmd,
+        # so we can leave it empty
+        args.ctu_phases = CtuConfig(collect=True, analyze=False,
+                                    dir='', func_map_cmd='')
+        run_analyzer_parallel(args)
+        merge_ctu_func_maps(ctu_config.dir)
+        args.ctu_phases = CtuConfig(collect=False, analyze=True,
+                                    dir='', func_map_cmd='')
+        run_analyzer_parallel(args)
+        shutil.rmtree(ctu_config.dir, ignore_errors=True)
+    else:
+        run_analyzer_parallel(args)
+        if ctu_config.collect:
+            merge_ctu_func_maps(ctu_config.dir)
+
+
 def setup_environment(args):
     """ Set up environment for build command to interpose compiler wrapper. """
 
@@ -140,7 +253,8 @@ def setup_environment(args):
         'ANALYZE_BUILD_REPORT_FORMAT': args.output_format,
         'ANALYZE_BUILD_REPORT_FAILURES': 'yes' if args.output_failures else '',
         'ANALYZE_BUILD_PARAMETERS': ' '.join(analyzer_params(args)),
-        'ANALYZE_BUILD_FORCE_DEBUG': 'yes' if args.force_debug else ''
+        'ANALYZE_BUILD_FORCE_DEBUG': 'yes' if args.force_debug else '',
+        'ANALYZE_BUILD_CTU': json.dumps(get_ctu_config(args))
     })
     return environment
 
@@ -173,7 +287,8 @@ def analyze_compiler_wrapper_impl(result, execution):
                                  '').split(' '),
         'force_debug': os.getenv('ANALYZE_BUILD_FORCE_DEBUG'),
         'directory': execution.cwd,
-        'command': [execution.cmd[0], '-c'] + compilation.flags
+        'command': [execution.cmd[0], '-c'] + compilation.flags,
+        'ctu': json.loads(os.getenv('ANALYZE_BUILD_CTU'))
     }
     # call static analyzer against the compilation
     for source in compilation.files:
@@ -222,14 +337,6 @@ def report_directory(hint, keep):
 def analyzer_params(args):
     """ A group of command line arguments can mapped to command
     line arguments of the analyzer. This method generates those. """
-
-    def prefix_with(constant, pieces):
-        """ From a sequence create another sequence where every second element
-        is from the original sequence and the odd elements are the prefix.
-
-        eg.: prefix_with(0, [1,2,3]) creates [0, 1, 0, 2, 0, 3] """
-
-        return [elem for piece in pieces for elem in [constant, piece]]
 
     result = []
 
@@ -294,8 +401,9 @@ def require(required):
           'direct_args',  # arguments from command line
           'force_debug',  # kill non debug macros
           'output_dir',  # where generated report files shall go
-          'output_format',  # it's 'plist' or 'html' or both
-          'output_failures'])  # generate crash reports or not
+          'output_format',  # it's 'plist', 'html', both or plist-multi-file
+          'output_failures',  # generate crash reports or not
+          'ctu'])  # ctu control options
 def run(opts):
     """ Entry point to run (or not) static analyzer against a single entry
     of the compilation database.
@@ -383,8 +491,10 @@ def run_analyzer(opts, continuation=report_failure):
 
     def target():
         """ Creates output file name for reports. """
-        if opts['output_format'] in {'plist', 'plist-html',
-                                     'plist-multi-file'}:
+        if opts['output_format'] in {
+                'plist',
+                'plist-html',
+                'plist-multi-file'}:
             (handle, name) = tempfile.mkstemp(prefix='report-',
                                               suffix='.plist',
                                               dir=opts['output_dir'])
@@ -408,8 +518,104 @@ def run_analyzer(opts, continuation=report_failure):
         return result
 
 
+def func_map_list_src_to_ast(func_src_list, triple_arch):
+    """ Turns textual function map list with source files into a
+    function map list with ast files. """
+
+    func_ast_list = []
+    for fn_src_txt in func_src_list:
+        dpos = fn_src_txt.find(" ")
+        mangled_name = fn_src_txt[0:dpos]
+        path = fn_src_txt[dpos + 1:]
+        # Normalize path on windows as well
+        path = os.path.splitdrive(path)[1]
+        # Make relative path out of absolute
+        path = path[1:] if path[0] == os.sep else path
+        ast_path = os.path.join("ast", triple_arch, path + ".ast")
+        func_ast_list.append(mangled_name + "@" + triple_arch + " " + ast_path)
+    return func_ast_list
+
+
+@require(['clang', 'directory', 'flags', 'direct_args', 'file', 'ctu'])
+def ctu_collect_phase(opts):
+    """ Preprocess source by generating all data needed by CTU analysis. """
+
+    def generate_ast(triple_arch):
+        """ Generates ASTs for the current compilation command. """
+
+        args = opts['direct_args'] + opts['flags']
+        ast_joined_path = os.path.join(opts['ctu'].dir, 'ast', triple_arch,
+                                       os.path.realpath(opts['file'])[1:] +
+                                       '.ast')
+        ast_path = os.path.abspath(ast_joined_path)
+        ast_dir = os.path.dirname(ast_path)
+        if not os.path.isdir(ast_dir):
+            os.makedirs(ast_dir)
+        ast_command = [opts['clang'], '-emit-ast']
+        ast_command.extend(args)
+        ast_command.append('-w')
+        ast_command.append(opts['file'])
+        ast_command.append('-o')
+        ast_command.append(ast_path)
+        logging.debug("Generating AST using '%s'", ast_command)
+        run_command(ast_command, cwd=opts['directory'])
+
+    def map_functions(triple_arch):
+        """ Generate function map file for the current source. """
+
+        args = opts['direct_args'] + opts['flags']
+        funcmap_command = [opts['ctu'].func_map_cmd]
+        funcmap_command.append(opts['file'])
+        funcmap_command.append('--')
+        funcmap_command.extend(args)
+        logging.debug("Generating function map using '%s'", funcmap_command)
+        func_src_list = run_command(funcmap_command, cwd=opts['directory'])
+        func_ast_list = func_map_list_src_to_ast(func_src_list, triple_arch)
+        extern_fns_map_folder = os.path.join(opts['ctu'].dir,
+                                             CTU_TEMP_FNMAP_FOLDER)
+        if func_ast_list:
+            with tempfile.NamedTemporaryFile(mode='w',
+                                             dir=extern_fns_map_folder,
+                                             delete=False) as out_file:
+                out_file.write("\n".join(func_ast_list) + "\n")
+
+    cwd = opts['directory']
+    cmd = [opts['clang'], '--analyze'] + opts['direct_args'] + opts['flags'] \
+        + [opts['file']]
+    triple_arch = get_triple_arch(cmd, cwd)
+    generate_ast(triple_arch)
+    map_functions(triple_arch)
+
+
+@require(['ctu'])
+def dispatch_ctu(opts, continuation=run_analyzer):
+    """ Execute only one phase of 2 phases of CTU if needed. """
+
+    ctu_config = opts['ctu']
+    # Recover namedtuple from json when coming from analyze_cc
+    if not hasattr(ctu_config, 'collect'):
+        ctu_config = CtuConfig(collect=ctu_config[0],
+                               analyze=ctu_config[1],
+                               dir=ctu_config[2],
+                               func_map_cmd=ctu_config[3])
+    opts['ctu'] = ctu_config
+
+    if ctu_config.collect or ctu_config.analyze:
+        assert ctu_config.collect != ctu_config.analyze
+        if ctu_config.collect:
+            return ctu_collect_phase(opts)
+        if ctu_config.analyze:
+            ctu_options = ['ctu-dir=' + ctu_config.dir,
+                           'reanalyze-ctu-visited=true']
+            analyzer_options = prefix_with('-analyzer-config', ctu_options)
+            direct_options = prefix_with('-Xanalyzer', analyzer_options)
+            opts['direct_args'].extend(direct_options)
+
+    return continuation(opts)
+
+
 @require(['flags', 'force_debug'])
-def filter_debug_flags(opts, continuation=run_analyzer):
+def filter_debug_flags(opts, continuation=dispatch_ctu):
     """ Filter out nondebug macros when requested. """
 
     if opts.pop('force_debug'):
@@ -475,6 +681,7 @@ def arch_check(opts, continuation=language_check):
     else:
         logging.debug('analysis, on default arch')
         return continuation(opts)
+
 
 # To have good results from static analyzer certain compiler options shall be
 # omitted. The compiler flag filtering only affects the static analyzer run.
