@@ -4,12 +4,12 @@
 # This file is distributed under the University of Illinois Open Source
 # License. See LICENSE.TXT for details.
 
-import libear
-import libscanbuild.analyze as sut
 import unittest
 import re
 import os
 import os.path
+import libear
+import libscanbuild.analyze as sut
 
 
 class ReportDirectoryTest(unittest.TestCase):
@@ -333,3 +333,83 @@ class RequireDecoratorTest(unittest.TestCase):
 
     def test_method_exception_not_caught(self):
         self.assertRaises(Exception, method_exception_from_inside, dict())
+
+
+class PrefixWithTest(unittest.TestCase):
+
+    def test_gives_empty_on_empty(self):
+        res = sut.prefix_with(0, [])
+        self.assertFalse(res)
+
+    def test_interleaves_prefix(self):
+        res = sut.prefix_with(0, [1, 2, 3])
+        self.assertListEqual([0, 1, 0, 2, 0, 3], res)
+
+
+class MergeCtuMapTest(unittest.TestCase):
+
+    def test_no_map_gives_empty(self):
+        pairs = sut.create_global_ctu_function_map([])
+        self.assertFalse(pairs)
+
+    def test_multiple_maps_merged(self):
+        concat_map = ['_Z1fun1i@x86_64 ast/x86_64/fun1.c.ast',
+                      '_Z1fun2i@x86_64 ast/x86_64/fun2.c.ast',
+                      '_Z1fun3i@x86_64 ast/x86_64/fun3.c.ast']
+        pairs = sut.create_global_ctu_function_map(concat_map)
+        self.assertTrue(('_Z1fun1i@x86_64', 'ast/x86_64/fun1.c.ast') in pairs)
+        self.assertTrue(('_Z1fun2i@x86_64', 'ast/x86_64/fun2.c.ast') in pairs)
+        self.assertTrue(('_Z1fun3i@x86_64', 'ast/x86_64/fun3.c.ast') in pairs)
+        self.assertEqual(3, len(pairs))
+
+    def test_not_unique_func_left_out(self):
+        concat_map = ['_Z1fun1i@x86_64 ast/x86_64/fun1.c.ast',
+                      '_Z1fun2i@x86_64 ast/x86_64/fun2.c.ast',
+                      '_Z1fun1i@x86_64 ast/x86_64/fun7.c.ast']
+        pairs = sut.create_global_ctu_function_map(concat_map)
+        self.assertFalse(('_Z1fun1i@x86_64', 'ast/x86_64/fun1.c.ast') in pairs)
+        self.assertFalse(('_Z1fun1i@x86_64', 'ast/x86_64/fun7.c.ast') in pairs)
+        self.assertTrue(('_Z1fun2i@x86_64', 'ast/x86_64/fun2.c.ast') in pairs)
+        self.assertEqual(1, len(pairs))
+
+    def test_duplicates_are_kept(self):
+        concat_map = ['_Z1fun1i@x86_64 ast/x86_64/fun1.c.ast',
+                      '_Z1fun2i@x86_64 ast/x86_64/fun2.c.ast',
+                      '_Z1fun1i@x86_64 ast/x86_64/fun1.c.ast']
+        pairs = sut.create_global_ctu_function_map(concat_map)
+        self.assertTrue(('_Z1fun1i@x86_64', 'ast/x86_64/fun1.c.ast') in pairs)
+        self.assertTrue(('_Z1fun2i@x86_64', 'ast/x86_64/fun2.c.ast') in pairs)
+        self.assertEqual(2, len(pairs))
+
+    def test_space_handled_in_source(self):
+        concat_map = ['_Z1fun1i@x86_64 ast/x86_64/f un.c.ast']
+        pairs = sut.create_global_ctu_function_map(concat_map)
+        self.assertTrue(('_Z1fun1i@x86_64', 'ast/x86_64/f un.c.ast') in pairs)
+        self.assertEqual(1, len(pairs))
+
+
+class FuncMapSrcToAstTest(unittest.TestCase):
+
+    def test_empty_gives_empty(self):
+        fun_ast_lst = sut.func_map_list_src_to_ast([], 'armv7')
+        self.assertFalse(fun_ast_lst)
+
+    def test_sources_to_asts(self):
+        fun_src_lst = ['_Z1f1i ' + os.path.join(os.sep + 'path', 'f1.c'),
+                       '_Z1f2i ' + os.path.join(os.sep + 'path', 'f2.c')]
+        fun_ast_lst = sut.func_map_list_src_to_ast(fun_src_lst, 'armv7')
+        self.assertTrue('_Z1f1i@armv7 ' +
+                        os.path.join('ast', 'armv7', 'path', 'f1.c.ast')
+                        in fun_ast_lst)
+        self.assertTrue('_Z1f2i@armv7 ' +
+                        os.path.join('ast', 'armv7', 'path', 'f2.c.ast')
+                        in fun_ast_lst)
+        self.assertEqual(2, len(fun_ast_lst))
+
+    def test_spaces_handled(self):
+        fun_src_lst = ['_Z1f1i ' + os.path.join(os.sep + 'path', 'f 1.c')]
+        fun_ast_lst = sut.func_map_list_src_to_ast(fun_src_lst, 'armv7')
+        self.assertTrue('_Z1f1i@armv7 ' +
+                        os.path.join('ast', 'armv7', 'path', 'f 1.c.ast')
+                        in fun_ast_lst)
+        self.assertEqual(1, len(fun_ast_lst))
