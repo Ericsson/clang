@@ -409,7 +409,6 @@ RuntimeDefinition AnyFunctionCall::getRuntimeDefinition() const {
   return RuntimeDefinition(CTUDecl);
 }
 
-
 bool AnyFunctionCall::argumentsMayEscape() const {
   if (CallEvent::argumentsMayEscape() || hasVoidPointerToNonConstArg())
     return true;
