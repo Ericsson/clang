@@ -417,8 +417,6 @@ void AnalysisConsumer::storeTopLevelDecls(DeclGroupRef DG) {
   }
 }
 
-std::string getMangledName(const NamedDecl *ND, MangleContext *MangleCtx);
-
 static bool shouldSkipFunction(const Decl *D,
                                const SetOfConstDecls &Visited,
                                const SetOfConstDecls &VisitedAsTopLevel) {

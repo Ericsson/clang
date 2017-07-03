@@ -2231,4 +2231,3 @@ size_t SourceManager::getDataStructureSizes() const {
 
   return size;
 }
-
