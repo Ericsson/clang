@@ -29,8 +29,6 @@ parser.add_argument('-j', metavar='threads', dest='threads',
                     default=threading_factor)
 parser.add_argument('-v', dest='verbose', action='store_true',
                     help='Verbose output of every command executed')
-parser.add_argument('--use-usr', dest='usr', action='store_true',
-                    help='Use Unified Symbol Resolution (USR) for cross-referencing')
 parser.add_argument('--xtu-reparse', dest='reparse', action='store_true',
                     help='Use on-demand reparsing of external TUs (and do not dump ASTs).')
 parser.add_argument('--clang-path', metavar='clang-path', dest='clang_path',
@@ -173,8 +171,6 @@ def map_functions(command):
     funcmap_command = os.path.join(clang_path, 'clang-func-mapping') + \
         ' --xtu-dir ' + os.path.abspath(mainargs.xtuindir) + ' ' + \
         string.join(sources, ' ')     
-    if mainargs.usr:
-        funcmap_command += " -use-usr"
     if mainargs.reparse:
         funcmap_command += " -use-realpath"    
     funcmap_command += ' -- ' + string.join(args, ' ')

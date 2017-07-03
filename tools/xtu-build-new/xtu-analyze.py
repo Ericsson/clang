@@ -59,8 +59,6 @@ parser.add_argument('-j', metavar='threads', dest='threads',
                     default=threading_factor)
 parser.add_argument('-v', dest='verbose', action='store_true',
                     help='Verbose output of every command executed')
-parser.add_argument('--use-usr', dest='usr', action='store_true',
-                    help='Use Unified Symbol Resolution (USR) for cross-referencing')
 parser.add_argument('--xtu-reparse', dest='reparse', action='store_true',
                     help='Use on-demand reparsing of external TUs (and do not dump ASTs).')
 parser.add_argument('--clang-path', metavar='clang-path', dest='clang_path',
@@ -158,9 +156,6 @@ if mainargs.enabled_checkers:
     analyzer_params += ['-analyzer-checker', mainargs.enabled_checkers]
 if mainargs.disabled_checkers:
     analyzer_params += ['-analyzer-disable-checker', mainargs.disable_checkers]
-if mainargs.usr:
-    analyzer_params += ['-analyzer-config',
-                        'use-usr=true']
 if mainargs.reparse:
     analyzer_params += ['-analyzer-config',
                         'xtu-reparse='+os.path.abspath(mainargs.buildlog)]

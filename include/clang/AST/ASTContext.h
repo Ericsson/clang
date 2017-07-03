@@ -63,7 +63,6 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <iterator>
 #include <memory>
 #include <new>
@@ -79,14 +78,11 @@ struct fltSemantics;
 } // end namespace llvm
 
 namespace clang {
-class ASTImporter;
 class ASTMutationListener;
 class ASTRecordLayout;
-class ASTUnit;
 class AtomicExpr;
 class BlockExpr;
 class CharUnits;
-class CompilerInstance;
 class CXXABI;
 class DiagnosticsEngine;
 class Expr;
@@ -1907,23 +1903,6 @@ public:
   static bool isObjCNSObjectType(QualType Ty) {
     return Ty->isObjCNSObjectType();
   }
-
-  //===--------------------------------------------------------------------===//
-  //                         Cross-translation unit support
-  //===--------------------------------------------------------------------===//
-private:
-  llvm::StringMap<std::unique_ptr<clang::ASTUnit>> FileASTUnitMap;
-  llvm::StringMap<clang::ASTUnit *> FunctionAstUnitMap;
-  llvm::StringMap<std::string> FunctionFileMap;
-  llvm::DenseMap<TranslationUnitDecl *, std::unique_ptr<ASTImporter>>
-      ASTUnitImporterMap;
-  ASTImporter &getOrCreateASTImporter(ASTContext &From);
-
-public:
-  const FunctionDecl *getCTUDefinition(
-      const FunctionDecl *FD, CompilerInstance &CI, StringRef CTUDir,
-      std::string getUSR(const Decl*), DiagnosticsEngine &Diags,
-      std::function<std::unique_ptr<clang::ASTUnit>(StringRef)> Loader);
 
   //===--------------------------------------------------------------------===//
   //                         Type Sizing and Analysis

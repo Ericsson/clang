@@ -16,7 +16,6 @@
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclObjC.h"
-#include "clang/AST/Mangle.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Analysis/Analyses/LiveVariables.h"
 #include "clang/Analysis/CFG.h"
@@ -36,6 +35,7 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/AnalysisManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ExprEngine.h"
 #include "clang/StaticAnalyzer/Frontend/CheckerRegistration.h"
+#include "clang/Tooling/CrossTranslationUnit.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Support/FileSystem.h"
@@ -176,7 +176,7 @@ public:
   AnalyzerOptionsRef Opts;
   ArrayRef<std::string> Plugins;
   CodeInjector *Injector;
-  CompilerInstance &CI;
+  tooling::CrossTranslationUnit CTU;
 
   /// \brief Stores the declarations from the local translation unit.
   /// Note, we pre-compute the local declarations at parse time as an
@@ -206,7 +206,7 @@ public:
                    ArrayRef<std::string> plugins, CodeInjector *injector)
       : RecVisitorMode(0), RecVisitorBR(nullptr), Ctx(nullptr), PP(pp),
         OutDir(outdir), Opts(std::move(opts)), Plugins(plugins),
-        Injector(injector), CI(CI) {
+        Injector(injector), CTU(CI) {
     DigestAnalyzerOptions();
     if (Opts->PrintStats) {
       llvm::EnableStatistics(false);
@@ -424,9 +424,6 @@ void AnalysisConsumer::storeTopLevelDecls(DeclGroupRef DG) {
   }
 }
 
-extern std::string getMangledName(const NamedDecl *ND,
-                                  MangleContext *MangleCtx);
-
 void lockedWrite(const std::string &fileName, const std::string &content) {
   if (content.empty()) 
     return;
@@ -443,8 +440,7 @@ static bool shouldSkipFunction(const Decl *D,
                                const SetOfConstDecls &Visited,
                                const SetOfConstDecls &VisitedAsTopLevel,
                                llvm::StringSet<> &VisitedAsCTU,
-                               MangleContext *MangleCtx,
-                               const std::string &Triple) {
+                               std::string LookupFnName) {
   if (VisitedAsTopLevel.count(D))
     return true;
 
@@ -476,8 +472,7 @@ static bool shouldSkipFunction(const Decl *D,
   }
 
   if (FD && FD->hasExternalFormalLinkage()) {
-    std::string MangledFnName = getMangledName(FD, MangleCtx) + "@" + Triple;
-    if (VisitedAsCTU.count(MangledFnName))
+    if (VisitedAsCTU.count(LookupFnName))
       return true;
   }
   return false;
@@ -505,10 +500,6 @@ void AnalysisConsumer::HandleDeclsCallGraph(const unsigned LocalTUDeclsSize) {
   TextDiagnosticPrinter *DiagClient =
       new TextDiagnosticPrinter(llvm::errs(), &*DiagOpts);
   DiagnosticsEngine Diags(DiagID, &*DiagOpts, DiagClient);
-  std::unique_ptr<MangleContext> MangleCtx(
-      ItaniumMangleContext::create(*Ctx, Diags));
-  MangleCtx->setShouldForceMangleProto(true);
-  std::string Triple = Ctx->getTargetInfo().getTriple().getTriple();
 
   // Build the Call Graph by adding all the top level declarations to the graph.
   // Note: CallGraph can trigger deserialization of more items from a pch
@@ -533,7 +524,7 @@ void AnalysisConsumer::HandleDeclsCallGraph(const unsigned LocalTUDeclsSize) {
   llvm::StringSet<> VisitedAsCTU;
   std::string VisitedFuncSetFile;
   StringRef BuildDir = Opts->getCTUDir();
-  if (!BuildDir.empty() && !Opts->shouldReanalyzeXTUVisitedFns()) {
+  if (!BuildDir.empty() && !Opts->shouldReanalyzeCTUVisitedFns()) {
     clock_t t1 = clock();
     VisitedFuncSetFile = (BuildDir + "/visitedFunc.txt").str();
     std::ifstream VisitedFuncSetStream(VisitedFuncSetFile);
@@ -559,10 +550,14 @@ void AnalysisConsumer::HandleDeclsCallGraph(const unsigned LocalTUDeclsSize) {
     if (!D)
       continue;
 
+    std::string LookupName;
+    if (const auto *ND = dyn_cast<NamedDecl>(D->getCanonicalDecl()))
+      LookupName = CTU.getLookupName(ND);
+
     // Skip the functions which have been processed already or previously
     // inlined.
     if (shouldSkipFunction(D->getCanonicalDecl(), Visited, VisitedAsTopLevel,
-                           VisitedAsCTU, MangleCtx.get(), Triple))
+                           VisitedAsCTU, LookupName))
       continue;
 
     // Analyze the function.
@@ -580,25 +575,27 @@ void AnalysisConsumer::HandleDeclsCallGraph(const unsigned LocalTUDeclsSize) {
     VisitedAsTopLevel.insert(D);
   }
 
-  if (!BuildDir.empty() && !Opts->shouldReanalyzeXTUVisitedFns()) {
+  if (!BuildDir.empty() && !Opts->shouldReanalyzeCTUVisitedFns()) {
     clock_t t1 = clock();
     llvm::StringSet<> NewVisited;
 
     // FIXME: Unify these loops
     for (const Decl *D : Visited) {
-      std::string MN =
-          getMangledName(dyn_cast_or_null<FunctionDecl>(D), MangleCtx.get()) +
-          '@' + Triple;
-      if (!VisitedAsCTU.count(MN))
-        NewVisited.insert(MN);
+      std::string LookupName;
+      if (const auto *FD = dyn_cast<FunctionDecl>(D->getCanonicalDecl())) {
+        LookupName = CTU.getLookupName(FD);
+        if (!VisitedAsCTU.count(LookupName))
+          NewVisited.insert(LookupName);
+      }
     }
 
     for (const Decl *D : VisitedAsTopLevel) {
-      std::string MN =
-          getMangledName(dyn_cast_or_null<FunctionDecl>(D), MangleCtx.get()) +
-          '@' + Triple;
-      if (!VisitedAsCTU.count(MN))
-        NewVisited.insert(MN);
+      std::string LookupName;
+      if (const auto *FD = dyn_cast<FunctionDecl>(D->getCanonicalDecl())) {
+        LookupName = CTU.getLookupName(FD);
+        if (!VisitedAsCTU.count(LookupName))
+          NewVisited.insert(LookupName);
+      }
     }
 
     std::string NewVisitedString;
@@ -808,7 +805,7 @@ void AnalysisConsumer::ActionExprEngine(Decl *D, bool ObjCGCEnabled,
   if (!Mgr->getAnalysisDeclContext(D)->getAnalysis<RelaxedLiveVariables>())
     return;
 
-  ExprEngine Eng(CI, *Mgr, ObjCGCEnabled, VisitedCallees, &FunctionSummaries,
+  ExprEngine Eng(CTU, *Mgr, ObjCGCEnabled, VisitedCallees, &FunctionSummaries,
                  IMode);
 
   // Set the graph auditor.

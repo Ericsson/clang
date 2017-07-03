@@ -46,7 +46,7 @@ void test_macro(void) {
 //warning:implicit functions are prohibited by c99
 void test_implicit(){
     int res=ident_implicit(6);//external implicit functions are not inlined
-    clang_analyzer_eval(res == 6); // expected-warning{{UNKNOWN}}
+    clang_analyzer_eval(res == 6); // expected-warning{{TRUE}}
 }
 
 

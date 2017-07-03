@@ -400,17 +400,11 @@ StringRef AnalyzerOptions::getCTUReparseOnDemand() {
   return CTUReparseOnDemand.getValue();
 }
 
-bool AnalyzerOptions::getCTUUseUSR() {
-  if (!CTUUseUSR.hasValue())
-    CTUUseUSR = getBooleanOption("use-usr", false);
-  return CTUUseUSR.getValue();
-}
-
-bool AnalyzerOptions::shouldReanalyzeXTUVisitedFns() {
-  if (!ReanalyzeXTUVisitedFns.hasValue())
-    ReanalyzeXTUVisitedFns =
+bool AnalyzerOptions::shouldReanalyzeCTUVisitedFns() {
+  if (!ReanalyzeCTUVisitedFns.hasValue())
+    ReanalyzeCTUVisitedFns =
         getBooleanOption("reanalyze-xtu-visited", /*Default=*/false);
-  return ReanalyzeXTUVisitedFns.getValue();
+  return ReanalyzeCTUVisitedFns.getValue();
 }
 
 StringRef AnalyzerOptions::coverageExportDir() {

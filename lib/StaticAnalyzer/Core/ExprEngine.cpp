@@ -29,6 +29,7 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/LoopWidening.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/LoopUnrolling.h"
+#include "clang/Tooling/CrossTranslationUnit.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/LineIterator.h"
@@ -74,10 +75,10 @@ REGISTER_TRAIT_WITH_PROGRAMSTATE(InitializedTemporariesSet,
 
 static const char* TagProviderName = "ExprEngine";
 
-ExprEngine::ExprEngine(CompilerInstance &CI, AnalysisManager &mgr,
+ExprEngine::ExprEngine(tooling::CrossTranslationUnit &CTU, AnalysisManager &mgr,
                        bool gcEnabled, SetOfConstDecls *VisitedCalleesIn,
                        FunctionSummariesTy *FS, InliningModes HowToInlineIn)
-    : CI(CI), AMgr(mgr),
+    : CTU(CTU), AMgr(mgr),
       AnalysisDeclContexts(mgr.getAnalysisDeclContextManager()),
       Engine(*this, FS), G(Engine.getGraph()),
       StateMgr(getContext(), mgr.getStoreManagerCreator(),

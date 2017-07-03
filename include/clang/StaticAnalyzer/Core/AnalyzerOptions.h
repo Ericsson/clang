@@ -287,11 +287,8 @@ private:
   /// \sa getCTUReparseOnDemand
   Optional<StringRef> CTUReparseOnDemand;
 
-  /// \sa getCTUUseUSR
-  Optional<bool> CTUUseUSR;
-
   /// \sa shouldReanalyzeXTUVisitedFns
-  Optional<bool> ReanalyzeXTUVisitedFns;
+  Optional<bool> ReanalyzeCTUVisitedFns;
 
   /// \sa shouldRecordCoverage
   Optional<StringRef> CoverageExportDir;  
@@ -598,14 +595,10 @@ public:
   /// the binary representations from disk.
   StringRef getCTUReparseOnDemand();
 
-  /// When true is returned USRs will be used to cross reference functions
-  /// instead of the mangled names.
-  bool getCTUUseUSR();
-
   /// Returns whether functions that were analyzed from another translation unit
   /// should be reanalyzed again as top level in case it is not called in its
   /// own translation unit.
-  bool shouldReanalyzeXTUVisitedFns();
+  bool shouldReanalyzeCTUVisitedFns();
 
   /// Determines where the coverage info should be dumped to. The coverage
   /// information is recorded on the basic block level granularity.

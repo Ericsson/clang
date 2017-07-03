@@ -22,8 +22,7 @@
 #include "clang/Index/USRGeneration.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/DynamicTypeMap.h"
-#include "clang/Tooling/JSONCompilationDatabase.h"
-#include "clang/Tooling/Tooling.h"
+#include "clang/Tooling/CrossTranslationUnit.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/raw_ostream.h"
@@ -376,59 +375,15 @@ RuntimeDefinition AnyFunctionCall::getRuntimeDefinition() const {
 
   auto Engine = static_cast<ExprEngine *>(
       getState()->getStateManager().getOwningEngine());
-  CompilerInstance &CI = Engine->getCompilerInstance();
+  tooling::CrossTranslationUnit &CTU = Engine->getCrossTranslationUnit();
   AnalysisManager &AMgr = Engine->getAnalysisManager();
 
-  auto ASTLoader = [&](StringRef ASTFileName) {
-    IntrusiveRefCntPtr<DiagnosticOptions> DiagOpts = new DiagnosticOptions();
-    TextDiagnosticPrinter *DiagClient =
-        new TextDiagnosticPrinter(llvm::errs(), &*DiagOpts);
-    IntrusiveRefCntPtr<DiagnosticIDs> DiagID(new DiagnosticIDs());
-    IntrusiveRefCntPtr<DiagnosticsEngine> Diags(
-        new DiagnosticsEngine(DiagID, &*DiagOpts, DiagClient));
-    StringRef CompilationDatabasePath = AMgr.options.getCTUReparseOnDemand();
-    if (CompilationDatabasePath.empty()) {
-      return ASTUnit::LoadFromASTFile(
-          ASTFileName, CI.getPCHContainerOperations()->getRawReader(), Diags,
-          CI.getFileSystemOpts());
-    } else {
-      using namespace tooling;
-      std::string Error;
-      std::unique_ptr<JSONCompilationDatabase> CompDb =
-          JSONCompilationDatabase::loadFromFile(
-              CompilationDatabasePath, Error,
-              JSONCommandLineSyntax::AutoDetect);
-      if (!CompDb) {
-        llvm::errs() << Error << "\n";
-        return std::unique_ptr<ASTUnit>();
-      }
-      SmallVector<std::string, 1> Files;
-      Files.push_back(ASTFileName);
-      ClangTool Tool(*CompDb, Files, CI.getPCHContainerOperations());
-      std::vector<std::unique_ptr<ASTUnit>> ASTs;
-      Tool.buildASTs(ASTs);
-      assert(ASTs.size() == 1);
-      return std::move(ASTs[0]);
-    }
-  };
+  if (AMgr.options.getCTUDir().empty())
+    return RuntimeDefinition();
 
-  const FunctionDecl *CTUDecl = nullptr;
-  if (AMgr.options.getCTUUseUSR()) {
-    CTUDecl = AD->getASTContext().getCTUDefinition(
-        FD, CI, AMgr.options.getCTUDir(),
-        [](const Decl *D) {
-          SmallString<128> DeclUSR;
-          bool Ret = index::generateUSRForDecl(D, DeclUSR);
-          assert(!Ret);
-          return DeclUSR.str().str();
-        },
-        CI.getDiagnostics(), ASTLoader);
-  } else {
-    CTUDecl = AD->getASTContext().getCTUDefinition(
-        FD, CI, AMgr.options.getCTUDir(),
-        [](const Decl *) { return std::string{}; }, CI.getDiagnostics(),
-        ASTLoader);
-  }
+  const FunctionDecl *CTUDecl = CTU.getCrossTUDefinition(
+      FD, AMgr.options.getCTUDir(), "externalFnMap.txt",
+      AMgr.options.getCTUReparseOnDemand());
 
   return RuntimeDefinition(CTUDecl);
 }
