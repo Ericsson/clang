@@ -3,6 +3,7 @@
 import argparse
 import io
 import json
+import glob
 import multiprocessing
 import os
 import re
@@ -10,9 +11,14 @@ import signal
 import subprocess
 import string
 import shlex
+import shutil
+import tempfile
 
 threading_factor = int(multiprocessing.cpu_count() * 1.5)
 timeout = 86400
+EXTERNAL_FUNCTION_MAP_FILENAME = 'externalFnMap.txt'
+TEMP_EXTERNAL_FNMAP_FOLDER = 'tmpExternalFnMaps'
+
 
 parser = argparse.ArgumentParser(
     description='Executes 1st pass of XTU analysis')
@@ -163,20 +169,55 @@ def generate_ast(source):
     subprocess.call(dir_command + " && " + ast_command, shell=True)
 
 
-def map_functions(command):
+def map_functions(params):
+    command, sources, directory, clang_path, ctuindir = params
+    ctuindir = os.path.abspath(ctuindir)
     args = get_command_arguments(command)
-    sources = cmd_2_src[command]
-    dir_command = 'cd ' + src_2_dir[sources[0]]
-    
-    funcmap_command = os.path.join(clang_path, 'clang-func-mapping') + \
-        ' --xtu-dir ' + os.path.abspath(mainargs.xtuindir) + ' ' + \
-        string.join(sources, ' ')     
-    if mainargs.reparse:
-        funcmap_command += " -use-realpath"    
-    funcmap_command += ' -- ' + string.join(args, ' ')
+    arch = get_triple_arch(clang_path, args, sources[0])
+    funcmap_command = [os.path.join(clang_path, 'clang-func-mapping')]
+    funcmap_command.extend(sources)
+    funcmap_command.append('--')
+    funcmap_command.extend(args)
+    output = []
+    os.chdir(directory);
     if mainargs.verbose:
         print funcmap_command
-    subprocess.call(dir_command + " && " + funcmap_command, shell=True)
+    fn_out = subprocess.check_output(funcmap_command)
+    fn_list = fn_out.splitlines()
+    for fn_txt in fn_list:
+        dpos = fn_txt.find(" ")
+        mangled_name = fn_txt[0:dpos]
+        path = fn_txt[dpos + 1:]
+        ast_path = os.path.join("ast", arch, path[1:] + ".ast")
+        output.append(mangled_name + "@" + arch + " " + ast_path)
+    extern_fns_map_folder = os.path.join(ctuindir,
+                                         TEMP_EXTERNAL_FNMAP_FOLDER)
+    if output:
+        with tempfile.NamedTemporaryFile(mode='w',
+                                         dir=extern_fns_map_folder,
+                                         delete=False) as out_file:
+            out_file.write("\n".join(output) + "\n")
+
+
+def create_external_fn_maps(ctuindir):
+    files = glob.glob(os.path.join(ctuindir, TEMP_EXTERNAL_FNMAP_FOLDER,
+                                   '*'))
+    extern_fns_map_file = os.path.join(ctuindir,
+                                       EXTERNAL_FUNCTION_MAP_FILENAME)
+    mangled_to_asts = {}
+    for filename in files:
+        with open(filename, 'rb') as in_file:
+            for line in in_file:
+                mangled_name, ast_file = line.strip().split(' ', 1)
+                if mangled_name not in mangled_to_asts:
+                    mangled_to_asts[mangled_name] = {ast_file}
+                else:
+                    mangled_to_asts[mangled_name].add(ast_file)
+    with open(extern_fns_map_file, 'wb') as out_file:
+        for mangled_name, ast_files in mangled_to_asts.iteritems():
+            if len(ast_files) == 1:
+                out_file.write('%s %s\n' % (mangled_name, ast_files.pop()))
+
 
 if not os.path.exists(mainargs.xtuindir):
     os.makedirs(mainargs.xtuindir)
@@ -201,11 +242,16 @@ if not mainargs.reparse:   #only generate AST dumps is reparse is off
         ast_workers.close()
         ast_workers.join()
 
+
+shutil.rmtree(os.path.join(mainargs.xtuindir, TEMP_EXTERNAL_FNMAP_FOLDER), ignore_errors=True)
+os.mkdir(os.path.join(mainargs.xtuindir, TEMP_EXTERNAL_FNMAP_FOLDER))
 original_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
 funcmap_workers = multiprocessing.Pool(processes=int(mainargs.threads))
 signal.signal(signal.SIGINT, original_handler)
 try:
-    res = funcmap_workers.map_async(map_functions, cmd_order)
+    res = funcmap_workers.map_async(map_functions,
+                                    [(cmd, cmd_2_src[cmd], src_2_dir[cmd_2_src[cmd][0]],
+                                      clang_path, mainargs.xtuindir) for cmd in cmd_order])
     res.get(mainargs.timeout)
 except KeyboardInterrupt:
     funcmap_workers.terminate()
@@ -218,48 +264,51 @@ else:
 
 # Generate externalFnMap.txt
 
-func_2_file = {}
-func_2_size = {}
-extfunc_2_file = {}
-func_2_fileset = {}
+create_external_fn_maps(mainargs.xtuindir)
+shutil.rmtree(os.path.join(mainargs.xtuindir, TEMP_EXTERNAL_FNMAP_FOLDER), ignore_errors=True)
 
-defined_fns_filename = os.path.join(mainargs.xtuindir, 'definedFns.txt')
-with open(defined_fns_filename,  'r') as defined_fns_file:
-    for line in defined_fns_file:
-        funcname, filename, funlen = line.strip().split(' ')
-        if funcname.startswith('!'):
-            funcname = funcname[1:]  # main function
-        if funcname not in func_2_file.keys():
-            func_2_fileset[funcname] = set([filename])
-        else:
-            func_2_fileset[funcname].add(filename)
-        func_2_file[funcname] = filename
-        func_2_size[funcname] = funlen
+# func_2_file = {}
+# func_2_size = {}
+# extfunc_2_file = {}
+# func_2_fileset = {}
 
-extern_fns_filename = os.path.join(mainargs.xtuindir, 'externalFns.txt')
-with open(extern_fns_filename,  'r') as extern_fns_file:
-    for line in extern_fns_file:
-        line = line.strip()
-        if line in func_2_file and line not in extfunc_2_file:
-            extfunc_2_file[line] = func_2_file[line]
+# defined_fns_filename = os.path.join(mainargs.xtuindir, 'definedFns.txt')
+# with open(defined_fns_filename,  'r') as defined_fns_file:
+#     for line in defined_fns_file:
+#         funcname, filename, funlen = line.strip().split(' ')
+#         if funcname.startswith('!'):
+#             funcname = funcname[1:]  # main function
+#         if funcname not in func_2_file.keys():
+#             func_2_fileset[funcname] = set([filename])
+#         else:
+#             func_2_fileset[funcname].add(filename)
+#         func_2_file[funcname] = filename
+#         func_2_size[funcname] = funlen
 
-extern_fns_map_filename = os.path.join(mainargs.xtuindir, 'externalFnMap.txt')
-with open(extern_fns_map_filename, 'w') as out_file:
-    for func, fname in extfunc_2_file.items():
-        if len(func_2_fileset[func]) == 1:
-            if not mainargs.reparse:
-                out_file.write('%s %s.ast\n' % (func, fname))
-            else:
-                out_file.write('%s %s\n' % (func, fname))
+# extern_fns_filename = os.path.join(mainargs.xtuindir, 'externalFns.txt')
+# with open(extern_fns_filename,  'r') as extern_fns_file:
+#     for line in extern_fns_file:
+#         line = line.strip()
+#         if line in func_2_file and line not in extfunc_2_file:
+#             extfunc_2_file[line] = func_2_file[line]
+
+# extern_fns_map_filename = os.path.join(mainargs.xtuindir, 'externalFnMap.txt')
+# with open(extern_fns_map_filename, 'w') as out_file:
+#     for func, fname in extfunc_2_file.items():
+#         if len(func_2_fileset[func]) == 1:
+#             if not mainargs.reparse:
+#                 out_file.write('%s %s.ast\n' % (func, fname))
+#             else:
+#                 out_file.write('%s %s\n' % (func, fname))
 
 
 # Build dependency graph
 
-script_dir = os.path.dirname(os.path.realpath(__file__))
-graph_script = os.path.join(script_dir, 'lib/xtu-build-graph.py')
-graph_script += ' -b ' + mainargs.buildlog + ' -o '
-graph_script += os.path.join(mainargs.xtuindir, 'build_dependency.json')
-graph_script += ' -d ' + defined_fns_filename
-graph_script += ' -e ' + extern_fns_filename
-graph_script += ' -c ' + os.path.join(mainargs.xtuindir, 'cfg.txt')
-subprocess.call(graph_script, shell=True)
+# script_dir = os.path.dirname(os.path.realpath(__file__))
+# graph_script = os.path.join(script_dir, 'lib/xtu-build-graph.py')
+# graph_script += ' -b ' + mainargs.buildlog + ' -o '
+# graph_script += os.path.join(mainargs.xtuindir, 'build_dependency.json')
+# graph_script += ' -d ' + defined_fns_filename
+# graph_script += ' -e ' + extern_fns_filename
+# graph_script += ' -c ' + os.path.join(mainargs.xtuindir, 'cfg.txt')
+# subprocess.call(graph_script, shell=True)

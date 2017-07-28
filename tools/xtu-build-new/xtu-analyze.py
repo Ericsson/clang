@@ -105,6 +105,11 @@ concurrent_threads = 0
 concurrent_thread_times = [0.0]
 concurrent_thread_last_clock = time.time()
 
+if mainargs.norevisit:
+    print 'No-revisit mode is no longer supported.'
+    sys.exit(1)
+
+
 if mainargs.no_xtu and mainargs.norevisit:
     print 'No XTU related option can be used in non-XTU mode.'
     sys.exit(1)
