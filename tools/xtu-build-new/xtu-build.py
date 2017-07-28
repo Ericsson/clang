@@ -170,7 +170,7 @@ def generate_ast(source):
 
 
 def map_functions(params):
-    command, sources, directory, clang_path, ctuindir = params
+    command, sources, directory, clang_path, ctuindir, reparse = params
     ctuindir = os.path.abspath(ctuindir)
     args = get_command_arguments(command)
     arch = get_triple_arch(clang_path, args, sources[0])
@@ -188,7 +188,9 @@ def map_functions(params):
         dpos = fn_txt.find(" ")
         mangled_name = fn_txt[0:dpos]
         path = fn_txt[dpos + 1:]
-        ast_path = os.path.join("ast", arch, path[1:] + ".ast")
+        ast_path = path
+        if not reparse:
+            ast_path = os.path.join("ast", arch, path[1:] + ".ast")
         output.append(mangled_name + "@" + arch + " " + ast_path)
     extern_fns_map_folder = os.path.join(ctuindir,
                                          TEMP_EXTERNAL_FNMAP_FOLDER)
@@ -251,7 +253,7 @@ signal.signal(signal.SIGINT, original_handler)
 try:
     res = funcmap_workers.map_async(map_functions,
                                     [(cmd, cmd_2_src[cmd], src_2_dir[cmd_2_src[cmd][0]],
-                                      clang_path, mainargs.xtuindir) for cmd in cmd_order])
+                                      clang_path, mainargs.xtuindir, mainargs.reparse) for cmd in cmd_order])
     res.get(mainargs.timeout)
 except KeyboardInterrupt:
     funcmap_workers.terminate()
