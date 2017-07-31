@@ -23,85 +23,39 @@
 #include "clang/Index/USRGeneration.h"
 #include "clang/Tooling/CommonOptionsParser.h"
 #include "clang/Tooling/Tooling.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Signals.h"
-#include <assert.h>
-#include <fstream>
 #include <sstream>
 #include <string>
-#include <sys/file.h>
-#include <unistd.h>
 #include <vector>
 
 using namespace llvm;
 using namespace clang;
 using namespace clang::tooling;
 
-typedef StringSet<> StrSet;
-typedef StringMap<StrSet> CallGraph;
-
 static cl::OptionCategory ClangFnMapGenCategory("clang-fnmapgen options");
-static cl::opt<std::string> CTUDir(
-    "xtu-dir",
-    cl::desc(
-        "Directory that contains the CTU related files (e.g.: AST dumps)."),
-    cl::init(""), cl::cat(ClangFnMapGenCategory));
-
-static cl::opt<bool>
-    UseRP("use-realpath",
-          cl::desc("Use real path of source files names in output files."),
-          cl::init(false), cl::cat(ClangFnMapGenCategory));
-
-static void lockedWrite(StringRef FileName, StringRef Content) {
-  int fd = open(FileName.str().c_str(), O_CREAT | O_WRONLY | O_APPEND, 0666);
-  flock(fd, LOCK_EX);
-  ssize_t written = write(fd, Content.data(), Content.size());
-  assert(written == (ssize_t)Content.size());
-  (void)written;
-  flock(fd, LOCK_UN);
-  close(fd);
-}
-
-static std::string getTripleSuffix(ASTContext &Ctx) {
-  // We are not going to support vendor and don't support OS and environment.
-  // FIXME: support OS and environment correctly.
-  Triple::ArchType T = Ctx.getTargetInfo().getTriple().getArch();
-  if (T == Triple::thumb)
-    T = Triple::arm;
-  return Ctx.getTargetInfo().getTriple().getArchTypeName(T);
-}
 
 class MapFunctionNamesConsumer : public ASTConsumer {
-private:
-  ASTContext &Ctx;
-  std::stringstream DefinedFuncsStr;
-  std::stringstream ExternFuncStr;
-  CallGraph CG;
-
 public:
   MapFunctionNamesConsumer(ASTContext &Context) : Ctx(Context) {}
-  std::string CurrentFileName;
 
-  ~MapFunctionNamesConsumer();
+  ~MapFunctionNamesConsumer() {
+    // Flush results to standard output.
+    llvm::outs() << DefinedFuncsStr.str();
+  }
+
   virtual void HandleTranslationUnit(ASTContext &Ctx) {
     handleDecl(Ctx.getTranslationUnitDecl());
   }
 
 private:
-  bool isCLibraryFunction(const FunctionDecl *FD);
+  std::string getLookupName(const FunctionDecl *FD);
   void handleDecl(const Decl *D);
 
-  class WalkAST : public ConstStmtVisitor<WalkAST> {
-    MapFunctionNamesConsumer &Parent;
-    std::string CurrentFuncName;
-
-  public:
-    WalkAST(MapFunctionNamesConsumer &parent, const std::string &FuncName)
-        : Parent(parent), CurrentFuncName(FuncName) {}
-    void VisitCallExpr(const CallExpr *CE);
-    void VisitStmt(const Stmt *S) { VisitChildren(S); }
-    void VisitChildren(const Stmt *S);
-  };
+  ASTContext &Ctx;
+  std::stringstream DefinedFuncsStr;
+  std::string CurrentFileName;
 };
 
 void MapFunctionNamesConsumer::handleDecl(const Decl *D) {
@@ -109,107 +63,38 @@ void MapFunctionNamesConsumer::handleDecl(const Decl *D) {
     return;
 
   if (const auto *FD = dyn_cast<FunctionDecl>(D)) {
-    if (const Stmt *Body = FD->getBody()) {
-      const SourceManager &SM = Ctx.getSourceManager();
-      if (CurrentFileName.empty()) {
-        StringRef SMgrName =
-            SM.getFileEntryForID(SM.getMainFileID())->getName();
-        char *Path = realpath(SMgrName.str().c_str(), nullptr);
-        CurrentFileName = Path;
-        free(Path);
+    if (FD->isThisDeclarationADefinition()) {
+      if (const Stmt *Body = FD->getBody()) {
+        SmallString<128> LookupName;
+        bool Res = index::generateUSRForDecl(D, LookupName);
+        assert(!Res);
+        (void)Res;
+        const SourceManager &SM = Ctx.getSourceManager();
+        if (CurrentFileName.empty()) {
+          StringRef SMgrName =
+              SM.getFileEntryForID(SM.getMainFileID())->getName();
+          char *Path = realpath(SMgrName.str().c_str(), nullptr);
+          CurrentFileName = Path;
+          free(Path);
+        }
+
+        switch (FD->getLinkageInternal()) {
+        case ExternalLinkage:
+        case VisibleNoLinkage:
+        case UniqueExternalLinkage:
+          if (SM.isInMainFile(Body->getLocStart()))
+            DefinedFuncsStr << LookupName.str().str() << " " << CurrentFileName
+                            << "\n";
+        default:
+          break;
+        }
       }
-
-      SmallString<128> FileName("");
-      if (!UseRP) {
-        FileName = "ast";
-        llvm::sys::path::append(FileName, getTripleSuffix(Ctx),
-                                CurrentFileName);
-      } else
-        FileName = CurrentFileName;
-      std::string FullName;
-      SmallString<128> DeclUSR;
-      bool Res = index::generateUSRForDecl(D, DeclUSR);
-      assert(!Res);
-      FullName = DeclUSR.str().str();
-
-      switch (FD->getLinkageInternal()) {
-      case ExternalLinkage:
-      case VisibleNoLinkage:
-      case UniqueExternalLinkage:
-        if (SM.isInMainFile(Body->getLocStart()))
-          DefinedFuncsStr << "!";
-        DefinedFuncsStr << FullName << " " << FileName.c_str() << " 0\n";
-      default:
-        break;
-      }
-
-      WalkAST Walker(*this, FullName);
-      Walker.Visit(Body);
-    } else if (!FD->getBody() && !FD->getBuiltinID()) {
-      std::string MangledName;
-      SmallString<128> DeclUSR;
-      bool Res = index::generateUSRForDecl(D, DeclUSR);
-      assert(!Res);
-      MangledName = DeclUSR.str().str();
-
-      ExternFuncStr << MangledName << "\n";
     }
   }
 
   if (const auto *DC = dyn_cast<DeclContext>(D))
     for (const Decl *D : DC->decls())
       handleDecl(D);
-}
-
-bool MapFunctionNamesConsumer::isCLibraryFunction(const FunctionDecl *FD) {
-  SourceManager &SM = Ctx.getSourceManager();
-  if (!FD)
-    return false;
-  SourceLocation Loc = FD->getLocation();
-  if (Loc.isValid())
-    return SM.isInSystemHeader(Loc);
-  return true;
-}
-
-MapFunctionNamesConsumer::~MapFunctionNamesConsumer() {
-  // Flush results to files.
-  SmallString<128> ExternalFns(CTUDir);
-  SmallString<128> DefinedFns(CTUDir);
-  SmallString<128> CfgFile(CTUDir);
-  llvm::sys::path::append(ExternalFns, "externalFns.txt");
-  llvm::sys::path::append(DefinedFns, "definedFns.txt");
-  llvm::sys::path::append(CfgFile, "cfg.txt");
-  lockedWrite(ExternalFns, ExternFuncStr.str());
-  lockedWrite(DefinedFns, DefinedFuncsStr.str());
-  std::ostringstream CFGStr;
-  for (auto &Entry : CG) {
-    CFGStr << CurrentFileName << "::" << Entry.getKey().data();
-    for (auto &E : Entry.getValue())
-      CFGStr << ' ' << E.getKey().data();
-    CFGStr << '\n';
-  }
-
-  lockedWrite(CfgFile, CFGStr.str());
-}
-
-void MapFunctionNamesConsumer::WalkAST::VisitChildren(const Stmt *S) {
-  for (const Stmt *CS : S->children())
-    if (CS)
-      Visit(CS);
-}
-
-void MapFunctionNamesConsumer::WalkAST::VisitCallExpr(const CallExpr *CE) {
-  const auto *FD = dyn_cast_or_null<FunctionDecl>(CE->getCalleeDecl());
-  if (FD && !FD->getBuiltinID()) {
-    std::string MangledName;
-    SmallString<128> DeclUSR;
-    bool Res = index::generateUSRForDecl(FD, DeclUSR);
-    assert(!Res);
-    MangledName = DeclUSR.str().str();
-    std::string FuncName = (FD->hasBody() ? "::" : "") + MangledName;
-    Parent.CG[CurrentFuncName].insert(FuncName);
-  }
-  VisitChildren(CE);
 }
 
 class MapFunctionNamesAction : public ASTFrontendAction {
@@ -222,29 +107,21 @@ protected:
   }
 };
 
+static cl::extrahelp CommonHelp(CommonOptionsParser::HelpMessage);
+
 int main(int argc, const char **argv) {
   // Print a stack trace if we signal out.
   sys::PrintStackTraceOnErrorSignal(argv[0], false);
   PrettyStackTraceProgram X(argc, argv);
 
-  SmallVector<std::string, 4> Sources;
+  const char *Overview = "\nThis tool collects the USR name and location "
+                         "of all functions definitions in the source files "
+                         "(excluding headers).\n";
   CommonOptionsParser OptionsParser(argc, argv, ClangFnMapGenCategory,
-                                    cl::ZeroOrMore);
+                                    cl::ZeroOrMore, Overview);
 
-  if (CTUDir.getNumOccurrences() != 1) {
-    errs() << "Exactly one CTU dir should be provided\n";
-    return 1;
-  }
-  const StringRef cppFile = ".cpp", ccFile = ".cc", cFile = ".c",
-                  cxxFile = ".cxx";
-  for (int i = 1; i < argc; i++) {
-    StringRef arg = argv[i];
-    if (arg.endswith(cppFile) || arg.endswith(ccFile) || arg.endswith(cFile) ||
-        arg.endswith(cxxFile)) {
-      Sources.push_back(arg);
-    }
-  }
-  ClangTool Tool(OptionsParser.getCompilations(), Sources);
+  ClangTool Tool(OptionsParser.getCompilations(),
+                 OptionsParser.getSourcePathList());
   Tool.run(newFrontendActionFactory<MapFunctionNamesAction>().get());
   return 0;
 }
