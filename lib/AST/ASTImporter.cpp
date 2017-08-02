@@ -281,6 +281,7 @@ namespace clang {
     Expr *VisitCXXConstructExpr(CXXConstructExpr *E);
     Expr *VisitCXXMemberCallExpr(CXXMemberCallExpr *E);
     Expr *VisitCXXDependentScopeMemberExpr(CXXDependentScopeMemberExpr *E);
+    Expr *VisitCXXUnresolvedConstructExpr(CXXUnresolvedConstructExpr *CE);
     Expr *VisitExprWithCleanups(ExprWithCleanups *EWC);
     Expr *VisitCXXThisExpr(CXXThisExpr *E);
     Expr *VisitCXXBoolLiteralExpr(CXXBoolLiteralExpr *E);
@@ -5817,6 +5818,33 @@ Expr *ASTNodeImporter::VisitCXXDependentScopeMemberExpr(
                                                      Importer.Import(E->getFirstQualifierFoundInScope())),
                                              MemberNameInfo,
                                              ResInfo);
+}
+
+Expr *ASTNodeImporter::VisitCXXUnresolvedConstructExpr(
+        CXXUnresolvedConstructExpr *CE) {
+
+  unsigned NumArgs = CE->arg_size();
+
+  llvm::SmallVector<Expr *, 2> ToArgs(NumArgs);
+
+  for (unsigned ai = 0, ae = NumArgs; ai != ae; ++ai) {
+    Expr *FromArg = CE->getArg(ai);
+    Expr *ToArg = Importer.Import(FromArg);
+    if (!ToArg)
+      return nullptr;
+    ToArgs[ai] = ToArg;
+  }
+
+  Expr **ToArgs_Copied = new (Importer.getToContext())
+          Expr*[NumArgs];
+
+  for (unsigned ai = 0, ae = NumArgs; ai != ae; ++ai)
+    ToArgs_Copied[ai] = ToArgs[ai];
+
+  return CXXUnresolvedConstructExpr::Create(
+          Importer.getToContext(), Importer.Import(CE->getTypeSourceInfo()),
+          Importer.Import(CE->getLParenLoc()), llvm::makeArrayRef(ToArgs_Copied, NumArgs),
+          Importer.Import(CE->getRParenLoc()));
 }
 
 Expr *ASTNodeImporter::VisitCallExpr(CallExpr *E) {
