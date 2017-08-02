@@ -488,6 +488,15 @@ TEST(ImportType, ImportAtomicType) {
                                        has(atomicType()))))))))));
 }
 
+TEST(ImportDecl, ImportFunctionTemplateDecl) {
+  MatchVerifier<Decl> Verifier;
+  EXPECT_TRUE(
+        testImport(
+          "template <typename T> void declToImport() { };",
+          Lang_CXX, "", Lang_CXX, Verifier,
+          functionTemplateDecl()));
+}
+
 
 } // end namespace ast_matchers
 } // end namespace clang
