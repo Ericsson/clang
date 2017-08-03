@@ -73,13 +73,17 @@ add_clang_library(clangStaticAnalyzerCheckers
   RetainCountChecker.cpp
   ReturnPointerRangeChecker.cpp
   ReturnUndefChecker.cpp
+  ReturnValueCheckStatisticsCollector.cpp
   SimpleStreamChecker.cpp
+  SpecialReturnValueChecker.cpp
+  SpecialReturnValueStatisticsCollector.cpp
   StackAddrEscapeChecker.cpp
   StdLibraryFunctionsChecker.cpp
   StreamChecker.cpp
   TaintTesterChecker.cpp
   TestAfterDivZeroChecker.cpp
   TraversalChecker.cpp
+  UncheckedReturnValueChecker.cpp
   UndefBranchChecker.cpp
   UndefCapturedBlockVarChecker.cpp
   UndefResultChecker.cpp
