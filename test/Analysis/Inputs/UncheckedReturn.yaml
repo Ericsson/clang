@@ -1,0 +1,7 @@
+#
+# UncheckedReturn metadata format 1.0
+
+- inData1
+- inData2
+- ns::inData3
+- templateTest

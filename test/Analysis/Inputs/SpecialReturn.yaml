@@ -1,0 +1,5 @@
+#
+# SpecialReturn metadata format 1.0
+
+{name: negative_return, relation: LT, value: 0}
+{name: null_return, relation: EQ, value: 0}
