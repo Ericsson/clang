@@ -81,11 +81,6 @@ parser.add_argument('--output-format', metavar='format',
 # parser.add_argument('--timeout', metavar='N',
 #                     help='Timeout for analysis in seconds (default: %d)' %
 #                     timeout, default=timeout)
-parser.add_argument('--do-not-revisit', dest='norevisit',
-                    action='store_true',
-                    help='Never reanalyze functions twice following '
-                         'topological order in generated build dependency '
-                         'graph file (lowers performance)')
 parser.add_argument('--no-xtu', dest='no_xtu', action='store_true',
                     help='Do not use XTU at all, '
                          'only do normal static analysis')
@@ -104,15 +99,6 @@ mainargs = parser.parse_args()
 concurrent_threads = 0
 concurrent_thread_times = [0.0]
 concurrent_thread_last_clock = time.time()
-
-if mainargs.norevisit:
-    print 'No-revisit mode is no longer supported.'
-    sys.exit(1)
-
-
-if mainargs.no_xtu and mainargs.norevisit:
-    print 'No XTU related option can be used in non-XTU mode.'
-    sys.exit(1)
 
 
 def executable_exists(path, exe_name):
@@ -167,8 +153,6 @@ if mainargs.reparse:
 if not mainargs.no_xtu:
     analyzer_params += ['-analyzer-config',
                         'xtu-dir=' + os.path.abspath(mainargs.xtuindir)]
-if not mainargs.norevisit:
-    analyzer_params += ['-analyzer-config', 'reanalyze-xtu-visited=true']
 if mainargs.record_coverage:
     gcov_tmppath = os.path.abspath(os.path.join(mainargs.xtuoutdir,
                                                 gcov_tmpdir))
@@ -204,7 +188,7 @@ buildlog_file = open(mainargs.buildlog, 'r')
 buildlog = json.load(buildlog_file)
 buildlog_file.close()
 
-if not mainargs.no_xtu and mainargs.norevisit:
+if not mainargs.no_xtu:
     bg_file = os.path.join(mainargs.xtuindir, 'build_dependency.json')
     buildgraph_file = open(bg_file, 'r')
     buildgraph = json.load(buildgraph_file)
@@ -230,7 +214,7 @@ for step in buildlog:
         src_build_steps += 1
     all_build_steps += 1
 
-if not mainargs.no_xtu and mainargs.norevisit:
+if not mainargs.no_xtu:
     for dep in buildgraph:
         assert len(dep) == 2
         assert dep[0] >= 0 and dep[0] < src_build_steps

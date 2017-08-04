@@ -394,13 +394,6 @@ StringRef AnalyzerOptions::getCTUReparseOnDemand() {
   return CTUReparseOnDemand.getValue();
 }
 
-bool AnalyzerOptions::shouldReanalyzeCTUVisitedFns() {
-  if (!ReanalyzeCTUVisitedFns.hasValue())
-    ReanalyzeCTUVisitedFns =
-        getBooleanOption("reanalyze-xtu-visited", /*Default=*/false);
-  return ReanalyzeCTUVisitedFns.getValue();
-}
-
 StringRef AnalyzerOptions::coverageExportDir() {
   if (!CoverageExportDir.hasValue())
     CoverageExportDir = getOptionAsString("record-coverage", /*Default=*/"");
