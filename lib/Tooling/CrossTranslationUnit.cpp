@@ -53,6 +53,7 @@ std::string CrossTranslationUnit::getLookupName(const NamedDecl *ND) {
   SmallString<128> DeclUSR;
   bool Ret = index::generateUSRForDecl(ND, DeclUSR);
   assert(!Ret);
+  (void)Ret;
   return DeclUSR.str();
 }
 
@@ -110,8 +111,17 @@ const FunctionDecl *CrossTranslationUnit::getCrossTUDefinition(
         if (Pos > 0 && Pos != std::string::npos) {
           FunctionName = LineRef.substr(0, Pos);
           FileName = LineRef.substr(Pos + 1);
-          SmallString<256> FilePath = CrossTUDir;
-          llvm::sys::path::append(FilePath, FileName);
+          SmallString<256> FilePath;
+          if (llvm::sys::path::is_absolute(FileName)) {
+            FilePath = FileName;
+          } else {
+            FilePath = CrossTUDir;
+            llvm::sys::path::append(FilePath, FileName);
+            if (!CompilationDatabase.empty()) {
+              Context.getDiagnostics().Report(diag::err_fnmap_absolute)
+                  << ExternalFunctionMap << (LineNo + 1);
+            }
+          }
           FunctionFileMap[FunctionName] = FilePath.str().str();
         } else {
           Context.getDiagnostics().Report(diag::err_fnmap_parsing)
