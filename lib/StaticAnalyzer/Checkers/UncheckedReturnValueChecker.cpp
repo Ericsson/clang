@@ -5,6 +5,30 @@
 // This file is distributed under the University of Illinois Open Source
 // License. See LICENSE.TXT for details.
 //
+// This checker finds calls to functions where the return value of the called
+// function should be checked but it is not used in any way: not stored,
+// not compared to some value, not passed as argument of another function etc.
+//
+// The names of functions whose return value is to be checked must be listed
+// in a YAML file called `UncheckedReturn.yaml`. The location of this file
+// must be passed to the checker as analyzer option `api-metadata-path`.
+//
+// Example YAML file:
+//
+//--- UncheckedReturn.yaml ---------------------------------------------------//
+//
+// #
+// # UncheckedReturn metadata format 1.0
+//
+// - functionName1
+// - functionName2
+// - namespaceName::functionName3
+//
+//----------------------------------------------------------------------------//
+//
+// To auto-generate this YAML file on statistical base see checker
+// `statisticsCollector.ReturnValueCheck`.
+//
 //===----------------------------------------------------------------------===//
 
 #include "ClangSACheckers.h"
@@ -73,25 +97,17 @@ void UncheckedReturnValueVisitor::checkUncheckedReturnValue(CallExpr *CE) {
   llvm::raw_svector_ostream os(buf);
   os << "Return value is not checked in call to '" << *FD << '\'';
 
-  const char *bugType = "Unchecked return value";
-
   PathDiagnosticLocation CELoc =
       PathDiagnosticLocation::createBegin(CE, BR.getSourceManager(), AC);
 
-  BR.EmitBasicReport(AC->getDecl(), CN, bugType, "API", os.str(), CELoc);
+  BR.EmitBasicReport(AC->getDecl(), CN, "Unchecked return value", "API",
+                     os.str(), CELoc);
 }
 
 namespace {
 class UncheckedReturnValueChecker : public Checker<check::ASTCodeBody> {
 public:
-  std::unique_ptr<BugType> UncheckedReturnValueBugType;
-
-  UncheckedReturnValueChecker() {
-    UncheckedReturnValueBugType.reset(
-        new BugType(getCheckName(),
-                    "Return value unchecked", "Misuse of APIs"));
-    UncheckedReturnValueBugType->setSuppressOnSink(true);
-  }
+  UncheckedReturnValueChecker() {}
 
   void checkASTCodeBody(const Decl *D, AnalysisManager& mgr,
                         BugReporter &BR) const {

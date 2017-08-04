@@ -5,6 +5,12 @@
 // This file is distributed under the University of Illinois Open Source
 // License. See LICENSE.TXT for details.
 //
+// This checker collects statistics about calls whether their return value
+// is used (assigned, compared or passed as argument).  Warnings emitted are
+// not for human consumption. Instead, the output of the checker must be piped
+// into `tools/gen_yaml_for_return_value_checks.sh` in order to generate file
+// `UncheckedReturn.yaml` for checker `api.UncheckedReturn`.
+//
 //===----------------------------------------------------------------------===//
 
 #include "ClangSACheckers.h"
@@ -22,7 +28,7 @@ class ReturnValueCheckVisitor : public StmtVisitor<ReturnValueCheckVisitor> {
   BugReporter &BR;
   AnalysisDeclContext *AC;
   const CheckName &CN;
-  std::map<CallExpr *, bool> Calls;
+  llvm::DenseMap<const CallExpr *, bool> Calls;
 
 public:
   ReturnValueCheckVisitor(BugReporter &br, AnalysisDeclContext *ac,
@@ -80,29 +86,21 @@ void ReturnValueCheckVisitor::VisitCallExpr(CallExpr *CE) {
 
 void ReturnValueCheckVisitor::VisitCompoundStmt(CompoundStmt *S) {
   for (Stmt *Child : S->children()) {
-    if (Child) {
-      if (CallExpr *CE = dyn_cast<CallExpr>(Child)) {
-        Calls[CE] = true;
-      }
-      Visit(Child);
+    if (CallExpr *CE = dyn_cast_or_null<CallExpr>(Child)) {
+      Calls[CE] = true;
     }
+    Visit(Child);
   }
 }
 
 namespace {
 class ReturnValueCheckStatisticsCollector : public Checker<check::ASTCodeBody> {
 public:
-  std::unique_ptr<BugType> UncheckedReturnValueBugType;
+  ReturnValueCheckStatisticsCollector() {}
 
-  ReturnValueCheckStatisticsCollector() {
-    UncheckedReturnValueBugType.reset(new BugType(
-        getCheckName(), "Return value unchecked", "Misuse of APIs"));
-    UncheckedReturnValueBugType->setSuppressOnSink(true);
-  }
-
-  void checkASTCodeBody(const Decl *D, AnalysisManager &mgr,
+  void checkASTCodeBody(const Decl *D, AnalysisManager &Mgr,
                         BugReporter &BR) const {
-    ReturnValueCheckVisitor visitor(BR, mgr.getAnalysisDeclContext(D),
+    ReturnValueCheckVisitor visitor(BR, Mgr.getAnalysisDeclContext(D),
                                     getCheckName());
     visitor.Visit(D->getBody());
   }

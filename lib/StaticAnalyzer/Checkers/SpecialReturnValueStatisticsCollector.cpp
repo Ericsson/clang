@@ -5,6 +5,13 @@
 // This file is distributed under the University of Illinois Open Source
 // License. See LICENSE.TXT for details.
 //
+// This checker collects statistics about calls whether their return value
+// is checked for (non-) negativeness in case of integer or (non-) nullness in
+// case of pointer types.  Warnings emitted are not for human consumption.
+// Instead, the output of the checker must be piped into
+// `tools/gen_yaml_for_special_return_values.sh` in order to generate file
+// `SpecialReturn.yaml` for checker `api.SpecialReturn`.
+//
 //===----------------------------------------------------------------------===//
 
 #include "ClangSACheckers.h"
@@ -60,20 +67,18 @@ public:
   }
 };
 
-std::map<const CallExpr *, std::pair<bool, bool>> CheckedCalls;
+llvm::DenseMap<const CallExpr *, std::pair<bool, bool>> CheckedCalls;
 
 class SpecialReturnValueStatisticsCollector
     : public Checker<check::PostCall, check::PostStmt<BinaryOperator>,
                      check::DeadSymbols, check::EndOfTranslationUnit> {
-
-  std::unique_ptr<BugType> StatisticsBugType;
   AnalysisDeclContext *AC;
 
   void handleComparison(BinaryOperator::Opcode, SymbolRef Sym, const SVal &Val,
                         CheckerContext &C) const;
 
 public:
-  SpecialReturnValueStatisticsCollector();
+  SpecialReturnValueStatisticsCollector() {}
 
   void checkPostCall(const CallEvent &Call, CheckerContext &C) const;
   void checkPostStmt(const BinaryOperator *BO, CheckerContext &C) const;
@@ -86,12 +91,6 @@ public:
 REGISTER_MAP_WITH_PROGRAMSTATE(SpecialReturnValueMap, SymbolRef,
                                SpecialReturnValue)
 
-SpecialReturnValueStatisticsCollector::SpecialReturnValueStatisticsCollector() {
-  StatisticsBugType.reset(
-      new BugType(this, "Special return value", "Statistics"));
-  StatisticsBugType->setSuppressOnSink(true);
-}
-
 void SpecialReturnValueStatisticsCollector::checkPostCall(
     const CallEvent &Call, CheckerContext &C) const {
   const auto *Func = dyn_cast_or_null<FunctionDecl>(Call.getDecl());
@@ -101,12 +100,12 @@ void SpecialReturnValueStatisticsCollector::checkPostCall(
   if (Func->getReturnType()->isVoidType())
     return;
 
-  const auto RetSym = Call.getReturnValue().getAsSymbol();
-  if (!RetSym)
-    return;
-
   const auto *Orig = dyn_cast_or_null<CallExpr>(Call.getOriginExpr());
   if (!Orig)
+    return;
+
+  const auto RetSym = Call.getReturnValue().getAsSymbol();
+  if (!RetSym)
     return;
 
   auto State = C.getState();

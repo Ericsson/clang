@@ -5,6 +5,41 @@
 // This file is distributed under the University of Illinois Open Source
 // License. See LICENSE.TXT for details.
 //
+// This checker tests whether the return value of certain calls are checked
+// against a concrete value. Typical examples are functions which return
+// negative integers or null pointers in error cases. This checker does not
+// emit warnings but instead splits the exploded graph after the call to two
+// branches: one branch is the error branch, where the return value falls in the
+// error-range while the other branch is the normal branch where it falls
+// outside of this range. Other chers (e.g. core checkers) are expected to find
+// a bug in the error case (e.g. negative indexing of an array or null pointer
+// dereference). The split should not decrease the performance significantly
+// since in most cases a branch statement follows shortly the function call
+// which does the same split. In error cases we expect to fail one of the
+// branches shortly.
+//
+// The names of functions whose return value is to be checked against a
+// concrete value must be listed in a YAML file called `SpecialReturn.yaml`
+// together with the concrete value to check against and the relation between
+// the return value and this concrete value. Valid relation names are `EQ`,
+// `NE`, `LT`, `GT`, `LE`, `GE`. The location of this file must be passed to
+// the checker as analyzer option `api-metadata-path`.
+//
+// Example YAML file:
+//
+//--- SpecialReturn.yaml -----------------------------------------------------//
+//
+// #
+// # SpecialReturn metadata format 1.0
+//
+// {name: negative_return, relation: LT, value: 0}
+// {name: null_return, relation: EQ, value: 0}
+//
+//----------------------------------------------------------------------------//
+//
+// To auto-generate this YAML file on statistical base see checker
+// `statisticsCollector.SpecialReturnValue`.
+//
 //===----------------------------------------------------------------------===//
 
 #include "ClangSACheckers.h"
@@ -67,7 +102,7 @@ template <> struct MappingTraits<FuncRetValToCheck> {
 }
 }
 
-static std::map<std::string, FuncRetValToCheck> FuncRetValsToCheck;
+static llvm::StringMap<FuncRetValToCheck> FuncRetValsToCheck;
 
 namespace {
 class SpecialReturnValueChecker : public Checker<check::PostCall> {
@@ -83,6 +118,10 @@ void SpecialReturnValueChecker::checkPostCall (const CallEvent &Call,
 
   const auto *FD = dyn_cast_or_null<FunctionDecl>(Call.getDecl());
   if (!FD)
+    return;
+
+  const auto RetType = FD->getReturnType();
+  if (!RetType->isIntegerType() && !RetType->isPointerType())
     return;
 
   std::string FullName = FD->getQualifiedNameAsString();

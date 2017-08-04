@@ -802,11 +802,11 @@ def UnixAPIPortabilityChecker : Checker<"UnixAPI">,
 let ParentPackage = StatisticsCollector in {
 
 def ReturnValueCheckStatisticsCollector : Checker<"ReturnValueCheck">,
-    HelpText<"Collectes statistics about the return value checks">,
+    HelpText<"Collects statistics about the return value checks">,
     DescFile<"ReturnValueCheckStatisticsCollector.cpp">;
 
 def SpecialReturnValueStatisticsCollector : Checker<"SpecialReturnValue">,
-    HelpText<"Collectes statistics about the special return values">,
+    HelpText<"Collects statistics about the special return values">,
     DescFile<"SpecialReturnValueStatisticsCollector.cpp">;
 
 } // end statisticsCollector
