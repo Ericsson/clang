@@ -37,6 +37,7 @@
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/AnalysisManager.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/Support/YAMLTraits.h"
 
 using namespace clang;
@@ -72,13 +73,9 @@ void UncheckedReturnValueVisitor::VisitCompoundStmt(CompoundStmt *S) {
   }
 }
 
-static llvm::Optional<std::vector<std::string>> APIFuncsReturningError;
+static llvm::StringSet<> FuncsReturningError;
 
 void UncheckedReturnValueVisitor::checkUncheckedReturnValue(CallExpr *CE) {
-  assert(APIFuncsReturningError.hasValue());
-  if (APIFuncsReturningError->empty())
-    return;
-
   const FunctionDecl *FD = CE->getDirectCallee();
   if (!FD)
     return;
@@ -86,10 +83,7 @@ void UncheckedReturnValueVisitor::checkUncheckedReturnValue(CallExpr *CE) {
   if (FullName.empty())
     return;
 
-  assert(std::is_sorted(APIFuncsReturningError->begin(),
-                        APIFuncsReturningError->end()));
-  if (!std::binary_search(APIFuncsReturningError->begin(),
-                          APIFuncsReturningError->end(), FullName))
+  if (!FuncsReturningError.count(FullName))
     return;
 
   // Issue a warning.
@@ -121,10 +115,13 @@ public:
 void ento::registerAPIUncheckedReturn(CheckerManager &mgr) {
   mgr.registerChecker<UncheckedReturnValueChecker>();
 
+  llvm::Optional<std::vector<std::string>> ReturningErrorVec;
   const auto metadataPath =
     mgr.getAnalyzerOptions().getOptionAsString("api-metadata-path", "");
 
   metadata::loadYAMLData(metadataPath, "UncheckedReturn.yaml", "1.0",
-                         mgr.getCurrentCheckName(), APIFuncsReturningError);
-  std::sort(APIFuncsReturningError->begin(), APIFuncsReturningError->end());
+                         mgr.getCurrentCheckName(), ReturningErrorVec);
+  for (const auto FREV: *ReturningErrorVec) {
+    FuncsReturningError.insert(FREV);
+  }
 }
