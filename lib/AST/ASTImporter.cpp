@@ -139,6 +139,7 @@ namespace clang {
                            bool Complain = true);
     bool IsStructuralMatch(EnumDecl *FromEnum, EnumDecl *ToRecord,
                            bool Complain = true);
+    bool IsStructuralMatch(FunctionTemplateDecl *From, FunctionTemplateDecl *To);
     bool IsStructuralMatch(EnumConstantDecl *FromEC, EnumConstantDecl *ToEC);
     bool IsStructuralMatch(ClassTemplateDecl *From, ClassTemplateDecl *To);
     bool IsStructuralMatch(VarTemplateDecl *From, VarTemplateDecl *To);
@@ -1267,6 +1268,15 @@ bool ASTNodeImporter::IsStructuralMatch(EnumDecl *FromEnum, EnumDecl *ToEnum,
                                    Importer.getNonEquivalentDecls(),
                                    false, Complain);
   return Ctx.IsStructurallyEquivalent(FromEnum, ToEnum);
+}
+
+bool ASTNodeImporter::IsStructuralMatch(FunctionTemplateDecl *From,
+                                        FunctionTemplateDecl *To) {
+  StructuralEquivalenceContext Ctx(Importer.getFromContext(),
+                                   Importer.getToContext(),
+                                   Importer.getNonEquivalentDecls(),
+                                   false, false);
+  return Ctx.IsStructurallyEquivalent(From, To);
 }
 
 bool ASTNodeImporter::IsStructuralMatch(EnumConstantDecl *FromEC,
@@ -4151,91 +4161,70 @@ Decl *ASTNodeImporter::VisitVarTemplateSpecializationDecl(
   return D2;
 }
 
+
 Decl *ASTNodeImporter::VisitFunctionTemplateDecl(FunctionTemplateDecl *D) {
-  // Import the major distinguishing characteristics of this function.
   DeclContext *DC, *LexicalDC;
   DeclarationName Name;
   SourceLocation Loc;
   NamedDecl *ToD;
+
   if (ImportDeclParts(D, DC, LexicalDC, Name, ToD, Loc))
     return nullptr;
+  assert(DC && "Null DeclContext after importing decl parts");
+  if (ToD)
+      return ToD;
 
-  DeclarationNameInfo NameInfo(Name, Loc);
+  // Try to find a function in our own ("to") context with the same name, same
+  // type, and in the same context as the function we're importing.
+  if (!LexicalDC->isFunctionOrMethod()) {
+    unsigned IDNS = Decl::IDNS_Ordinary;
+    SmallVector<NamedDecl *, 2> FoundDecls;
+    DC->getRedeclContext()->localUncachedLookup(Name, FoundDecls);
+    for (unsigned I = 0, N = FoundDecls.size(); I != N; ++I) {
+      if (!FoundDecls[I]->isInIdentifierNamespace(IDNS))
+        continue;
 
-  QualType FromTy = D->getTemplatedDecl()->getType();
-
-  // Import the type.
-  QualType T = Importer.Import(FromTy);
-  if (T.isNull())
-    return nullptr;
-
-  TypeSourceInfo *TInfo
-    = Importer.Import(D->getTemplatedDecl()->getTypeSourceInfo());
-
-  // Import the function parameters.
-  SmallVector<ParmVarDecl *, 8> Parameters;
-  TypeLoc ToTypeLoc = TInfo->getTypeLoc();
-  unsigned I = 0;
-  for (auto P : D->getTemplatedDecl()->parameters()) {
-    ParmVarDecl *ToP = cast_or_null<ParmVarDecl>(Importer.Import(P));
-    ToP->setScopeInfo(P->getFunctionScopeDepth(), P->getFunctionScopeIndex());
-    if (!ToP)
-      return nullptr;
-
-    Parameters.push_back(ToP);
-
-    if (FunctionProtoTypeLoc ToProtoLoc
-          = ToTypeLoc.getAs<FunctionProtoTypeLoc>()) {
-      ToProtoLoc.setParam(I, Parameters[I]);
-      I++;
+      if (FunctionTemplateDecl *FoundFunction =
+          dyn_cast<FunctionTemplateDecl>(FoundDecls[I])) {
+        if (FoundFunction->hasExternalFormalLinkage() &&
+            D->hasExternalFormalLinkage()) {
+          if (IsStructuralMatch(D, FoundFunction)) {
+            Importer.Imported(D, FoundFunction);
+            // FIXME: Actually try to merge the body and other attributes.
+            return FoundFunction;
+          }
+        }
+      }
     }
   }
 
-  FunctionDecl *ToFunction;
-  if (CXXMethodDecl *Method = dyn_cast<CXXMethodDecl>(D->getTemplatedDecl())) {
-    ToFunction = CXXMethodDecl::Create(Importer.getToContext(),
-                                       cast<CXXRecordDecl>(DC),
-                                       D->getTemplatedDecl()->getInnerLocStart(),
-                                       NameInfo, T, TInfo,
-                                       Method->getStorageClass(),
-                                       Method->isInlineSpecified(),
-                                       D->getTemplatedDecl()->isConstexpr(),
-                                       Importer.Import(D->getLocEnd()));
-  } else {
-    ToFunction = FunctionDecl::Create(Importer.getToContext(), DC,
-                                      D->getTemplatedDecl()->getInnerLocStart(),
-                                      NameInfo, T, TInfo,
-                                      D->getTemplatedDecl()->getStorageClass(),
-                                      D->getTemplatedDecl()->isInlineSpecified(),
-                                      D->getTemplatedDecl()->hasWrittenPrototype(),
-                                      D->getTemplatedDecl()->isConstexpr());
-  }
+  TemplateParameterList *Params = ImportTemplateParameterList(
+                                    D->getTemplateParameters());
+  if (!Params)
+    return nullptr;
 
-  // Import the qualifier, if any.
-  ToFunction->setQualifierInfo(Importer.Import(
-    D->getTemplatedDecl()->getQualifierLoc()));
-  ToFunction->setAccess(D->getTemplatedDecl()->getAccess());
-  ToFunction->setLexicalDeclContext(LexicalDC);
-  Importer.Imported(D, ToFunction);
+  FunctionDecl *TemplatedFD = cast_or_null<FunctionDecl>(
+		                 Importer.Import(D->getTemplatedDecl()));
+  if (!TemplatedFD)
+    return nullptr;
 
-  // Set the parameters.
-  for (unsigned I = 0, N = Parameters.size(); I != N; ++I) {
-    Parameters[I]->setOwningFunction(ToFunction);
-    ToFunction->addDeclInternal(Parameters[I]);
-  }
-  ToFunction->setParams(Parameters);
+  FunctionTemplateDecl *ToFunc = FunctionTemplateDecl::Create(
+      Importer.getToContext(), DC, Loc, Name, Params, TemplatedFD);
 
-  FunctionTemplateDecl *ToFunctionTemplate
-    = FunctionTemplateDecl::Create(Importer.getToContext(), DC,
-                                   Loc, Name,
-                                   D->getTemplateParameters(),
-                                   ToFunction);
+  TemplatedFD->setDescribedFunctionTemplate(ToFunc);
+  // Import attributes.
+  for (Decl::attr_iterator I = D->attr_begin(), E = D->attr_end(); I != E;
+       ++I) {
+    Attr *ToAttr = (*I)->clone(Importer.getToContext());
+    ToAttr->setRange(Importer.Import((*I)->getRange()));
+    ToFunc->addAttr(ToAttr);
+  }  
+  ToFunc->setAccess(D->getAccess());
+  ToFunc->setLexicalDeclContext(LexicalDC);
+  Importer.Imported(D, ToFunc);
 
-  ToFunctionTemplate->setAccess(D->getAccess());
-  ToFunction->setDescribedFunctionTemplate(ToFunctionTemplate);
-
-  LexicalDC->addDeclInternal(ToFunctionTemplate);
-  return ToFunctionTemplate;
+  LexicalDC->addDeclInternal(ToFunc);
+  return ToFunc;
 }
 
 //----------------------------------------------------------------------------
@@ -5852,11 +5841,11 @@ Expr *ASTNodeImporter::VisitCXXUnresolvedConstructExpr(
 Expr *ASTNodeImporter::VisitUnresolvedLookupExpr(UnresolvedLookupExpr *E) {
   CXXRecordDecl *NamingClass = cast_or_null<CXXRecordDecl>(
           Importer.Import(E->getNamingClass()));
-  if (!NamingClass)
+  if (E->getNamingClass() && !NamingClass) 
     return nullptr;
 
   DeclarationName Name = Importer.Import(E->getName());
-  if(E->getName().isEmpty() && Name.isEmpty())
+  if(!E->getName().isEmpty() && Name.isEmpty())
     return nullptr;
   DeclarationNameInfo NameInfo(Name, Importer.Import(E->getNameLoc()));
   // Import additional name location/type info.
