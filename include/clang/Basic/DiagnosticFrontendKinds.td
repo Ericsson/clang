@@ -231,4 +231,7 @@ def warn_option_invalid_ocl_version : Warning<
 def err_fnmap_parsing : Error<
   "error parsing CrossTU index file: '%0' line: %1 'USR filename' format "
   "expected">;
+def err_fnmap_absolute : Error<
+  "error parsing CrossTU index file: '%0' line: %1 Path needs to be absolute "
+  "in reparse mode">;
 }
