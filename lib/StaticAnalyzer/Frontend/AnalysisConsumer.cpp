@@ -438,9 +438,7 @@ void lockedWrite(const std::string &fileName, const std::string &content) {
 
 static bool shouldSkipFunction(const Decl *D,
                                const SetOfConstDecls &Visited,
-                               const SetOfConstDecls &VisitedAsTopLevel,
-                               llvm::StringSet<> &VisitedAsCTU,
-                               std::string LookupFnName) {
+                               const SetOfConstDecls &VisitedAsTopLevel) {
   if (VisitedAsTopLevel.count(D))
     return true;
 
@@ -461,21 +459,9 @@ static bool shouldSkipFunction(const Decl *D,
     if (MD->isCopyAssignmentOperator() || MD->isMoveAssignmentOperator())
       return false;
   }
-  // Otherwise, if we visited the function before, do not reanalyze it.
-  const FunctionDecl *FD = dyn_cast<FunctionDecl>(D);
-  if (Visited.count(D)) {
-    return true;
-    /*if (D->getAccess() == AS_private)
-      return true;
-    if (FD && !FD->hasExternalFormalLinkage())
-      return true;*/
-  }
 
-  if (FD && FD->hasExternalFormalLinkage()) {
-    if (VisitedAsCTU.count(LookupFnName))
-      return true;
-  }
-  return false;
+  // Otherwise, if we visited the function before, do not reanalyze it.
+  return Visited.count(D);
 }
 
 ExprEngine::InliningModes
@@ -494,13 +480,6 @@ AnalysisConsumer::getInliningModeForFunction(const Decl *D,
 }
 
 void AnalysisConsumer::HandleDeclsCallGraph(const unsigned LocalTUDeclsSize) {
-
-  IntrusiveRefCntPtr<DiagnosticOptions> DiagOpts = new DiagnosticOptions();
-  IntrusiveRefCntPtr<DiagnosticIDs> DiagID(new DiagnosticIDs());
-  TextDiagnosticPrinter *DiagClient =
-      new TextDiagnosticPrinter(llvm::errs(), &*DiagOpts);
-  DiagnosticsEngine Diags(DiagID, &*DiagOpts, DiagClient);
-
   // Build the Call Graph by adding all the top level declarations to the graph.
   // Note: CallGraph can trigger deserialization of more items from a pch
   // (though HandleInterestingDecl); triggering additions to LocalTUDecls.
@@ -519,25 +498,6 @@ void AnalysisConsumer::HandleDeclsCallGraph(const unsigned LocalTUDeclsSize) {
   SetOfConstDecls Visited;
   SetOfConstDecls VisitedAsTopLevel;
 
-  // The visitedFunc.txt collects all functions that were inlinded as callee or
-  // top level caller these functions will not be visited as top level nodes.
-  llvm::StringSet<> VisitedAsCTU;
-  std::string VisitedFuncSetFile;
-  StringRef BuildDir = Opts->getCTUDir();
-  if (!BuildDir.empty() && !Opts->shouldReanalyzeCTUVisitedFns()) {
-    clock_t t1 = clock();
-    VisitedFuncSetFile = (BuildDir + "/visitedFunc.txt").str();
-    std::ifstream VisitedFuncSetStream(VisitedFuncSetFile);
-    std::string FunctionName;
-    while (VisitedFuncSetStream >> FunctionName)
-      VisitedAsCTU.insert(FunctionName);
-    VisitedFuncSetStream.close();
-    clock_t t2 = clock();
-    llvm::errs() << "! Reading " << VisitedFuncSetFile << " took "
-                 << ((double)(t2 - t1)) / ((double)CLOCKS_PER_SEC)
-                 << " seconds\n";
-  }
-
   llvm::ReversePostOrderTraversal<clang::CallGraph*> RPOT(&CG);
   for (llvm::ReversePostOrderTraversal<clang::CallGraph*>::rpo_iterator
          I = RPOT.begin(), E = RPOT.end(); I != E; ++I) {
@@ -550,14 +510,9 @@ void AnalysisConsumer::HandleDeclsCallGraph(const unsigned LocalTUDeclsSize) {
     if (!D)
       continue;
 
-    std::string LookupName;
-    if (const auto *ND = dyn_cast<NamedDecl>(D->getCanonicalDecl()))
-      LookupName = CTU.getLookupName(ND);
-
     // Skip the functions which have been processed already or previously
     // inlined.
-    if (shouldSkipFunction(D->getCanonicalDecl(), Visited, VisitedAsTopLevel,
-                           VisitedAsCTU, LookupName))
+    if (shouldSkipFunction(D->getCanonicalDecl(), Visited, VisitedAsTopLevel))
       continue;
 
     // Analyze the function.
@@ -573,39 +528,6 @@ void AnalysisConsumer::HandleDeclsCallGraph(const unsigned LocalTUDeclsSize) {
       Visited.insert(isa<ObjCMethodDecl>(Callee) ? Callee
                                                  : Callee->getCanonicalDecl());
     VisitedAsTopLevel.insert(D);
-  }
-
-  if (!BuildDir.empty() && !Opts->shouldReanalyzeCTUVisitedFns()) {
-    clock_t t1 = clock();
-    llvm::StringSet<> NewVisited;
-
-    // FIXME: Unify these loops
-    for (const Decl *D : Visited) {
-      std::string LookupName;
-      if (const auto *FD = dyn_cast<FunctionDecl>(D->getCanonicalDecl())) {
-        LookupName = CTU.getLookupName(FD);
-        if (!VisitedAsCTU.count(LookupName))
-          NewVisited.insert(LookupName);
-      }
-    }
-
-    for (const Decl *D : VisitedAsTopLevel) {
-      std::string LookupName;
-      if (const auto *FD = dyn_cast<FunctionDecl>(D->getCanonicalDecl())) {
-        LookupName = CTU.getLookupName(FD);
-        if (!VisitedAsCTU.count(LookupName))
-          NewVisited.insert(LookupName);
-      }
-    }
-
-    std::string NewVisitedString;
-    for (auto &Entry : NewVisited)
-      NewVisitedString += (Entry.getKey() + "\n").str();
-    lockedWrite(VisitedFuncSetFile, NewVisitedString);
-    clock_t t2 = clock();
-    llvm::errs() << "! Writing " << VisitedFuncSetFile << " took "
-                 << ((double)(t2 - t1)) / ((double)CLOCKS_PER_SEC)
-                 << " seconds\n";
   }
 }
 

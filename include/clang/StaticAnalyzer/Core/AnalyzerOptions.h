@@ -287,9 +287,6 @@ private:
   /// \sa getCTUReparseOnDemand
   Optional<StringRef> CTUReparseOnDemand;
 
-  /// \sa shouldReanalyzeXTUVisitedFns
-  Optional<bool> ReanalyzeCTUVisitedFns;
-
   /// \sa shouldRecordCoverage
   Optional<StringRef> CoverageExportDir;  
 
@@ -594,11 +591,6 @@ public:
   /// translation units during the CTU analysis on demand instead of reading
   /// the binary representations from disk.
   StringRef getCTUReparseOnDemand();
-
-  /// Returns whether functions that were analyzed from another translation unit
-  /// should be reanalyzed again as top level in case it is not called in its
-  /// own translation unit.
-  bool shouldReanalyzeCTUVisitedFns();
 
   /// Determines where the coverage info should be dumped to. The coverage
   /// information is recorded on the basic block level granularity.
