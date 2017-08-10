@@ -167,6 +167,8 @@ const FunctionDecl *CrossTranslationUnit::getCrossTUDefinition(
         std::vector<std::unique_ptr<ASTUnit>> ASTs;
         Tool.buildASTs(ASTs);
         assert(ASTs.size() == 1);
+        if (ASTs.empty())
+          return nullptr;
         LoadedUnit = std::move(ASTs[0]);
       }
       Unit = LoadedUnit.get();
