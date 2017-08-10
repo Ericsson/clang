@@ -182,22 +182,13 @@ analyzer_env['ANALYZE_BUILD_PARAMETERS'] = ' '.join(passthru_analyzer_params)
 analyzer_env['ANALYZE_BUILD_REPORT_FORMAT'] = mainargs.output_format
 analyzer_env['ANALYZE_BUILD_REPORT_FAILURES'] = 'yes'
 
-graph_lock = threading.Lock()
-
 buildlog_file = open(mainargs.buildlog, 'r')
 buildlog = json.load(buildlog_file)
 buildlog_file.close()
 
-if not mainargs.no_xtu:
-    bg_file = os.path.join(mainargs.xtuindir, 'build_dependency.json')
-    buildgraph_file = open(bg_file, 'r')
-    buildgraph = json.load(buildgraph_file)
-    buildgraph_file.close()
-
 src_pattern = re.compile('.*\.(C|c|cc|cpp|cxx|ii|m|mm)$', re.IGNORECASE)
 dircmd_separator = ': '
 dircmd_2_orders = {}
-dep_graph = {}
 src_build_steps = 0
 all_build_steps = 0
 passed_buildlog = []
@@ -213,17 +204,6 @@ for step in buildlog:
             dircmd_2_original_orders[uid].append(all_build_steps)
         src_build_steps += 1
     all_build_steps += 1
-
-if not mainargs.no_xtu:
-    for dep in buildgraph:
-        assert len(dep) == 2
-        assert dep[0] >= 0 and dep[0] < src_build_steps
-        assert dep[1] >= 0 and dep[1] < src_build_steps
-        assert dep[0] != dep[1]
-        if dep[1] not in dep_graph:
-            dep_graph[dep[1]] = [dep[0]]
-        else:
-            dep_graph[dep[1]].append(dep[0])
 
 
 def get_compiler_and_arguments(cmd):
@@ -311,79 +291,46 @@ def analyze_work():
     global concurrent_threads
     global concurrent_thread_times
     global concurrent_thread_last_clock
-    global graph_lock
     global dircmd_2_orders
-    global dep_graph
     global buildlog
     global passed_buildlog
     global dircmd_2_original_orders
     global num_passes
     global num_fails
     while len(dircmd_2_orders) > 0:
-        graph_lock.acquire()
         found_dircmd_orders = None
         found_dircmd = None
-        found_orders = None
         for dircmd_orders in dircmd_2_orders.items():
             dircmd = dircmd_orders[0].split(dircmd_separator, 2)
-            orders = dircmd_orders[1]
             assert len(dircmd) == 2 and len(dircmd[0]) > 0 and \
                 len(dircmd[1]) > 0
-            assert len(orders) > 0
-            independent = True
-            for order in orders:
-                depends = dep_graph.get(order)
-                if depends is not None:
-                    independent = False
-            if independent:
-                found_dircmd_orders = dircmd_orders
-                found_dircmd = dircmd
-                found_orders = orders
-                break
-        if found_dircmd_orders is not None:
-            del dircmd_2_orders[found_dircmd_orders[0]]
+            found_dircmd_orders = dircmd_orders
+            found_dircmd = dircmd
+            break
+        del dircmd_2_orders[found_dircmd_orders[0]]
 
-            concurrent_thread_current_clock = time.time()
-            concurrent_thread_times[concurrent_threads] += \
-                concurrent_thread_current_clock - concurrent_thread_last_clock
-            concurrent_thread_last_clock = concurrent_thread_current_clock
-            concurrent_threads += 1
-            if len(concurrent_thread_times) == concurrent_threads:
-                concurrent_thread_times.append(0.0)
+        concurrent_thread_current_clock = time.time()
+        concurrent_thread_times[concurrent_threads] += \
+            concurrent_thread_current_clock - concurrent_thread_last_clock
+        concurrent_thread_last_clock = concurrent_thread_current_clock
+        concurrent_threads += 1
+        if len(concurrent_thread_times) == concurrent_threads:
+            concurrent_thread_times.append(0.0)
 
-            graph_lock.release()
-            result = analyze(found_dircmd[0], found_dircmd[1])
-            graph_lock.acquire()
-            if (result):
-                num_passes += 1
-                for order in dircmd_2_original_orders[found_dircmd_orders[0]]:
-                    passed_buildlog.append(buildlog[order])
-            else:
-                num_fails += 1
-
-            concurrent_thread_current_clock = time.time()
-            concurrent_thread_times[concurrent_threads] += \
-                concurrent_thread_current_clock - concurrent_thread_last_clock
-            concurrent_thread_last_clock = concurrent_thread_current_clock
-            concurrent_threads -= 1
-            assert concurrent_threads >= 0
-
-            deps_2_remove = []
-            for dep in dep_graph.items():
-                i = 0
-                while i < len(dep[1]):
-                    if dep[1][i] in found_orders:
-                        dep[1][i] = dep[1][-1]
-                        del dep[1][-1]
-                        if len(dep[1]) == 0:
-                            deps_2_remove.append(dep[0])
-                    i += 1
-            for dep in deps_2_remove:
-                del dep_graph[dep]
-            graph_lock.release()
+        result = analyze(found_dircmd[0], found_dircmd[1])
+        if (result):
+            num_passes += 1
+            for order in dircmd_2_original_orders[found_dircmd_orders[0]]:
+                passed_buildlog.append(buildlog[order])
         else:
-            graph_lock.release()
-            time.sleep(0.125)
+            num_fails += 1
+
+        concurrent_thread_current_clock = time.time()
+        concurrent_thread_times[concurrent_threads] += \
+            concurrent_thread_current_clock - concurrent_thread_last_clock
+        concurrent_thread_last_clock = concurrent_thread_current_clock
+        concurrent_threads -= 1
+        assert concurrent_threads >= 0
 
 try:
     os.makedirs(os.path.abspath(mainargs.xtuoutdir))
