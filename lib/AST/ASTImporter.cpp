@@ -284,6 +284,7 @@ namespace clang {
     Expr *VisitCXXDependentScopeMemberExpr(CXXDependentScopeMemberExpr *E);
     Expr *VisitCXXUnresolvedConstructExpr(CXXUnresolvedConstructExpr *CE);
     Expr *VisitUnresolvedLookupExpr(UnresolvedLookupExpr *E);
+    Expr *VisitUnresolvedMemberExpr(UnresolvedMemberExpr *E);
     Expr *VisitExprWithCleanups(ExprWithCleanups *EWC);
     Expr *VisitCXXThisExpr(CXXThisExpr *E);
     Expr *VisitCXXBoolLiteralExpr(CXXBoolLiteralExpr *E);
@@ -5884,6 +5885,52 @@ Expr *ASTNodeImporter::VisitUnresolvedLookupExpr(UnresolvedLookupExpr *E) {
                                       E->requiresADL(), E->isOverloaded(),
                                       ToDecls.begin(), ToDecls.end());
 }
+
+Expr *ASTNodeImporter::VisitUnresolvedMemberExpr(UnresolvedMemberExpr *E) {
+  DeclarationName Name = Importer.Import(E->getName());
+  if(!E->getName().isEmpty() && Name.isEmpty())
+    return nullptr;
+  DeclarationNameInfo NameInfo(Name, Importer.Import(E->getNameLoc()));
+  // Import additional name location/type info.
+  ImportDeclarationNameLoc(E->getNameInfo(), NameInfo);
+
+  QualType BaseType = Importer.Import(E->getType());
+  if (!E->getType().isNull() && BaseType.isNull())
+    return nullptr;
+
+  UnresolvedSet<8> ToDecls;
+  for (Decl *D : E->decls()) {
+    if (NamedDecl * To = cast_or_null<NamedDecl>(Importer.Import(D)))
+      ToDecls.addDecl(To);
+    else
+      return nullptr;
+  }
+
+  TemplateArgumentListInfo ToTAInfo;
+  TemplateArgumentListInfo *ResInfo = nullptr;
+  if (E->hasExplicitTemplateArgs()) {
+    for (const auto &FromLoc : E->template_arguments()) {
+      if (auto ToTALoc = ImportTemplateArgumentLoc(FromLoc))
+        ToTAInfo.addArgument(*ToTALoc);
+      else
+        return nullptr;
+    }
+    ResInfo = &ToTAInfo;
+  }
+
+  Expr *BaseE = E->isImplicitAccess() ? nullptr : Importer.Import(E->getBase());
+  if (!BaseE && !E->isImplicitAccess() && E->getBase()) {
+    return nullptr;
+  }
+
+  return UnresolvedMemberExpr::Create(
+        Importer.getToContext(), E->hasUnresolvedUsing(), BaseE, BaseType,
+        E->isArrow(), Importer.Import(E->getOperatorLoc()),
+        Importer.Import(E->getQualifierLoc()),
+        Importer.Import(E->getTemplateKeywordLoc()), NameInfo,
+        ResInfo, ToDecls.begin(), ToDecls.end());
+}
+
 
 Expr *ASTNodeImporter::VisitCallExpr(CallExpr *E) {
   QualType T = Importer.Import(E->getType());
