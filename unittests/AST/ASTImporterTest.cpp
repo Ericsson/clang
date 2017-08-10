@@ -531,6 +531,8 @@ TEST(ImportExpr, ImportCXXDependentScopeMemberExpr) {
                       binaryOperator()))))))));
 }
 
+
+// TODO: Match unresolvedMemberExpr in the test case.
 TEST(ImportExpr, ImportUnresolvedMemberExpr) {
   MatchVerifier<Decl> Verifier;
  EXPECT_TRUE(
