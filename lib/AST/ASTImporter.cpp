@@ -89,7 +89,8 @@ namespace clang {
     void ImportDefinitionIfNeeded(Decl *FromD, Decl *ToD = nullptr);
     void ImportDeclarationNameLoc(const DeclarationNameInfo &From,
                                   DeclarationNameInfo& To);
-    void ImportDeclContext(DeclContext *FromDC, bool ForceImport = false);
+    void ImportDeclContext(DeclContext *FromDC, bool ForceImport = false,
+                           DeclContext *ToDC = nullptr);
 
     bool ImportCastPath(CastExpr *E, CXXCastPath &Path);
 
@@ -941,21 +942,33 @@ ASTNodeImporter::ImportDeclarationNameLoc(const DeclarationNameInfo &From,
   llvm_unreachable("Unknown name kind.");
 }
 
-void ASTNodeImporter::ImportDeclContext(DeclContext *FromDC, bool ForceImport) {  
+void ASTNodeImporter::ImportDeclContext(DeclContext *FromDC, bool ForceImport,
+                                        DeclContext *ToDC) {
   if (Importer.isMinimalImport() && !ForceImport) {
     Importer.ImportContext(FromDC);
     return;
   }
-  
+  llvm::SmallVector<Decl*, 8> Decls;
   for (auto *From : FromDC->decls())
-    Importer.Import(From);
+    Decls.push_back(Importer.Import(From));
+  if (ToDC) {
+    // Restore the order.
+    for (auto *D : Decls) {
+      if (D && D->getLexicalDeclContext() == ToDC)
+        ToDC->removeDecl(D);
+    }
+    for (auto *D : Decls) {
+      if (D && D->getLexicalDeclContext() == ToDC)
+        ToDC->addDeclInternal(D);
+    }
+  }
 }
 
 bool ASTNodeImporter::ImportDefinition(RecordDecl *From, RecordDecl *To, 
                                        ImportDefinitionKind Kind) {
   if (To->getDefinition() || To->isBeingDefined()) {
     if (Kind == IDK_Everything)
-      ImportDeclContext(From, /*ForceImport=*/true);
+      ImportDeclContext(From, /*ForceImport=*/true, To);
     
     return false;
   }
@@ -1055,7 +1068,7 @@ bool ASTNodeImporter::ImportDefinition(RecordDecl *From, RecordDecl *To,
   }
   
   if (shouldForceImportDeclContext(Kind))
-    ImportDeclContext(From, /*ForceImport=*/true);
+    ImportDeclContext(From, /*ForceImport=*/true, To);
   
   To->completeDefinition();
   return false;
@@ -2556,10 +2569,17 @@ Decl *ASTNodeImporter::VisitVarDecl(VarDecl *D) {
       
       if (VarDecl *DDef = D->getDefinition()) {
         if (VarDecl *ExistingDef = MergeWithVar->getDefinition()) {
-          Importer.ToDiag(ExistingDef->getLocation(), 
-                          diag::err_odr_variable_multiple_def)
-            << Name;
-          Importer.FromDiag(DDef->getLocation(), diag::note_odr_defined_here);
+          // TODO: Somehow the check bellow is required. I suspect that,
+          // the variable has multiple declarations, and while we import the
+          // declaration that is also a definition, we only add one of the
+          // declaration to the imported decls (which is not the definition).
+          if (Importer.Import(DDef->getLocation()) !=
+              ExistingDef->getLocation()) {
+            Importer.ToDiag(ExistingDef->getLocation(),
+                            diag::err_odr_variable_multiple_def)
+                << Name;
+            Importer.FromDiag(DDef->getLocation(), diag::note_odr_defined_here);
+          }
         } else {
           Expr *Init = Importer.Import(DDef->getInit());
           MergeWithVar->setInit(Init);
@@ -6133,9 +6153,9 @@ Expr *ASTNodeImporter::VisitSubstNonTypeTemplateParmExpr(
 void ASTNodeImporter::ImportOverrides(CXXMethodDecl *ToMethod,
                                       CXXMethodDecl *FromMethod) {
   for (auto *FromOverriddenMethod : FromMethod->overridden_methods())
-    ToMethod->addOverriddenMethod(
-      cast<CXXMethodDecl>(Importer.Import(const_cast<CXXMethodDecl*>(
-                                            FromOverriddenMethod))));
+    ToMethod->getCanonicalDecl()->addOverriddenMethod(cast<CXXMethodDecl>(
+        Importer.Import(const_cast<CXXMethodDecl *>(FromOverriddenMethod))
+            ->getCanonicalDecl()));
 }
 
 ASTImporter::ASTImporter(ASTContext &ToContext, FileManager &ToFileManager,

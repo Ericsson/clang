@@ -32,6 +32,8 @@ static bool IsStructurallyEquivalent(StructuralEquivalenceContext &Context,
 static bool IsStructurallyEquivalent(StructuralEquivalenceContext &Context,
                                      Decl *D1, Decl *D2);
 static bool IsStructurallyEquivalent(StructuralEquivalenceContext &Context,
+                                     FriendDecl *D1, FriendDecl *D2);
+static bool IsStructurallyEquivalent(StructuralEquivalenceContext &Context,
                                      const TemplateArgument &Arg1,
                                      const TemplateArgument &Arg2);
 
@@ -875,6 +877,11 @@ static bool IsStructurallyEquivalent(StructuralEquivalenceContext &Context,
   D1 = D1->getDefinition();
   D2 = D2->getDefinition();
   if (!D1 || !D2)
+    return true;
+
+  // TODO: avoid this case to happen. For now, if the definition is not
+  // done yet, we will not compare for equality and assume that they are equal.
+  if (D1->isBeingDefined() || D2->isBeingDefined())
     return true;
 
   if (CXXRecordDecl *D1CXX = dyn_cast<CXXRecordDecl>(D1)) {
