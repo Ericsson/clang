@@ -1,6 +1,6 @@
 // RUN: %clang_cc1 -emit-pch -std=c++1z -o %t.1.ast %S/Inputs/class-template-partial-spec1.cpp
 // RUN: %clang_cc1 -emit-pch -std=c++1z -o %t.2.ast %S/Inputs/class-template-partial-spec2.cpp
-// RUN: not %clang_cc1 -std=c++1z -Werror -ast-merge %t.1.ast -ast-merge %t.2.ast -fsyntax-only %s 2>&1 | FileCheck %s
+// RUN: not %clang_cc1 -std=c++1z -Werror=odr -ast-merge %t.1.ast -ast-merge %t.2.ast -fsyntax-only %s 2>&1 | FileCheck %s
 
 static_assert(sizeof(**SingleSource.member) == sizeof(**SingleDest.member));
 static_assert(sizeof(SecondDoubleSource.member) == sizeof(SecondDoubleDest.member));
