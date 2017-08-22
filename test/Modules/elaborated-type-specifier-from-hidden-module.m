@@ -1,5 +1,5 @@
 // RUN: rm -rf %t
-// RUN: %clang_cc1 -fmodules -fimplicit-module-maps -fmodules-cache-path=%t -I %S/Inputs %s -verify
+// RUN: %clang_cc1  -Werror=odr -fmodules -fimplicit-module-maps -fmodules-cache-path=%t -I %S/Inputs %s -verify
 
 @import ElaboratedTypeStructs.Empty; // The structs are now hidden.
 struct S1 *x;

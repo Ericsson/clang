@@ -1,7 +1,7 @@
 // RUN: rm -rf %t.cache
-// RUN: %clang_cc1 -fsyntax-only %s -fmodules -fmodules-cache-path=%t.cache \
+// RUN: %clang_cc1  -Werror=odr -fsyntax-only %s -fmodules -fmodules-cache-path=%t.cache \
 // RUN:   -fimplicit-module-maps -F%S/Inputs -verify
-// RUN: %clang_cc1 -fsyntax-only %s -fmodules -fmodules-cache-path=%t.cache \
+// RUN: %clang_cc1  -Werror=odr -fsyntax-only %s -fmodules -fmodules-cache-path=%t.cache \
 // RUN:   -fimplicit-module-maps -F%S/Inputs -DCHANGE_TAGS -verify
 #include "F/F.h"
 
