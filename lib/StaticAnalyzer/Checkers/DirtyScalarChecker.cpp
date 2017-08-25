@@ -223,7 +223,8 @@ void DirtyScalarChecker::reportBug(CheckerContext &C, ProgramStateRef State,
       "Tainted variable is used without proper bound checking", EN);
   BR->markInteresting(C.getLocationContext());
   BR->markInteresting(V);
-  C.emitReport(std::move(BR));
+  if (BR->getLocation(C.getSourceManager()).isValid())
+    C.emitReport(std::move(BR));
 }
 
 void ento::registerDirtyScalarChecker(CheckerManager &mgr) {
