@@ -1,11 +1,14 @@
-// RUN: %clang_cc1 -analyze -analyzer-checker=alpha.security.taint,alpha.security.DirtyScalar -verify -analyzer-config alpha.security.DirtyScalar:criticalOnly=true %s
-// RUN: %clang_cc1 -analyze -analyzer-checker=alpha.security.taint,alpha.security.DirtyScalar -verify -analyzer-config alpha.security.DirtyScalar:criticalOnly=false -DDIRTYSCALARSTRICT=1 %s
+// RUN: %clang_cc1 -std=c++11 -analyze -analyzer-checker=alpha.security.taint,alpha.security.DirtyScalar -verify -analyzer-config alpha.security.DirtyScalar:criticalOnly=true %s
+// RUN: %clang_cc1 -std=c++11 -analyze -analyzer-checker=alpha.security.taint,alpha.security.DirtyScalar -verify -analyzer-config alpha.security.DirtyScalar:criticalOnly=false -DDIRTYSCALARSTRICT=1 %s
 
 #include "Inputs/system-header-simulator.h"
+#include "Inputs/system-header-simulator-cxx.h"
 
 typedef long ssize_t;
+typedef long off_t;
 
-ssize_t recv(int s, void *buf, size_t len, int flags);
+//ssize_t recv(int s, void *buf, size_t len, int flags); is missing from GenericTaintChecker
+ssize_t pread(int fd, void *buf, size_t count, off_t offset);
 
 void gets_tainted_ival(int val) {
   (void)val;
@@ -60,7 +63,7 @@ int tainted_usage_checked() {
 int detect_tainted(char const **messages) {
   int sock, index;
   scanf("%d", &sock);
-  if (recv(sock, &index, sizeof(index), 0) != sizeof(index)) {
+  if (pread(sock, &index, sizeof(index), 0) != sizeof(index)) {
 #if DIRTYSCALARSTRICT
 // expected-warning@-2{{Tainted variable is used without proper bound checking}}
 #endif
@@ -78,7 +81,7 @@ int skip_sizes_likely_used_for_table_access(char const **messages) {
   char byte;
 
   scanf("%d", &sock);
-  if (recv(sock, &byte, sizeof(byte), 0) != sizeof(byte)) {
+  if (pread(sock, &byte, sizeof(byte), 0) != sizeof(byte)) {
 #if DIRTYSCALARSTRICT
 // expected-warning@-2{{Tainted variable is used without proper bound checking}}
 #endif
@@ -89,5 +92,17 @@ int skip_sizes_likely_used_for_table_access(char const **messages) {
   printf("%s\n", messages[byte2]); // no warning
 
   return 0;
+}
+
+struct Dummy {
+  char* dummy;
+  Dummy(char* d) : dummy(d) {}
+};
+
+void check_in_place_new() {
+  char* buf = new char[sizeof(Dummy)];
+  Dummy* d = new (buf) Dummy(buf); // no warning
+  d->~Dummy();
+  delete[] buf;
 }
 

@@ -67,6 +67,8 @@ void DirtyScalarChecker::checkPreCall(const CallEvent &Call,
   if (!E)
     return;
   const CallExpr *CE = dyn_cast<CallExpr>(E);
+  if (!CE)
+    return;
   const FunctionDecl *FDecl = C.getCalleeDecl(CE);
   if (!FDecl || FDecl->getKind() != Decl::Function)
     return;
