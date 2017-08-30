@@ -401,6 +401,10 @@ def MallocOverflowSecurityChecker : Checker<"MallocOverflow">,
   HelpText<"Check for overflows in the arguments to malloc()">,
   DescFile<"MallocOverflowSecurityChecker.cpp">;
 
+def DirtyScalarChecker : Checker<"DirtyScalar">,
+  HelpText<"Warn on using tainted integers without proper bound check">,
+  DescFile<"DirtyScalarChecker.cpp">;
+
 } // end "alpha.security"
 
 //===----------------------------------------------------------------------===//

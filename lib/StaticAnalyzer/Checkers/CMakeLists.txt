@@ -31,6 +31,7 @@ add_clang_library(clangStaticAnalyzerCheckers
   DebugCheckers.cpp
   DereferenceChecker.cpp
   DirectIvarAssignment.cpp
+  DirtyScalarChecker.cpp
   DivZeroChecker.cpp
   DynamicTypePropagation.cpp
   DynamicTypeChecker.cpp
