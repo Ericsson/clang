@@ -6,6 +6,7 @@ if [ -z $1 ] || [ $1 = "-h" ] || [ $1 = "--help" ] || [ ! -d $1 ]; then
   echo "--reparse Do not generate ast dumps, analyze on the fly"
   echo "--use-usr Use USR identifiers instead of mangled names"
   echo "--name Run name extension"
+  echo "--strict-mode Give an error on all import failures"
   exit 0
 fi
 
@@ -13,6 +14,7 @@ MEMPROF=""
 CODECHECKER_PORT=15002
 REPARSE=""
 USR=""
+STRICT_MODE=""
 NAME=""
 i=0
 j=0
@@ -30,6 +32,9 @@ do
   fi
   if  [ "$var" = "--use-usr" ]; then
     USR="--use-usr"
+  fi
+  if  [ "$var" = "--strict-mode" ]; then
+    STRICT_MODE="--saargs strict_mode_saargs.txt"
   fi
   if  [ "$var" = "--name" ]; then
     j=$((i+1))
@@ -66,8 +71,8 @@ PATH=/mnt/storage/xtu-service/clang_build/buildrelwdeb/bin/:$PATH $CC analyze -o
 #gcovr -k -g .xtu-out-noxtu/gcov --html --html-details -r . -o "$PROJNAME"_gcovNoXtu/coverage.html
 #XTU RUN (on files that dont crash)
 #../../../clang_build/clang/tools/xtu-build-new/xtu-analyze.py $USR $MEMPROF $REPARSE --record-coverage -b passed_buildlog.json -o .xtu-out-xtu -j 16 -v --clang-path /mnt/storage/xtu-service/clang_build/buildrelwdeb/bin/ --analyze-cc-path /mnt/storage/xtu-service/clang_build/clang/tools/scan-build-py/bin/ | tee "$PROJNAME"_XTU.out
-PATH=/mnt/storage/xtu-service/clang_build/buildrelwdeb/bin/:$PATH $CC analyze -o .xtu-out-xtu --analyzers clangsa --ctu-collect $REPARSE -j 16 buildlog.json | tee "$PROJNAME"_XTU_build.out
-PATH=/mnt/storage/xtu-service/clang_build/buildrelwdeb/bin/:$PATH $CC analyze -o .xtu-out-xtu --analyzers clangsa --ctu-analyze $REPARSE -j 16 buildlog.json | tee "$PROJNAME"_XTU_analyze.out
+PATH=/mnt/storage/xtu-service/clang_build/buildrelwdeb/bin/:$PATH $CC analyze -o .xtu-out-xtu --analyzers clangsa --ctu-collect $REPARSE $STRICT_MODE -j 16 buildlog.json | tee "$PROJNAME"_XTU_build.out
+PATH=/mnt/storage/xtu-service/clang_build/buildrelwdeb/bin/:$PATH $CC analyze -o .xtu-out-xtu --analyzers clangsa --ctu-analyze $REPARSE $STRICT_MODE -j 16 buildlog.json | tee "$PROJNAME"_XTU_analyze.out
 
 #mkdir "$PROJNAME"_gcovXtu
 #gcovr -k -g .xtu-out-xtu/gcov --html --html-details -r . -o "$PROJNAME"_gcovXtu/coverage.html
