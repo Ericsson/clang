@@ -7,6 +7,7 @@ if [ ! -z $1 ] && ( [ $1 = "-h" ] || [ $1 = "--help" ] ) ; then
   echo "--reparse Do not create AST dumps. Analyze on the fly"
   echo "--use-usr Use USR for function identification instead of mangled name."
   echo "--name Run name extension"
+  echo "--strict-mode Give an error on all import failures"
   exit 0
 fi
 
@@ -31,6 +32,7 @@ CODECHECKER_PORT="15002"
 MODE="exp" #exp or prod
 REPARSE=""
 USR=""
+STRICT_MODE=""
 i=0
 j=0
 NAME=""
@@ -44,6 +46,9 @@ do
   fi
   if  [ "$var" = "--use-usr" ]; then
     USR="--use-usr"
+  fi
+  if  [ "$var" = "--strict-mode" ]; then
+    STRICT_MODE="--strict-mode"
   fi
   if  [ "$var" = "--production" ]; then
     HTML_DIR="/var/www/html/clang-ctu"
@@ -65,10 +70,10 @@ STATFILE="all_statistics_"$MODE.txt
 
 for PROJECT in $(ls -d */ | cut -d"/" -f1); do
   if [ "$MEMPROF" = true ]; then
-    ../analyze_project.sh $PROJECT $REPARSE --memprof $USR $NAME
+    ../analyze_project.sh $PROJECT $REPARSE --memprof $USR $NAME $STRICT_MODE
     cp ./$PROJECT/build/*heap_usage.txt $HTML_DIR
   else
-    /bin/bash -x ../analyze_project.sh $PROJECT $REPARSE $USR $NAME
+    /bin/bash -x ../analyze_project.sh $PROJECT $REPARSE $USR $NAME $STRICT_MODE
   fi
   cp -rf $PROJECT/build/*gcov* $HTML_DIR
 done
