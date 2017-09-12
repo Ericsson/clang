@@ -547,27 +547,67 @@ TEST(ImportExpr, ImportCXXDependentScopeMemberExpr) {
                       binaryOperator()))))))));
 }
 
-
-// TODO: Match unresolvedMemberExpr in the test case.
+const internal::VariadicDynCastAllOfMatcher<Expr, UnresolvedMemberExpr>
+    unresolvedMemberExpr;
 TEST(ImportExpr, ImportUnresolvedMemberExpr) {
   MatchVerifier<Decl> Verifier;
- EXPECT_TRUE(
-        testImport(
-          "struct S { template <typename T> void mem(); };"
-          "template <typename U> void declToImport() {"
-            "S s;"
-            "s.mem<U>();"
-          "}",
-          Lang_CXX, "", Lang_CXX, Verifier,
-          functionTemplateDecl(
-            has(
-              functionDecl(
-                has(
-                  compoundStmt(
-                    has(callExpr()))))))));
+  EXPECT_TRUE(testImport("struct S { template <typename T> void mem(); };"
+                         "template <typename U> void declToImport() {"
+                         "S s;"
+                         "s.mem<U>();"
+                         "}",
+                         Lang_CXX, "", Lang_CXX, Verifier,
+                         functionTemplateDecl(has(functionDecl(has(compoundStmt(
+                             has(callExpr(has(unresolvedMemberExpr()))))))))));
 }
 
+const internal::VariadicDynCastAllOfMatcher<Expr, DependentScopeDeclRefExpr>
+    dependentScopeDeclRefExpr;
+TEST(ImportExpr, ImportDependentScopeDeclRefExpr) {
+  MatchVerifier<Decl> Verifier;
+  EXPECT_TRUE(testImport("template <typename T> struct S;"
+                         "template <typename T> void declToImport() {"
+                         "S<T>::foo;"
+                         "}",
+                         Lang_CXX, "", Lang_CXX, Verifier,
+                         functionTemplateDecl(has(functionDecl(has(compoundStmt(
+                             has(dependentScopeDeclRefExpr()))))))));
 
+  EXPECT_TRUE(testImport("template <typename T> struct S;"
+                         "template <typename T> void declToImport() {"
+                         "S<T>::template foo;"
+                         "}",
+                         Lang_CXX, "", Lang_CXX, Verifier,
+                         functionTemplateDecl(has(functionDecl(has(compoundStmt(
+                             has(dependentScopeDeclRefExpr()))))))));
+
+  EXPECT_TRUE(testImport("template <typename T> struct S;"
+                         "template <typename T> void declToImport() {"
+                         "S<T>::template foo<>;"
+                         "}",
+                         Lang_CXX, "", Lang_CXX, Verifier,
+                         functionTemplateDecl(has(functionDecl(has(compoundStmt(
+                             has(dependentScopeDeclRefExpr()))))))));
+
+  EXPECT_TRUE(testImport("template <typename T> struct S;"
+                         "template <typename T> void declToImport() {"
+                         "S<T>::template foo<T>;"
+                         "}",
+                         Lang_CXX, "", Lang_CXX, Verifier,
+                         functionTemplateDecl(has(functionDecl(has(compoundStmt(
+                             has(dependentScopeDeclRefExpr()))))))));
+}
+const internal::VariadicDynCastAllOfMatcher<Type, DependentNameType>
+    dependentNameType;
+TEST(ImportExpr, DependentNameType) {
+  MatchVerifier<Decl> Verifier;
+  EXPECT_TRUE(testImport("template <typename T> struct declToImport {"
+                         "typedef typename T::type dependent_name;"
+                         "};",
+                         Lang_CXX11, "", Lang_CXX11, Verifier,
+                         classTemplateDecl(has(cxxRecordDecl(
+                             has(typedefDecl(has(dependentNameType()))))))));
+}
 
 } // end namespace ast_matchers
 } // end namespace clang
