@@ -609,5 +609,15 @@ TEST(ImportExpr, DependentNameType) {
                              has(typedefDecl(has(dependentNameType()))))))));
 }
 
+TEST(ImportExpr, DependentSizedArrayType) {
+  MatchVerifier<Decl> Verifier;
+  EXPECT_TRUE(testImport("template<typename T, int Size> class declToImport {"
+                         "  T data[Size];"
+                         "};",
+                         Lang_CXX, "", Lang_CXX, Verifier,
+                         classTemplateDecl(has(cxxRecordDecl(has(fieldDecl(
+                             hasType(dependentSizedArrayType()))))))));
+}
+
 } // end namespace ast_matchers
 } // end namespace clang
