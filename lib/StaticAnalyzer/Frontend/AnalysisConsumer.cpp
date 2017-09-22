@@ -22,6 +22,7 @@
 #include "clang/Analysis/CallGraph.h"
 #include "clang/Analysis/CodeInjector.h"
 #include "clang/Basic/SourceManager.h"
+#include "clang/CrossTU/CrossTranslationUnit.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/StaticAnalyzer/Checkers/LocalCheckers.h"
@@ -33,7 +34,6 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/AnalysisManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ExprEngine.h"
 #include "clang/StaticAnalyzer/Frontend/CheckerRegistration.h"
-#include "clang/Tooling/CrossTranslationUnit.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Support/FileSystem.h"
@@ -169,7 +169,7 @@ public:
   AnalyzerOptionsRef Opts;
   ArrayRef<std::string> Plugins;
   CodeInjector *Injector;
-  tooling::CrossTranslationUnit CTU;
+  cross_tu::CrossTranslationUnitContext CTU;
 
   /// \brief Stores the declarations from the local translation unit.
   /// Note, we pre-compute the local declarations at parse time as an

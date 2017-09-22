@@ -70,8 +70,9 @@ REGISTER_TRAIT_WITH_PROGRAMSTATE(InitializedTemporariesSet,
 
 static const char* TagProviderName = "ExprEngine";
 
-ExprEngine::ExprEngine(tooling::CrossTranslationUnit &CTU, AnalysisManager &mgr,
-                       bool gcEnabled, SetOfConstDecls *VisitedCalleesIn,
+ExprEngine::ExprEngine(cross_tu::CrossTranslationUnitContext &CTU,
+                       AnalysisManager &mgr, bool gcEnabled,
+                       SetOfConstDecls *VisitedCalleesIn,
                        FunctionSummariesTy *FS, InliningModes HowToInlineIn)
     : CTU(CTU), AMgr(mgr),
       AnalysisDeclContexts(mgr.getAnalysisDeclContextManager()),

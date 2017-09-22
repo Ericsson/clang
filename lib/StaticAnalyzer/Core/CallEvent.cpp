@@ -18,7 +18,7 @@
 #include "clang/Analysis/ProgramPoint.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/DynamicTypeMap.h"
-#include "clang/Tooling/CrossTranslationUnit.h"
+#include "clang/CrossTU/CrossTranslationUnit.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/raw_ostream.h"
@@ -353,39 +353,6 @@ RuntimeDefinition AnyFunctionCall::getRuntimeDefinition() const {
   const FunctionDecl *FD = getDecl();
   // Note that the AnalysisDeclContext will have the FunctionDecl with
   // the definition (if one exists).
-  if (FD) {
-    AnalysisDeclContext *AD =
-      getLocationContext()->getAnalysisDeclContext()->
-      getManager()->getContext(FD);
-    bool IsAutosynthesized;
-    Stmt* Body = AD->getBody(IsAutosynthesized);
-    DEBUG({
-        if (IsAutosynthesized)
-          llvm::dbgs() << "Using autosynthesized body for " << FD->getName()
-                       << "\n";
-    });
-    if (Body) {
-      const Decl* Decl = AD->getDecl();
-      return RuntimeDefinition(Decl);
-    }
-  }
-
-  return RuntimeDefinition();
-}
-
-void AnyFunctionCall::getInitialStackFrameContents(
-                                        const StackFrameContext *CalleeCtx,
-                                        BindingsTy &Bindings) const {
-  const FunctionDecl *D = cast<FunctionDecl>(CalleeCtx->getDecl());
-  SValBuilder &SVB = getState()->getStateManager().getSValBuilder();
-  addParameterValuesToBindings(CalleeCtx, Bindings, SVB, *this,
-                               D->parameters());
-}
-
-RuntimeDefinition AnyFunctionCall::getRuntimeDefinition() const {
-  const FunctionDecl *FD = getDecl();
-  // Note that the AnalysisDeclContext will have the FunctionDecl with
-  // the definition (if one exists).
   if (!FD)
     return RuntimeDefinition();
 
@@ -401,12 +368,32 @@ RuntimeDefinition AnyFunctionCall::getRuntimeDefinition() const {
   //Try to get CTU definition only if CTUDir is provided.
   if (Engine->getAnalysisManager().options.getCTUDir().empty())
     return RuntimeDefinition();
-  const FunctionDecl *CTUDecl =
-      Engine->getCrossTranslationUnit().getCrossTUDefinition(
+
+  cross_tu::CrossTranslationUnitContext &CTUCtx =
+      Engine->getCrossTranslationUnitContext();
+  llvm::Expected<const FunctionDecl *> CTUDeclOrError =
+      CTUCtx.getCrossTUDefinition(
           FD, Engine->getAnalysisManager().options.getCTUDir(),
           "externalFnMap.txt");
 
-  return RuntimeDefinition(CTUDecl);
+  if (!CTUDeclOrError) {
+    handleAllErrors(CTUDeclOrError.takeError(),
+                    [&](const cross_tu::IndexError &IE) {
+                      CTUCtx.emitCrossTUDiagnostics(IE);
+                    });
+    return RuntimeDefinition();
+  }
+
+  return RuntimeDefinition(*CTUDeclOrError);
+}
+
+void AnyFunctionCall::getInitialStackFrameContents(
+                                        const StackFrameContext *CalleeCtx,
+                                        BindingsTy &Bindings) const {
+  const FunctionDecl *D = cast<FunctionDecl>(CalleeCtx->getDecl());
+  SValBuilder &SVB = getState()->getStateManager().getSValBuilder();
+  addParameterValuesToBindings(CalleeCtx, Bindings, SVB, *this,
+                               D->parameters());
 }
 
 bool AnyFunctionCall::argumentsMayEscape() const {
