@@ -388,8 +388,11 @@ static bool compareCrossTUSourceLocs(FullSourceLoc XL, FullSourceLoc YL) {
   std::pair<bool, bool> InSameTU = SM.isInTheSameTranslationUnit(XOffs, YOffs);
   if (InSameTU.first)
     return XL.isBeforeInTranslationUnitThan(YL);
-  return SM.getFileEntryForID(XL.getFileID())->getName() <
-         SM.getFileEntryForID(YL.getFileID())->getName();
+  const FileEntry *XFE = SM.getFileEntryForID(XL.getFileID());
+  const FileEntry *YFE = SM.getFileEntryForID(YL.getFileID());
+  if (!XFE || !YFE)
+    return XFE && !YFE;
+  return XFE->getName() < YFE->getName();
 }
 
 static bool compare(const PathDiagnostic &X, const PathDiagnostic &Y) {
