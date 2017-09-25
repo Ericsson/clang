@@ -28,7 +28,6 @@ add_clang_library(clangTooling
   clangDriver
   clangFormat
   clangFrontend
-  clangIndex
   clangLex
   clangRewrite
   clangToolingCore
