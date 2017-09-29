@@ -20,6 +20,8 @@ include "clang/StaticAnalyzer/Checkers/CheckerBase.td"
 // alpha.osx.cocoa).
 def Alpha : Package<"alpha">;
 
+def API : Package<"api">;
+
 def Core : Package<"core">;
 def CoreBuiltin : Package<"builtin">, InPackage<Core>;
 def CoreUninitialized  : Package<"uninitialized">, InPackage<Core>;
@@ -83,6 +85,8 @@ def LocalizabilityOptIn : Package<"localizability">, InPackage<CocoaOptIn>;
 def MPI : Package<"mpi">, InPackage<OptIn>;
 
 def LLVM : Package<"llvm">;
+
+def StatisticsCollector : Package<"statisticsCollector">, Hidden;
 
 // The APIModeling package is for checkers that model APIs and don't perform
 // any diagnostics. These checkers are always turned on; this package is
@@ -209,6 +213,25 @@ def NullableReturnedFromNonnullChecker : Checker<"NullableReturnedFromNonnull">,
   DescFile<"NullabilityChecker.cpp">;
 
 } // end "nullability"
+
+//===----------------------------------------------------------------------===//
+// API checkers.
+//===----------------------------------------------------------------------===//
+
+let ParentPackage = API in {
+
+def APISpecialReturn : Checker<"SpecialReturnValue">,
+  InPackage<API>,
+  HelpText<"Check for special return values in APIs">,
+  DescFile<"SpecialReturnValueChecker.cpp">;
+
+def APIUncheckedReturn : Checker<"UncheckedReturnValue">,
+  InPackage<API>,
+  HelpText<"Check for unchecked return values in APIs">,
+  DescFile<"UncheckedReturnValueChecker.cpp">;
+
+} // end "api"
+
 
 //===----------------------------------------------------------------------===//
 // Evaluate "builtin" functions.
@@ -770,3 +793,20 @@ def UnixAPIPortabilityChecker : Checker<"UnixAPI">,
   DescFile<"UnixAPIChecker.cpp">;
 
 } // end optin.portability
+
+//===----------------------------------------------------------------------===/
+// Statistics collectors.
+//===----------------------------------------------------------------------===/
+
+
+let ParentPackage = StatisticsCollector in {
+
+def ReturnValueCheckStatisticsCollector : Checker<"ReturnValueCheck">,
+    HelpText<"Collects statistics about the return value checks">,
+    DescFile<"ReturnValueCheckStatisticsCollector.cpp">;
+
+def SpecialReturnValueStatisticsCollector : Checker<"SpecialReturnValue">,
+    HelpText<"Collects statistics about the special return values">,
+    DescFile<"SpecialReturnValueStatisticsCollector.cpp">;
+
+} // end statisticsCollector
