@@ -281,7 +281,6 @@ namespace clang {
     Expr *VisitCXXTemporaryObjectExpr(CXXTemporaryObjectExpr *CE);
     Expr *VisitMaterializeTemporaryExpr(MaterializeTemporaryExpr *E);
     Expr *VisitPackExpansionExpr(PackExpansionExpr *E);
-    //Expr *VisitSizeOfPackExpr(SizeOfPackExpr *E);
     Expr *VisitCXXNewExpr(CXXNewExpr *CE);
     Expr *VisitCXXDeleteExpr(CXXDeleteExpr *E);
     Expr *VisitCXXConstructExpr(CXXConstructExpr *E);
@@ -5746,29 +5745,6 @@ Expr *ASTNodeImporter::VisitPackExpansionExpr(PackExpansionExpr *E) {
         T, Pattern, Importer.Import(E->getEllipsisLoc()),
         E->getNumExpansions());
 }
-
-//Expr *ASTNodeImporter::VisitSizeOfPackExpr(SizeOfPackExpr *E) {
-//  QualType T = Importer.Import(E->getType());
-//  if (T.isNull()) {
-//    assert(false);
-//    return NULL;
-//  }
-
-//  NamedDecl *Pack = cast_or_null<NamedDecl>(E->getPack());
-//  assert(Pack);
-//  if (!Pack)
-//    return NULL;
-
-//  if (E->isValueDependent())
-//    return new (Importer.getToContext()) SizeOfPackExpr(
-//          T, Importer.Import(E->getOperatorLoc()), Pack,
-//          Importer.Import(E->getPackLoc()), Importer.Import(E->getRParenLoc()));
-
-//  return new (Importer.getToContext()) SizeOfPackExpr(
-//        T, Importer.Import(E->getOperatorLoc()), Pack,
-//        Importer.Import(E->getPackLoc()), Importer.Import(E->getRParenLoc()),
-//        E->getPackLength());
-//}
 
 Expr *ASTNodeImporter::VisitCXXNewExpr(CXXNewExpr *CE) {
   QualType T = Importer.Import(CE->getType());
