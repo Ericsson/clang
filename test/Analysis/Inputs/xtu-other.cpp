@@ -87,3 +87,23 @@ int fun_with_unsupported_node(int n) {
   vector<int,8> v;
   return n;
 }
+
+// TypeAliasTemplate support
+template <int K>
+struct TATS {
+  static const int i = K;
+};
+
+template <int K>
+using TAT = TATS<K>;
+
+int fun_using_type_alias_template() { return TAT<3>::i;}
+
+// PackExpansion support
+template <typename... Args>
+struct PES {
+  PES(Args... args) {}
+  static const int i = 4;
+};
+
+int fun_using_pack_expansion() { return PES<int>::i;}
