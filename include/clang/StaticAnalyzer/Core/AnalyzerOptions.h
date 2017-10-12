@@ -155,6 +155,7 @@ public:
   unsigned ShowEnabledCheckerList : 1;
   unsigned AnalyzeAll : 1;
   unsigned AnalyzerDisplayProgress : 1;
+  unsigned AnalyzerDisplayCtuProgress : 1;
   unsigned AnalyzeNestedBlocks : 1;
 
   /// \brief The flag regulates if we should eagerly assume evaluations of
@@ -600,6 +601,7 @@ public:
     ShowEnabledCheckerList(0),
     AnalyzeAll(0),
     AnalyzerDisplayProgress(0),
+    AnalyzerDisplayCtuProgress(0),
     AnalyzeNestedBlocks(0),
     eagerlyAssumeBinOpBifurcation(0),
     TrimGraph(0),

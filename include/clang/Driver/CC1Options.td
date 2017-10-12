@@ -81,6 +81,9 @@ def analyzer_viz_egraph_graphviz : Flag<["-"], "analyzer-viz-egraph-graphviz">,
 def analyzer_viz_egraph_ubigraph : Flag<["-"], "analyzer-viz-egraph-ubigraph">,
   HelpText<"Display exploded graph using Ubigraph">;
 
+def analyzer_display_ctu_progress : Flag<["-"], "analyzer-display-ctu-progress">,
+  HelpText<"Emit verbose output about the analyzer's progress related to ctu">;
+
 def analyzer_inline_max_stack_depth : Separate<["-"], "analyzer-inline-max-stack-depth">,
   HelpText<"Bound on stack depth while inlining (4 by default)">;
 def analyzer_inline_max_stack_depth_EQ : Joined<["-"], "analyzer-inline-max-stack-depth=">, 

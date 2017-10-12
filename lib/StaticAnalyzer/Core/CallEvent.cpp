@@ -383,7 +383,8 @@ RuntimeDefinition AnyFunctionCall::getRuntimeDefinition() const {
 
   const FunctionDecl *CTUDecl = CTU.getCrossTUDefinition(
       FD, AMgr.options.getCTUDir(), "externalFnMap.txt",
-      AMgr.options.getCTUReparseOnDemand());
+      AMgr.options.getCTUReparseOnDemand(),
+      AMgr.options.AnalyzerDisplayCtuProgress);
 
   return RuntimeDefinition(CTUDecl);
 }

@@ -84,7 +84,7 @@ CrossTranslationUnit::findFunctionInDeclContext(const DeclContext *DC,
 
 const FunctionDecl *CrossTranslationUnit::getCrossTUDefinition(
     const FunctionDecl *FD, StringRef CrossTUDir, StringRef IndexName,
-    StringRef CompilationDatabase) {
+    StringRef CompilationDatabase, bool DisplayCtuProgress) {
   assert(!FD->hasBody() && "FD has a definition in current translation unit!");
   ++NumGetCTUCalled;
 
@@ -175,6 +175,14 @@ const FunctionDecl *CrossTranslationUnit::getCrossTUDefinition(
       }
       Unit = LoadedUnit.get();
       FileASTUnitMap[ASTFileName] = std::move(LoadedUnit);
+
+      if (DisplayCtuProgress) {
+        // Drop the '.ast' extension
+        StringRef SourceFileName = ASTFileName.drop_back(4);
+        llvm::errs() << "ANALYZE (CTU loaded AST for source file): "
+                     << SourceFileName << "\n";
+      }
+
     } else {
       Unit = ASTCacheEntry->second.get();
     }

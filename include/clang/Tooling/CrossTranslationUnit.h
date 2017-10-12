@@ -60,7 +60,8 @@ public:
   const FunctionDecl *getCrossTUDefinition(const FunctionDecl *FD,
                                            StringRef CrossTUDir,
                                            StringRef IndexName,
-                                           StringRef CompilationDatabase = "");
+                                           StringRef CompilationDatabase = "",
+                                           bool DisplayCtuProgress = false);
 
   std::string getLookupName(const NamedDecl *ND);
 

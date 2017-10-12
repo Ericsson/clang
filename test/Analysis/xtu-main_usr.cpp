@@ -3,6 +3,11 @@
 // RUN: %clang_cc1 -triple x86_64-pc-linux-gnu -emit-pch -o %T/xtudir/xtu-chain.cpp.ast %S/Inputs/xtu-chain.cpp
 // RUN: cp %S/Inputs/externalFnMap_usr.txt %T/xtudir/externalFnMap.txt
 // RUN: %clang_cc1 -triple x86_64-pc-linux-gnu -fsyntax-only -analyze -analyzer-checker=core,debug.ExprInspection -analyzer-config xtu-dir=%T/xtudir -analyzer-config use-usr=true -analyzer-config reanalyze-xtu-visited=true -std=c++11 -verify %s
+// RUN: %clang_cc1 -triple x86_64-pc-linux-gnu -fsyntax-only -analyze -analyzer-checker=core,debug.ExprInspection -analyzer-config xtu-dir=%T/xtudir -analyzer-config use-usr=true -analyzer-config reanalyze-xtu-visited=true -std=c++11 -analyzer-display-ctu-progress 2>&1 %s | FileCheck %s
+
+// CHECK: ANALYZE (CTU loaded AST for source file): {{.*}}/xtu-other.cpp
+// CHECK: ANALYZE (CTU loaded AST for source file): {{.*}}/xtu-chain.cpp
+
 
 void clang_analyzer_eval(int);
 
