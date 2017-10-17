@@ -1713,7 +1713,7 @@ Decl *ASTNodeImporter::VisitTypeAliasTemplateDecl(TypeAliasTemplateDecl *D) {
                                          ConflictingDecls.data(),
                                          ConflictingDecls.size());
       if (!Name)
-        return 0;
+        return nullptr;
     }
   }
 
@@ -1721,12 +1721,12 @@ Decl *ASTNodeImporter::VisitTypeAliasTemplateDecl(TypeAliasTemplateDecl *D) {
         D->getTemplateParameters());
   assert(Params);
   if (!Params)
-    return NULL;
+    return nullptr;
 
   NamedDecl *TemplDecl = cast<NamedDecl>(Importer.Import(D->getTemplatedDecl()));
   assert(TemplDecl);
   if (!TemplDecl)
-    return NULL;
+    return nullptr;
 
   TypeAliasTemplateDecl *ToAlias = TypeAliasTemplateDecl::Create(
         Importer.getToContext(), DC, Loc, Name, Params, TemplDecl);
