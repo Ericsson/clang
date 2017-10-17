@@ -353,63 +353,63 @@ class MergeCtuMapTest(unittest.TestCase):
         self.assertFalse(pairs)
 
     def test_multiple_maps_merged(self):
-        concat_map = ['_Z1fun1i@x86_64 ast/x86_64/fun1.c.ast',
-                      '_Z1fun2i@x86_64 ast/x86_64/fun2.c.ast',
-                      '_Z1fun3i@x86_64 ast/x86_64/fun3.c.ast']
+        concat_map = ['c:@F@fun1#I# ast/fun1.c.ast',
+                      'c:@F@fun2#I# ast/fun2.c.ast',
+                      'c:@F@fun3#I# ast/fun3.c.ast']
         pairs = sut.create_global_ctu_function_map(concat_map)
-        self.assertTrue(('_Z1fun1i@x86_64', 'ast/x86_64/fun1.c.ast') in pairs)
-        self.assertTrue(('_Z1fun2i@x86_64', 'ast/x86_64/fun2.c.ast') in pairs)
-        self.assertTrue(('_Z1fun3i@x86_64', 'ast/x86_64/fun3.c.ast') in pairs)
+        self.assertTrue(('c:@F@fun1#I#', 'ast/fun1.c.ast') in pairs)
+        self.assertTrue(('c:@F@fun2#I#', 'ast/fun2.c.ast') in pairs)
+        self.assertTrue(('c:@F@fun3#I#', 'ast/fun3.c.ast') in pairs)
         self.assertEqual(3, len(pairs))
 
     def test_not_unique_func_left_out(self):
-        concat_map = ['_Z1fun1i@x86_64 ast/x86_64/fun1.c.ast',
-                      '_Z1fun2i@x86_64 ast/x86_64/fun2.c.ast',
-                      '_Z1fun1i@x86_64 ast/x86_64/fun7.c.ast']
+        concat_map = ['c:@F@fun1#I# ast/fun1.c.ast',
+                      'c:@F@fun2#I# ast/fun2.c.ast',
+                      'c:@F@fun1#I# ast/fun7.c.ast']
         pairs = sut.create_global_ctu_function_map(concat_map)
-        self.assertFalse(('_Z1fun1i@x86_64', 'ast/x86_64/fun1.c.ast') in pairs)
-        self.assertFalse(('_Z1fun1i@x86_64', 'ast/x86_64/fun7.c.ast') in pairs)
-        self.assertTrue(('_Z1fun2i@x86_64', 'ast/x86_64/fun2.c.ast') in pairs)
+        self.assertFalse(('c:@F@fun1#I#', 'ast/fun1.c.ast') in pairs)
+        self.assertFalse(('c:@F@fun1#I#', 'ast/fun7.c.ast') in pairs)
+        self.assertTrue(('c:@F@fun2#I#', 'ast/fun2.c.ast') in pairs)
         self.assertEqual(1, len(pairs))
 
     def test_duplicates_are_kept(self):
-        concat_map = ['_Z1fun1i@x86_64 ast/x86_64/fun1.c.ast',
-                      '_Z1fun2i@x86_64 ast/x86_64/fun2.c.ast',
-                      '_Z1fun1i@x86_64 ast/x86_64/fun1.c.ast']
+        concat_map = ['c:@F@fun1#I# ast/fun1.c.ast',
+                      'c:@F@fun2#I# ast/fun2.c.ast',
+                      'c:@F@fun1#I# ast/fun1.c.ast']
         pairs = sut.create_global_ctu_function_map(concat_map)
-        self.assertTrue(('_Z1fun1i@x86_64', 'ast/x86_64/fun1.c.ast') in pairs)
-        self.assertTrue(('_Z1fun2i@x86_64', 'ast/x86_64/fun2.c.ast') in pairs)
+        self.assertTrue(('c:@F@fun1#I#', 'ast/fun1.c.ast') in pairs)
+        self.assertTrue(('c:@F@fun2#I#', 'ast/fun2.c.ast') in pairs)
         self.assertEqual(2, len(pairs))
 
     def test_space_handled_in_source(self):
-        concat_map = ['_Z1fun1i@x86_64 ast/x86_64/f un.c.ast']
+        concat_map = ['c:@F@fun1#I# ast/f un.c.ast']
         pairs = sut.create_global_ctu_function_map(concat_map)
-        self.assertTrue(('_Z1fun1i@x86_64', 'ast/x86_64/f un.c.ast') in pairs)
+        self.assertTrue(('c:@F@fun1#I#', 'ast/f un.c.ast') in pairs)
         self.assertEqual(1, len(pairs))
 
 
 class FuncMapSrcToAstTest(unittest.TestCase):
 
     def test_empty_gives_empty(self):
-        fun_ast_lst = sut.func_map_list_src_to_ast([], 'armv7')
+        fun_ast_lst = sut.func_map_list_src_to_ast([])
         self.assertFalse(fun_ast_lst)
 
     def test_sources_to_asts(self):
-        fun_src_lst = ['_Z1f1i ' + os.path.join(os.sep + 'path', 'f1.c'),
-                       '_Z1f2i ' + os.path.join(os.sep + 'path', 'f2.c')]
-        fun_ast_lst = sut.func_map_list_src_to_ast(fun_src_lst, 'armv7')
-        self.assertTrue('_Z1f1i@armv7 ' +
-                        os.path.join('ast', 'armv7', 'path', 'f1.c.ast')
+        fun_src_lst = ['c:@F@f1#I# ' + os.path.join(os.sep + 'path', 'f1.c'),
+                       'c:@F@f2#I# ' + os.path.join(os.sep + 'path', 'f2.c')]
+        fun_ast_lst = sut.func_map_list_src_to_ast(fun_src_lst)
+        self.assertTrue('c:@F@f1#I# ' +
+                        os.path.join('ast', 'path', 'f1.c.ast')
                         in fun_ast_lst)
-        self.assertTrue('_Z1f2i@armv7 ' +
-                        os.path.join('ast', 'armv7', 'path', 'f2.c.ast')
+        self.assertTrue('c:@F@f2#I# ' +
+                        os.path.join('ast', 'path', 'f2.c.ast')
                         in fun_ast_lst)
         self.assertEqual(2, len(fun_ast_lst))
 
     def test_spaces_handled(self):
-        fun_src_lst = ['_Z1f1i ' + os.path.join(os.sep + 'path', 'f 1.c')]
-        fun_ast_lst = sut.func_map_list_src_to_ast(fun_src_lst, 'armv7')
-        self.assertTrue('_Z1f1i@armv7 ' +
-                        os.path.join('ast', 'armv7', 'path', 'f 1.c.ast')
+        fun_src_lst = ['c:@F@f1#I# ' + os.path.join(os.sep + 'path', 'f 1.c')]
+        fun_ast_lst = sut.func_map_list_src_to_ast(fun_src_lst)
+        self.assertTrue('c:@F@f1#I# ' +
+                        os.path.join('ast', 'path', 'f 1.c.ast')
                         in fun_ast_lst)
         self.assertEqual(1, len(fun_ast_lst))

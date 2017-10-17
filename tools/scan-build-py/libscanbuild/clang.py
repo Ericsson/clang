@@ -178,5 +178,5 @@ def get_triple_arch(command, cwd):
     while i < len(cmd) and cmd[i] != "-triple":
         i += 1
     if i < (len(cmd) - 1):
-        arch = cmd[i + 1].split("-")[0]
+        arch = cmd[i + 1]
     return arch

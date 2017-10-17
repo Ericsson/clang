@@ -165,22 +165,28 @@ def merge_ctu_func_maps(ctudir):
                 for line in in_file:
                     yield line
 
-    def write_global_map(ctudir, mangled_ast_pairs):
+    def write_global_map(ctudir, arch, mangled_ast_pairs):
         """ Write (mangled function name, ast file) pairs into final file. """
 
-        extern_fns_map_file = os.path.join(ctudir, CTU_FUNCTION_MAP_FILENAME)
+        extern_fns_map_file = os.path.join(ctudir, arch,
+                                           CTU_FUNCTION_MAP_FILENAME)
         with open(extern_fns_map_file, 'w') as out_file:
             for mangled_name, ast_file in mangled_ast_pairs:
                 out_file.write('%s %s\n' % (mangled_name, ast_file))
 
-    fnmap_dir = os.path.join(ctudir, CTU_TEMP_FNMAP_FOLDER)
+    triple_arches = glob.glob(os.path.join(ctudir, '*'))
+    for triple_path in triple_arches:
+        if os.path.isdir(triple_path):
+            triple_arch = os.path.basename(triple_path)
+            fnmap_dir = os.path.join(ctudir, triple_arch,
+                                     CTU_TEMP_FNMAP_FOLDER)
 
-    func_map_lines = generate_func_map_lines(fnmap_dir)
-    mangled_ast_pairs = create_global_ctu_function_map(func_map_lines)
-    write_global_map(ctudir, mangled_ast_pairs)
+            func_map_lines = generate_func_map_lines(fnmap_dir)
+            mangled_ast_pairs = create_global_ctu_function_map(func_map_lines)
+            write_global_map(ctudir, triple_arch, mangled_ast_pairs)
 
-    # Remove all temporary files
-    shutil.rmtree(fnmap_dir, ignore_errors=True)
+            # Remove all temporary files
+            shutil.rmtree(fnmap_dir, ignore_errors=True)
 
 
 def run_analyzer_parallel(args):
@@ -222,7 +228,6 @@ def run_analyzer_with_ctu(args):
     ctu_config = get_ctu_config(args)
     if ctu_config.collect:
         shutil.rmtree(ctu_config.dir, ignore_errors=True)
-        os.makedirs(os.path.join(ctu_config.dir, CTU_TEMP_FNMAP_FOLDER))
     if ctu_config.collect and ctu_config.analyze:
         # CTU strings are coming from args.ctu_dir and func_map_cmd,
         # so we can leave it empty
@@ -518,7 +523,7 @@ def run_analyzer(opts, continuation=report_failure):
         return result
 
 
-def func_map_list_src_to_ast(func_src_list, triple_arch):
+def func_map_list_src_to_ast(func_src_list):
     """ Turns textual function map list with source files into a
     function map list with ast files. """
 
@@ -531,8 +536,8 @@ def func_map_list_src_to_ast(func_src_list, triple_arch):
         path = os.path.splitdrive(path)[1]
         # Make relative path out of absolute
         path = path[1:] if path[0] == os.sep else path
-        ast_path = os.path.join("ast", triple_arch, path + ".ast")
-        func_ast_list.append(mangled_name + "@" + triple_arch + " " + ast_path)
+        ast_path = os.path.join("ast", path + ".ast")
+        func_ast_list.append(mangled_name + " " + ast_path)
     return func_ast_list
 
 
@@ -544,13 +549,16 @@ def ctu_collect_phase(opts):
         """ Generates ASTs for the current compilation command. """
 
         args = opts['direct_args'] + opts['flags']
-        ast_joined_path = os.path.join(opts['ctu'].dir, 'ast', triple_arch,
+        ast_joined_path = os.path.join(opts['ctu'].dir, triple_arch, 'ast',
                                        os.path.realpath(opts['file'])[1:] +
                                        '.ast')
         ast_path = os.path.abspath(ast_joined_path)
         ast_dir = os.path.dirname(ast_path)
         if not os.path.isdir(ast_dir):
-            os.makedirs(ast_dir)
+            try:
+                os.makedirs(ast_dir)
+            except OSError:
+                pass
         ast_command = [opts['clang'], '-emit-ast']
         ast_command.extend(args)
         ast_command.append('-w')
@@ -570,9 +578,14 @@ def ctu_collect_phase(opts):
         funcmap_command.extend(args)
         logging.debug("Generating function map using '%s'", funcmap_command)
         func_src_list = run_command(funcmap_command, cwd=opts['directory'])
-        func_ast_list = func_map_list_src_to_ast(func_src_list, triple_arch)
-        extern_fns_map_folder = os.path.join(opts['ctu'].dir,
+        func_ast_list = func_map_list_src_to_ast(func_src_list)
+        extern_fns_map_folder = os.path.join(opts['ctu'].dir, triple_arch,
                                              CTU_TEMP_FNMAP_FOLDER)
+        if not os.path.isdir(extern_fns_map_folder):
+            try:
+                os.makedirs(extern_fns_map_folder)
+            except OSError:
+                pass
         if func_ast_list:
             with tempfile.NamedTemporaryFile(mode='w',
                                              dir=extern_fns_map_folder,
@@ -605,7 +618,11 @@ def dispatch_ctu(opts, continuation=run_analyzer):
         if ctu_config.collect:
             return ctu_collect_phase(opts)
         if ctu_config.analyze:
-            ctu_options = ['ctu-dir=' + ctu_config.dir,
+            cwd = opts['directory']
+            cmd = [opts['clang'], '--analyze'] + opts['direct_args'] \
+                + opts['flags'] + [opts['file']]
+            triarch = get_triple_arch(cmd, cwd)
+            ctu_options = ['ctu-dir=' + os.path.join(ctu_config.dir, triarch),
                            'reanalyze-ctu-visited=true']
             analyzer_options = prefix_with('-analyzer-config', ctu_options)
             direct_options = prefix_with('-Xanalyzer', analyzer_options)
