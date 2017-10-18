@@ -5733,13 +5733,13 @@ Expr *ASTNodeImporter::VisitPackExpansionExpr(PackExpansionExpr *E) {
   QualType T = Importer.Import(E->getType());
   if (T.isNull()) {
     assert(false);
-    return NULL;
+    return nullptr;
   }
 
   Expr *Pattern = Importer.Import(E->getPattern());
   if (!Pattern) {
     assert(false);
-    return NULL;
+    return nullptr;
   }
   return new (Importer.getToContext()) PackExpansionExpr(
         T, Pattern, Importer.Import(E->getEllipsisLoc()),
