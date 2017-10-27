@@ -1,7 +1,7 @@
-// RUN: mkdir -p %T/xtudir2
-// RUN: %clang_cc1 -triple x86_64-pc-linux-gnu -emit-pch -o %T/xtudir2/xtu-other.c.ast %S/Inputs/xtu-other.c
-// RUN: cp %S/Inputs/externalFnMap2_usr.txt %T/xtudir2/externalFnMap.txt
-// RUN: %clang_cc1 -triple x86_64-pc-linux-gnu -fsyntax-only -std=c89 -analyze -analyzer-checker=core,debug.ExprInspection -analyzer-config xtu-dir=%T/xtudir2 -analyzer-config use-usr=true -analyzer-config reanalyze-xtu-visited=true -verify %s
+// RUN: mkdir -p %T/ctudir2
+// RUN: %clang_cc1 -triple x86_64-pc-linux-gnu -emit-pch -o %T/ctudir2/ctu-other.c.ast %S/Inputs/ctu-other.c
+// RUN: cp %S/Inputs/externalFnMap2_usr.txt %T/ctudir2/externalFnMap.txt
+// RUN: %clang_cc1 -triple x86_64-pc-linux-gnu -fsyntax-only -std=c89 -analyze -analyzer-checker=core,debug.ExprInspection -analyzer-config ctu-dir=%T/ctudir2 -analyzer-config use-usr=true -analyzer-config reanalyze-ctu-visited=true -verify %s
 
 void clang_analyzer_eval(int);
 
@@ -38,7 +38,7 @@ int main() {
 struct S;
 int g(struct S *);
 void test_macro(void) {
-  g(0); // expected-warning@Inputs/xtu-other.c:31 {{Access to field 'a' results in a dereference of a null pointer (loaded from variable 'ctx')}}
+  g(0); // expected-warning@Inputs/ctu-other.c:31 {{Access to field 'a' results in a dereference of a null pointer (loaded from variable 'ctx')}}
 }
 
 //Test:

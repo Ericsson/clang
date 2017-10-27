@@ -35,18 +35,18 @@ gcov_outdir = 'gcov'
 gcov_tmpdir = gcov_outdir + '_tmp'
 
 parser = argparse.ArgumentParser(
-            description='Executes 2nd pass of XTU analysis')
+            description='Executes 2nd pass of CTU analysis')
 parser.add_argument('-b', required=True, metavar='buildlog.json',
                     dest='buildlog',
                     help='Use a JSON Compilation Database')
-parser.add_argument('-p', metavar='preanalyze-dir', dest='xtuindir',
+parser.add_argument('-p', metavar='preanalyze-dir', dest='ctuindir',
                     help='Use directory for reading preanalyzation data '
-                         '(default=".xtu")',
-                    default='.xtu')
-parser.add_argument('-o', metavar='output-dir', dest='xtuoutdir',
+                         '(default=".ctu")',
+                    default='.ctu')
+parser.add_argument('-o', metavar='output-dir', dest='ctuoutdir',
                     help='Use directory for output analyzation results '
-                         '(default=".xtu-out")',
-                    default='.xtu-out')
+                         '(default=".ctu-out")',
+                    default='.ctu-out')
 parser.add_argument('-e', metavar='enabled-checker', nargs='+',
                     dest='enabled_checkers',
                     help='List all enabled checkers')
@@ -59,7 +59,7 @@ parser.add_argument('-j', metavar='threads', dest='threads',
                     default=threading_factor)
 parser.add_argument('-v', dest='verbose', action='store_true',
                     help='Verbose output of every command executed')
-parser.add_argument('--xtu-reparse', dest='reparse', action='store_true',
+parser.add_argument('--ctu-reparse', dest='reparse', action='store_true',
                     help='Use on-demand reparsing of external TUs (and do not dump ASTs).')
 parser.add_argument('--clang-path', metavar='clang-path', dest='clang_path',
                     help='Set path of clang binaries to be used (default '
@@ -81,8 +81,8 @@ parser.add_argument('--output-format', metavar='format',
 # parser.add_argument('--timeout', metavar='N',
 #                     help='Timeout for analysis in seconds (default: %d)' %
 #                     timeout, default=timeout)
-parser.add_argument('--no-xtu', dest='no_xtu', action='store_true',
-                    help='Do not use XTU at all, '
+parser.add_argument('--no-ctu', dest='no_ctu', action='store_true',
+                    help='Do not use CTU at all, '
                          'only do normal static analysis')
 parser.add_argument('--record-coverage', dest='record_coverage',
                     action='store_true',
@@ -90,7 +90,7 @@ parser.add_argument('--record-coverage', dest='record_coverage',
 parser.add_argument('--record-memory-profile', dest='record_memprof',
                     action='store_true',
                     help='Generate Valgrind Massif memory profile information '
-                         'during analysis (into xtuoutdir/memprof)')
+                         'during analysis (into ctuoutdir/memprof)')
 parser.add_argument('--log-passed-build', metavar='passed-buildlog.json',
                     dest='passed_buildlog',
                     help='Write new buildlog JSON of files passing analysis')
@@ -130,7 +130,7 @@ def check_executable_available(exe_name, arg_path):
             'argument' if arg_path is not None else 'environment')
         sys.exit(1)
     elif mainargs.verbose:
-        print 'XTU uses {} dir: {}, taken from {}.'.format(
+        print 'CTU uses {} dir: {}, taken from {}.'.format(
             exe_name,
             found_path,
             'argument' if arg_path is not None else 'environment')
@@ -149,21 +149,21 @@ if mainargs.disabled_checkers:
     analyzer_params += ['-analyzer-disable-checker', mainargs.disable_checkers]
 if mainargs.reparse:
     analyzer_params += ['-analyzer-config',
-                        'xtu-reparse='+os.path.abspath(mainargs.buildlog)]
-if not mainargs.no_xtu:
+                        'ctu-reparse='+os.path.abspath(mainargs.buildlog)]
+if not mainargs.no_ctu:
     analyzer_params += ['-analyzer-config',
-                        'xtu-dir=' + os.path.abspath(mainargs.xtuindir)]
+                        'ctu-dir=' + os.path.abspath(mainargs.ctuindir)]
 if mainargs.record_coverage:
-    gcov_tmppath = os.path.abspath(os.path.join(mainargs.xtuoutdir,
+    gcov_tmppath = os.path.abspath(os.path.join(mainargs.ctuoutdir,
                                                 gcov_tmpdir))
-    gcov_finalpath = os.path.abspath(os.path.join(mainargs.xtuoutdir,
+    gcov_finalpath = os.path.abspath(os.path.join(mainargs.ctuoutdir,
                                                   gcov_outdir))
     shutil.rmtree(gcov_tmppath, True)
 if mainargs.record_memprof:
     # memprof_analyze.sh calls clang with valgrind profiling.
     # We need to wrap it in a script so scan-build/analyze-cc
     # can call it instead of clang.
-    memprof_path = os.path.abspath(os.path.join(mainargs.xtuoutdir,
+    memprof_path = os.path.abspath(os.path.join(mainargs.ctuoutdir,
                                                 "memprof"))
     memprof_command = os.path.join(os.path.abspath(os.path.dirname(__file__)),
                                    'lib', 'memprof_analyze.py')
@@ -177,7 +177,7 @@ passthru_analyzer_params += ['--analyzer-output ' + mainargs.output_format]
 
 analyzer_env = os.environ.copy()
 analyzer_env['ANALYZE_BUILD_CLANG'] = os.path.join(clang_path, 'clang')
-analyzer_env['ANALYZE_BUILD_REPORT_DIR'] = os.path.abspath(mainargs.xtuoutdir)
+analyzer_env['ANALYZE_BUILD_REPORT_DIR'] = os.path.abspath(mainargs.ctuoutdir)
 analyzer_env['ANALYZE_BUILD_PARAMETERS'] = ' '.join(passthru_analyzer_params)
 analyzer_env['ANALYZE_BUILD_REPORT_FORMAT'] = mainargs.output_format
 analyzer_env['ANALYZE_BUILD_REPORT_FAILURES'] = 'yes'
@@ -278,9 +278,9 @@ def analyze(directory, command):
     if mainargs.verbose:
         sys.stdout.write(out)
     if not runOK:
-        prefix = os.path.join(os.path.abspath(mainargs.xtuoutdir), "fails")
+        prefix = os.path.join(os.path.abspath(mainargs.ctuoutdir), "fails")
     else:
-        prefix = os.path.join(os.path.abspath(mainargs.xtuoutdir), "passes")
+        prefix = os.path.join(os.path.abspath(mainargs.ctuoutdir), "passes")
     with open(os.path.join(prefix, "%s.out" % tu_name), "w") as f:
         f.write("%s\n%s" % (analyze_cmd, out))
 
@@ -333,18 +333,18 @@ def analyze_work():
         assert concurrent_threads >= 0
 
 try:
-    os.makedirs(os.path.abspath(mainargs.xtuoutdir))
+    os.makedirs(os.path.abspath(mainargs.ctuoutdir))
     if mainargs.record_memprof:
         if not os.path.exists(memprof_path):
             os.makedirs(memprof_path)
 except OSError:
     print 'Output directory %s already exists!' % \
-        os.path.abspath(mainargs.xtuoutdir)
+        os.path.abspath(mainargs.ctuoutdir)
     sys.exit(1)
 
-os.makedirs(os.path.join(os.path.abspath(mainargs.xtuoutdir), "passes"))
+os.makedirs(os.path.join(os.path.abspath(mainargs.ctuoutdir), "passes"))
 num_passes = 0
-os.makedirs(os.path.join(os.path.abspath(mainargs.xtuoutdir), "fails"))
+os.makedirs(os.path.join(os.path.abspath(mainargs.ctuoutdir), "fails"))
 num_fails = 0
 
 original_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -361,12 +361,12 @@ try:
 except KeyboardInterrupt:
     exit(1)
 
-os.system('rm -vf ' + os.path.join(os.path.abspath(mainargs.xtuindir),
+os.system('rm -vf ' + os.path.join(os.path.abspath(mainargs.ctuindir),
                                    'visitedFunc.txt'))
 try:
-    os.removedirs(os.path.abspath(mainargs.xtuoutdir))
+    os.removedirs(os.path.abspath(mainargs.ctuoutdir))
     print 'Removing directory %s because it contains no reports' % \
-        os.path.abspath(mainargs.xtuoutdir)
+        os.path.abspath(mainargs.ctuoutdir)
 except OSError:
     pass
 

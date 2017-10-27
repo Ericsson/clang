@@ -384,13 +384,13 @@ bool AnalyzerOptions::shouldDisplayNotesAsEvents() {
 
 StringRef AnalyzerOptions::getCTUDir() {
   if (!CTUDir.hasValue() || !llvm::sys::fs::is_directory(*CTUDir))
-    CTUDir = getOptionAsString("xtu-dir", "");
+    CTUDir = getOptionAsString("ctu-dir", "");
   return CTUDir.getValue();
 }
 
 StringRef AnalyzerOptions::getCTUReparseOnDemand() {
   if (!CTUReparseOnDemand.hasValue())
-    CTUReparseOnDemand = getOptionAsString("xtu-reparse", "");
+    CTUReparseOnDemand = getOptionAsString("ctu-reparse", "");
   return CTUReparseOnDemand.getValue();
 }
 

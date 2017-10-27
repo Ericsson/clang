@@ -21,21 +21,21 @@ TEMP_EXTERNAL_FNMAP_FOLDER = 'tmpExternalFnMaps'
 
 
 parser = argparse.ArgumentParser(
-    description='Executes 1st pass of XTU analysis')
+    description='Executes 1st pass of CTU analysis')
 parser.add_argument('-b', required=True, dest='buildlog',
                     metavar='build.json',
                     help='Use a JSON Compilation Database')
-parser.add_argument('-p', metavar='preanalyze-dir', dest='xtuindir',
+parser.add_argument('-p', metavar='preanalyze-dir', dest='ctuindir',
                     help='Use directory for generating preanalyzation data '
-                         '(default=".xtu")',
-                    default='.xtu')
+                         '(default=".ctu")',
+                    default='.ctu')
 parser.add_argument('-j', metavar='threads', dest='threads',
                     help='Number of threads used (default=' +
                     str(threading_factor) + ')',
                     default=threading_factor)
 parser.add_argument('-v', dest='verbose', action='store_true',
                     help='Verbose output of every command executed')
-parser.add_argument('--xtu-reparse', dest='reparse', action='store_true',
+parser.add_argument('--ctu-reparse', dest='reparse', action='store_true',
                     help='Use on-demand reparsing of external TUs (and do not dump ASTs).')
 parser.add_argument('--clang-path', metavar='clang-path', dest='clang_path',
                     help='Set path of clang binaries to be used '
@@ -77,7 +77,7 @@ def check_executable_available(exe_name, arg_path):
             'argument' if arg_path is not None else 'environment')
         sys.exit(1)
     elif mainargs.verbose:
-        print 'XTU uses {} dir: {}, taken from {}.'.format(
+        print 'CTU uses {} dir: {}, taken from {}.'.format(
             exe_name,
             found_path,
             'argument' if arg_path is not None else 'environment')
@@ -150,7 +150,7 @@ def generate_ast(source):
     cmd = src_2_cmd[source]
     args = get_command_arguments(cmd)        
     arch=get_triple_arch(clang_path,args,source)    
-    ast_path = os.path.abspath(os.path.join(mainargs.xtuindir,
+    ast_path = os.path.abspath(os.path.join(mainargs.ctuindir,
                                os.path.join('/ast/' + arch,
                                             os.path.realpath(source)[1:] +
                                             '.ast')[1:]))
@@ -221,12 +221,12 @@ def create_external_fn_maps(ctuindir):
                 out_file.write('%s %s\n' % (mangled_name, ast_files.pop()))
 
 
-if not os.path.exists(mainargs.xtuindir):
-    os.makedirs(mainargs.xtuindir)
-clear_file(os.path.join(mainargs.xtuindir, 'cfg.txt'))
-clear_file(os.path.join(mainargs.xtuindir, 'definedFns.txt'))
-clear_file(os.path.join(mainargs.xtuindir, 'externalFns.txt'))
-clear_file(os.path.join(mainargs.xtuindir, 'externalFnMap.txt'))
+if not os.path.exists(mainargs.ctuindir):
+    os.makedirs(mainargs.ctuindir)
+clear_file(os.path.join(mainargs.ctuindir, 'cfg.txt'))
+clear_file(os.path.join(mainargs.ctuindir, 'definedFns.txt'))
+clear_file(os.path.join(mainargs.ctuindir, 'externalFns.txt'))
+clear_file(os.path.join(mainargs.ctuindir, 'externalFnMap.txt'))
 
 original_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
 if not mainargs.reparse:   #only generate AST dumps is reparse is off     
@@ -245,15 +245,15 @@ if not mainargs.reparse:   #only generate AST dumps is reparse is off
         ast_workers.join()
 
 
-shutil.rmtree(os.path.join(mainargs.xtuindir, TEMP_EXTERNAL_FNMAP_FOLDER), ignore_errors=True)
-os.mkdir(os.path.join(mainargs.xtuindir, TEMP_EXTERNAL_FNMAP_FOLDER))
+shutil.rmtree(os.path.join(mainargs.ctuindir, TEMP_EXTERNAL_FNMAP_FOLDER), ignore_errors=True)
+os.mkdir(os.path.join(mainargs.ctuindir, TEMP_EXTERNAL_FNMAP_FOLDER))
 original_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
 funcmap_workers = multiprocessing.Pool(processes=int(mainargs.threads))
 signal.signal(signal.SIGINT, original_handler)
 try:
     res = funcmap_workers.map_async(map_functions,
                                     [(cmd, cmd_2_src[cmd], src_2_dir[cmd_2_src[cmd][0]],
-                                      clang_path, mainargs.xtuindir, mainargs.reparse) for cmd in cmd_order])
+                                      clang_path, mainargs.ctuindir, mainargs.reparse) for cmd in cmd_order])
     res.get(mainargs.timeout)
 except KeyboardInterrupt:
     funcmap_workers.terminate()
@@ -266,6 +266,6 @@ else:
 
 # Generate externalFnMap.txt
 
-create_external_fn_maps(mainargs.xtuindir)
-shutil.rmtree(os.path.join(mainargs.xtuindir, TEMP_EXTERNAL_FNMAP_FOLDER), ignore_errors=True)
+create_external_fn_maps(mainargs.ctuindir)
+shutil.rmtree(os.path.join(mainargs.ctuindir, TEMP_EXTERNAL_FNMAP_FOLDER), ignore_errors=True)
 
