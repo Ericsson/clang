@@ -116,6 +116,19 @@ def clear_file(filename):
     except OSError:
         pass
 
+def ensure_dir(dir):
+    """Creates the directory if it does not exists.
+
+    Ignores the directory already exists error, but does not
+    unnecessarily suppresses others.
+    """
+
+    try:
+        os.makedirs(dir)
+    except OSError:
+        if not os.path.isdir(dir):
+            raise
+
 
 def get_command_arguments(cmd):
     had_command = False
@@ -136,13 +149,13 @@ def get_triple_arch(clang_path, clang_args,source):
     clang_cmd.append("-###")
     clang_cmd.extend(clang_args)
     clang_cmd.append(source)    
-    clang_out = subprocess.check_output(clang_cmd, stderr=subprocess.STDOUT, shell=False)    
+    clang_out = subprocess.check_output(clang_cmd, stderr=subprocess.STDOUT, shell=False)
     clang_params=shlex.split(clang_out)
     i=0
     while i<len(clang_params) and clang_params[i]!="-triple":        
         i=i+1
     if i<(len(clang_params) - 1):
-        arch=clang_params[i+1].split("-")[0]              
+        arch=clang_params[i+1]
     return arch
     
 
@@ -150,8 +163,8 @@ def generate_ast(source):
     cmd = src_2_cmd[source]
     args = get_command_arguments(cmd)        
     arch=get_triple_arch(clang_path,args,source)    
-    ast_path = os.path.abspath(os.path.join(mainargs.ctuindir,
-                               os.path.join('/ast/' + arch,
+    ast_path = os.path.abspath(os.path.join(mainargs.ctuindir, arch,
+                               os.path.join('/ast/',
                                             os.path.realpath(source)[1:] +
                                             '.ast')[1:]))
     try:
@@ -190,21 +203,24 @@ def map_functions(params):
         path = fn_txt[dpos + 1:]
         ast_path = path
         if not reparse:
-            ast_path = os.path.join("ast", arch, path[1:] + ".ast")
-        output.append(mangled_name + "@" + arch + " " + ast_path)
+            ast_path = os.path.join("ast", path[1:] + ".ast")
+        output.append(mangled_name + " " + ast_path)
     extern_fns_map_folder = os.path.join(ctuindir,
-                                         TEMP_EXTERNAL_FNMAP_FOLDER)
+                                         TEMP_EXTERNAL_FNMAP_FOLDER, arch)
     if output:
+        ensure_dir(extern_fns_map_folder)
         with tempfile.NamedTemporaryFile(mode='w',
                                          dir=extern_fns_map_folder,
                                          delete=False) as out_file:
             out_file.write("\n".join(output) + "\n")
 
 
-def create_external_fn_maps(ctuindir):
+def create_external_fn_maps_for_triple(ctuindir, triple):
+    """Collects the function mapping file for a given triple (architecture)."""
+
     files = glob.glob(os.path.join(ctuindir, TEMP_EXTERNAL_FNMAP_FOLDER,
-                                   '*'))
-    extern_fns_map_file = os.path.join(ctuindir,
+                                   triple, '*'))
+    extern_fns_map_file = os.path.join(ctuindir, triple,
                                        EXTERNAL_FUNCTION_MAP_FILENAME)
     mangled_to_asts = {}
     for filename in files:
@@ -219,6 +235,16 @@ def create_external_fn_maps(ctuindir):
         for mangled_name, ast_files in mangled_to_asts.iteritems():
             if len(ast_files) == 1:
                 out_file.write('%s %s\n' % (mangled_name, ast_files.pop()))
+
+
+def create_external_fn_maps(ctuindir):
+    """Creates the function maping file for each triple."""
+
+    triple_paths = glob.glob(os.path.join(ctuindir, TEMP_EXTERNAL_FNMAP_FOLDER, '*'))
+    triple_dirs = filter(os.path.isdir, triple_paths)
+    triples = map(os.path.basename, triple_dirs)
+    for triple in triples:
+        create_external_fn_maps_for_triple(ctuindir, triple)
 
 
 if not os.path.exists(mainargs.ctuindir):

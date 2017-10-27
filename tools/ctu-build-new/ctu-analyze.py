@@ -7,6 +7,7 @@ import multiprocessing
 import os
 import re
 import shutil
+import shlex
 import signal
 import subprocess
 import string
@@ -150,9 +151,9 @@ if mainargs.disabled_checkers:
 if mainargs.reparse:
     analyzer_params += ['-analyzer-config',
                         'ctu-reparse='+os.path.abspath(mainargs.buildlog)]
-if not mainargs.no_ctu:
-    analyzer_params += ['-analyzer-config',
-                        'ctu-dir=' + os.path.abspath(mainargs.ctuindir)]
+#if not mainargs.no_ctu:
+#    analyzer_params += ['-analyzer-config',
+#                        'ctu-dir=' + os.path.abspath(mainargs.ctuindir)]
 if mainargs.record_coverage:
     gcov_tmppath = os.path.abspath(os.path.join(mainargs.ctuoutdir,
                                                 gcov_tmpdir))
@@ -217,6 +218,22 @@ def get_compiler_and_arguments(cmd):
             compiler = arg
     return compiler, args
 
+def get_triple_arch(clang_path, clang_args,source):
+    """Returns the architecture part of the target triple in a compilation command """
+    arch = ""
+    clang_cmd = []
+    clang_cmd.append(os.path.join(clang_path, 'clang'))
+    clang_cmd.append("-###")
+    clang_cmd.extend(clang_args)
+    clang_cmd.append(source)
+    clang_out = subprocess.check_output(clang_cmd, stderr=subprocess.STDOUT, shell=False)
+    clang_params=shlex.split(clang_out)
+    i=0
+    while i<len(clang_params) and clang_params[i]!="-triple":
+        i=i+1
+    if i<(len(clang_params) - 1):
+        arch=clang_params[i+1]
+    return arch
 
 def analyze(directory, command):
     compiler, args = get_compiler_and_arguments(command)
@@ -231,9 +248,16 @@ def analyze(directory, command):
 
     print 'Currently analyzing "{}"...'.format(tu_name)
 
+    cmdenv = analyzer_env.copy()
+
+    if not mainargs.no_ctu:
+        triple = get_triple_arch(clang_path, args, tu_name)
+        cmdenv['ANALYZE_BUILD_PARAMETERS'] += \
+            ' -Xanalyzer -analyzer-config -Xanalyzer ctu-dir=' + \
+            os.path.join(os.path.abspath(mainargs.ctuindir), triple)
+
     tu_name += '_' + str(uuid.uuid4())
 
-    cmdenv = analyzer_env.copy()
     #cmdenv['ANALYZE_BUILD_CC'] = compiler
     #cmdenv['ANALYZE_BUILD_CXX'] = compiler
     cmdenv['INTERCEPT_BUILD'] = json.dumps({
