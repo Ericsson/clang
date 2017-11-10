@@ -148,21 +148,21 @@ def get_triple_arch(clang_path, clang_args,source):
     clang_cmd.append(os.path.join(clang_path, 'clang'))
     clang_cmd.append("-###")
     clang_cmd.extend(clang_args)
-    clang_cmd.append(source)    
+    clang_cmd.append(source)
     clang_out = subprocess.check_output(clang_cmd, stderr=subprocess.STDOUT, shell=False)
     clang_params=shlex.split(clang_out)
-    i=0
-    while i<len(clang_params) and clang_params[i]!="-triple":        
-        i=i+1
-    if i<(len(clang_params) - 1):
-        arch=clang_params[i+1]
+    i = 0
+    while i < len(clang_params) and clang_params[i] != "-triple":
+        i = i + 1
+    if i < (len(clang_params) - 1):
+        arch = clang_params[i + 1]
     return arch
-    
+
 
 def generate_ast(source):
     cmd = src_2_cmd[source]
-    args = get_command_arguments(cmd)        
-    arch=get_triple_arch(clang_path,args,source)    
+    args = get_command_arguments(cmd)
+    arch = get_triple_arch(clang_path,args,source)
     ast_path = os.path.abspath(os.path.join(mainargs.ctuindir, arch,
                                os.path.join('/ast/',
                                             os.path.realpath(source)[1:] +
@@ -249,13 +249,12 @@ def create_external_fn_maps(ctuindir):
 
 if not os.path.exists(mainargs.ctuindir):
     os.makedirs(mainargs.ctuindir)
-clear_file(os.path.join(mainargs.ctuindir, 'cfg.txt'))
 clear_file(os.path.join(mainargs.ctuindir, 'definedFns.txt'))
 clear_file(os.path.join(mainargs.ctuindir, 'externalFns.txt'))
 clear_file(os.path.join(mainargs.ctuindir, 'externalFnMap.txt'))
 
 original_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
-if not mainargs.reparse:   #only generate AST dumps is reparse is off     
+if not mainargs.reparse:   #only generate AST dumps is reparse is off
     ast_workers = multiprocessing.Pool(processes=int(mainargs.threads))
     signal.signal(signal.SIGINT, original_handler)
     try:

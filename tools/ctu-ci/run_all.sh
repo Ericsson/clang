@@ -24,7 +24,7 @@ cd projects
 rm statistics.txt
 rm detailed_stats.txt
 
-export PATH=/mnt/storage/ctu-service/clang_build/buildrelwdeb/bin:/mnt/storage/ctu-service/clang_build/codechecker/build/CodeChecker/bin:$PATH
+export PATH=/mnt/storage/xtu-service/clang_build/buildrelwdeb/bin:/mnt/storage/xtu-service/clang_build/codechecker/build/CodeChecker/bin:$PATH
 MEMPROF=false
 HTML_DIR="/var/www/html/clang-ctu/experiments"
 WEB_ROOT="/clang-ctu/experiments"

@@ -228,11 +228,11 @@ def get_triple_arch(clang_path, clang_args,source):
     clang_cmd.append(source)
     clang_out = subprocess.check_output(clang_cmd, stderr=subprocess.STDOUT, shell=False)
     clang_params=shlex.split(clang_out)
-    i=0
-    while i<len(clang_params) and clang_params[i]!="-triple":
-        i=i+1
-    if i<(len(clang_params) - 1):
-        arch=clang_params[i+1]
+    i = 0
+    while i<len(clang_params) and clang_params[i] != "-triple":
+        i = i + 1
+    if i < (len(clang_params) - 1):
+        arch = clang_params[i + 1]
     return arch
 
 def analyze(directory, command):
@@ -264,7 +264,7 @@ def analyze(directory, command):
         'verbose': 1,
         'cc': [compiler],
         'cxx': [compiler]
-        })    
+        })
     if mainargs.record_coverage:
         cmdenv['ANALYZE_BUILD_PARAMETERS'] += \
             ' -Xanalyzer -analyzer-config -Xanalyzer record-coverage=' + \

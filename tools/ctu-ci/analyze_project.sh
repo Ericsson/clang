@@ -46,9 +46,9 @@ do
   i=$((i+1))
 done
 
-.  /mnt/storage/ctu-service/clang_build/codechecker/venv/bin/activate
+.  /mnt/storage/xtu-service/clang_build/codechecker/venv/bin/activate
 
-CC="/mnt/storage/ctu-service/clang_build/codechecker/build/CodeChecker/bin/CodeChecker"
+CC="/mnt/storage/xtu-service/clang_build/codechecker/build/CodeChecker/bin/CodeChecker"
 PROJECT="$1"
 TIMESTAMP=$(date +"%F_%T")
 PROJNAME="$PROJECT"_"$TIMESTAMP$NAME"
@@ -62,17 +62,17 @@ rm -rf .ctu-out-noctu/
 cp -rf .ctu-out-ctu ./"$PROJNAME"_ctu-out-ctu
 rm -rf .ctu-out-ctu/
 #INITIAL CTU RUN
-#/usr/bin/time -f "%e" ../../../clang_build/clang/tools/ctu-build-new/ctu-build.py $USR $REPARSE -b buildlog.json --clang-path /mnt/storage/ctu-service/clang_build/buildrelwdeb/bin/ -v -j 16 2>"$PROJNAME"_buildtime.out | tee "$PROJNAME"_build.out
-#../../../clang_build/clang/tools/ctu-build-new/ctu-analyze.py $USR $REPARSE -b buildlog.json -o .ctu-out-init -j 16 -v --clang-path /mnt/storage/ctu-service/clang_build/buildrelwdeb/bin/ --analyze-cc-path /mnt/storage/ctu-service/clang_build/clang/tools/scan-build-py/bin/ --log-passed-build passed_buildlog.json | tee "$PROJNAME"_init.out
+#/usr/bin/time -f "%e" ../../../clang_build/clang/tools/ctu-build-new/ctu-build.py $USR $REPARSE -b buildlog.json --clang-path /mnt/storage/xtu-service/clang_build/buildrelwdeb/bin/ -v -j 16 2>"$PROJNAME"_buildtime.out | tee "$PROJNAME"_build.out
+#../../../clang_build/clang/tools/ctu-build-new/ctu-analyze.py $USR $REPARSE -b buildlog.json -o .ctu-out-init -j 16 -v --clang-path /mnt/storage/xtu-service/clang_build/buildrelwdeb/bin/ --analyze-cc-path /mnt/storage/xtu-service/clang_build/clang/tools/scan-build-py/bin/ --log-passed-build passed_buildlog.json | tee "$PROJNAME"_init.out
 #NOCTU-RUN
-#../../../clang_build/clang/tools/ctu-build-new/ctu-analyze.py $MEMPROF --record-coverage -b passed_buildlog.json -o .ctu-out-noctu -j 16 -v --clang-path /mnt/storage/ctu-service/clang_build/buildrelwdeb/bin/ --analyze-cc-path /mnt/storage/ctu-service/clang_build/clang/tools/scan-build-py/bin/ --no-ctu | tee "$PROJNAME"_noCTU.out
-PATH=/mnt/storage/ctu-service/clang_build/buildrelwdeb/bin/:$PATH $CC analyze -o .ctu-out-noctu --analyzers clangsa -j 16 buildlog.json | tee "$PROJNAME"_noCTU.out
+#../../../clang_build/clang/tools/ctu-build-new/ctu-analyze.py $MEMPROF --record-coverage -b passed_buildlog.json -o .ctu-out-noctu -j 16 -v --clang-path /mnt/storage/xtu-service/clang_build/buildrelwdeb/bin/ --analyze-cc-path /mnt/storage/xtu-service/clang_build/clang/tools/scan-build-py/bin/ --no-ctu | tee "$PROJNAME"_noCTU.out
+PATH=/mnt/storage/xtu-service/clang_build/buildrelwdeb/bin/:$PATH $CC analyze -o .ctu-out-noctu --analyzers clangsa -j 16 buildlog.json | tee "$PROJNAME"_noCTU.out
 #mkdir "$PROJNAME"_gcovNoCtu
 #gcovr -k -g .ctu-out-noctu/gcov --html --html-details -r . -o "$PROJNAME"_gcovNoCtu/coverage.html
 #CTU RUN (on files that dont crash)
-#../../../clang_build/clang/tools/ctu-build-new/ctu-analyze.py $USR $MEMPROF $REPARSE --record-coverage -b passed_buildlog.json -o .ctu-out-ctu -j 16 -v --clang-path /mnt/storage/ctu-service/clang_build/buildrelwdeb/bin/ --analyze-cc-path /mnt/storage/ctu-service/clang_build/clang/tools/scan-build-py/bin/ | tee "$PROJNAME"_CTU.out
-PATH=/mnt/storage/ctu-service/clang_build/buildrelwdeb/bin/:$PATH $CC analyze -o .ctu-out-ctu --analyzers clangsa --ctu-collect $REPARSE $STRICT_MODE -j 16 buildlog.json | tee "$PROJNAME"_CTU_build.out
-PATH=/mnt/storage/ctu-service/clang_build/buildrelwdeb/bin/:$PATH $CC analyze -o .ctu-out-ctu --analyzers clangsa --ctu-analyze $REPARSE $STRICT_MODE -j 16 buildlog.json | tee "$PROJNAME"_CTU_analyze.out
+#../../../clang_build/clang/tools/ctu-build-new/ctu-analyze.py $USR $MEMPROF $REPARSE --record-coverage -b passed_buildlog.json -o .ctu-out-ctu -j 16 -v --clang-path /mnt/storage/xtu-service/clang_build/buildrelwdeb/bin/ --analyze-cc-path /mnt/storage/xtu-service/clang_build/clang/tools/scan-build-py/bin/ | tee "$PROJNAME"_CTU.out
+PATH=/mnt/storage/xtu-service/clang_build/buildrelwdeb/bin/:$PATH $CC analyze -o .ctu-out-ctu --analyzers clangsa --ctu-collect $REPARSE $STRICT_MODE -j 16 buildlog.json | tee "$PROJNAME"_CTU_build.out
+PATH=/mnt/storage/xtu-service/clang_build/buildrelwdeb/bin/:$PATH $CC analyze -o .ctu-out-ctu --analyzers clangsa --ctu-analyze $REPARSE $STRICT_MODE -j 16 buildlog.json | tee "$PROJNAME"_CTU_analyze.out
 
 #mkdir "$PROJNAME"_gcovCtu
 #gcovr -k -g .ctu-out-ctu/gcov --html --html-details -r . -o "$PROJNAME"_gcovCtu/coverage.html
