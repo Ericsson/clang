@@ -379,12 +379,9 @@ void CodeGenFunction::EmitMustTailThunk(const CXXMethodDecl *MD,
 
   // Apply the standard set of call attributes.
   unsigned CallingConv;
-  CodeGen::AttributeListType AttributeList;
-  CGM.ConstructAttributeList(CalleePtr->getName(),
-                             *CurFnInfo, MD, AttributeList,
+  llvm::AttributeList Attrs;
+  CGM.ConstructAttributeList(CalleePtr->getName(), *CurFnInfo, MD, Attrs,
                              CallingConv, /*AttrOnCallSite=*/true);
-  llvm::AttributeList Attrs =
-      llvm::AttributeList::get(getLLVMContext(), AttributeList);
   Call->setAttributes(Attrs);
   Call->setCallingConv(static_cast<llvm::CallingConv::ID>(CallingConv));
 
@@ -904,6 +901,8 @@ void CodeGenModule::EmitDeferredVTables() {
   for (const CXXRecordDecl *RD : DeferredVTables)
     if (shouldEmitVTableAtEndOfTranslationUnit(*this, RD))
       VTables.GenerateClassData(RD);
+    else if (shouldOpportunisticallyEmitVTables())
+      OpportunisticVTables.push_back(RD);
 
   assert(savedSize == DeferredVTables.size() &&
          "deferred extra vtables during vtable emission?");

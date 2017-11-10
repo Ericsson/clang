@@ -42,7 +42,7 @@ void wasm::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   const char *Linker = Args.MakeArgString(ToolChain.GetLinkerPath());
   ArgStringList CmdArgs;
   CmdArgs.push_back("-flavor");
-  CmdArgs.push_back("ld");
+  CmdArgs.push_back("wasm");
 
   // Enable garbage collection of unused input sections by default, since code
   // size is of particular importance. This is significantly facilitated by
@@ -83,6 +83,8 @@ void wasm::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     if (Args.hasArg(options::OPT_pthread))
       CmdArgs.push_back("-lpthread");
 
+    CmdArgs.push_back("-allow-undefined-file");
+    CmdArgs.push_back(Args.MakeArgString(ToolChain.GetFilePath("wasm.syms")));
     CmdArgs.push_back("-lc");
     CmdArgs.push_back("-lcompiler_rt");
   }
@@ -101,8 +103,10 @@ WebAssembly::WebAssembly(const Driver &D, const llvm::Triple &Triple,
   : ToolChain(D, Triple, Args) {
 
   assert(Triple.isArch32Bit() != Triple.isArch64Bit());
-  getFilePaths().push_back(
-      getDriver().SysRoot + "/lib" + (Triple.isArch32Bit() ? "32" : "64"));
+
+  getProgramPaths().push_back(getDriver().getInstalledDir());
+
+  getFilePaths().push_back(getDriver().SysRoot + "/lib");
 }
 
 bool WebAssembly::IsMathErrnoDefault() const { return false; }
@@ -130,7 +134,8 @@ bool WebAssembly::SupportsProfiling() const { return false; }
 bool WebAssembly::HasNativeLLVMSupport() const { return true; }
 
 void WebAssembly::addClangTargetOptions(const ArgList &DriverArgs,
-                                        ArgStringList &CC1Args) const {
+                                        ArgStringList &CC1Args,
+                                        Action::OffloadKind) const {
   if (DriverArgs.hasFlag(clang::driver::options::OPT_fuse_init_array,
                          options::OPT_fno_use_init_array, true))
     CC1Args.push_back("-fuse-init-array");

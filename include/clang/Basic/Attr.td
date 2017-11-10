@@ -149,6 +149,9 @@ class ExprArgument<string name, bit opt = 0> : Argument<name, opt>;
 class FunctionArgument<string name, bit opt = 0, bit fake = 0> : Argument<name,
                                                                           opt,
                                                                           fake>;
+class NamedArgument<string name, bit opt = 0, bit fake = 0> : Argument<name,
+                                                                          opt,
+                                                                          fake>;
 class TypeArgument<string name, bit opt = 0> : Argument<name, opt>;
 class UnsignedArgument<string name, bit opt = 0> : Argument<name, opt>;
 class VariadicUnsignedArgument<string name> : Argument<name, 1>;
@@ -248,6 +251,8 @@ def COnly : LangOpt<"CPlusPlus", 1>;
 def CPlusPlus : LangOpt<"CPlusPlus">;
 def OpenCL : LangOpt<"OpenCL">;
 def RenderScript : LangOpt<"RenderScript">;
+def ObjC : LangOpt<"ObjC1">;
+def BlocksSupported : LangOpt<"Blocks">;
 
 // Defines targets for target-specific attributes. The list of strings should
 // specify architectures for which the target applies, based off the ArchType
@@ -269,6 +274,112 @@ def TargetWindows : TargetArch<["x86", "x86_64", "arm", "thumb"]> {
 def TargetMicrosoftCXXABI : TargetArch<["x86", "x86_64", "arm", "thumb"]> {
   let CXXABIs = ["Microsoft"];
 }
+
+// Attribute subject match rules that are used for #pragma clang attribute.
+//
+// A instance of AttrSubjectMatcherRule represents an individual match rule.
+// An individual match rule can correspond to a number of different attribute
+// subjects, e.g. "record" matching rule corresponds to the Record and
+// CXXRecord attribute subjects.
+//
+// Match rules are used in the subject list of the #pragma clang attribute.
+// Match rules can have sub-match rules that are instances of
+// AttrSubjectMatcherSubRule. A sub-match rule can correspond to a number
+// of different attribute subjects, and it can have a negated spelling as well.
+// For example, "variable(unless(is_parameter))" matching rule corresponds to
+// the NonParmVar attribute subject.
+class AttrSubjectMatcherSubRule<string name, list<AttrSubject> subjects,
+                                bit negated = 0> {
+  string Name = name;
+  list<AttrSubject> Subjects = subjects;
+  bit Negated = negated;
+  // Lists language options, one of which is required to be true for the
+  // attribute to be applicable. If empty, the language options are taken
+  // from the parent matcher rule.
+  list<LangOpt> LangOpts = [];
+}
+class AttrSubjectMatcherRule<string name, list<AttrSubject> subjects,
+                             list<AttrSubjectMatcherSubRule> subrules = []> {
+  string Name = name;
+  list<AttrSubject> Subjects = subjects;
+  list<AttrSubjectMatcherSubRule> Constraints = subrules;
+  // Lists language options, one of which is required to be true for the
+  // attribute to be applicable. If empty, no language options are required.
+  list<LangOpt> LangOpts = [];
+}
+
+// function(is_member)
+def SubRuleForCXXMethod : AttrSubjectMatcherSubRule<"is_member", [CXXMethod]> {
+  let LangOpts = [CPlusPlus];
+}
+def SubjectMatcherForFunction : AttrSubjectMatcherRule<"function", [Function], [
+  SubRuleForCXXMethod
+]>;
+// hasType is abstract, it should be used with one of the sub-rules.
+def SubjectMatcherForType : AttrSubjectMatcherRule<"hasType", [], [
+  AttrSubjectMatcherSubRule<"functionType", [FunctionLike]>
+
+  // FIXME: There's a matcher ambiguity with objc methods and blocks since
+  // functionType excludes them but functionProtoType includes them.
+  // AttrSubjectMatcherSubRule<"functionProtoType", [HasFunctionProto]>
+]>;
+def SubjectMatcherForTypedef : AttrSubjectMatcherRule<"type_alias",
+                                                      [TypedefName]>;
+def SubjectMatcherForRecord : AttrSubjectMatcherRule<"record", [Record,
+                                                                CXXRecord], [
+  // unless(is_union)
+  AttrSubjectMatcherSubRule<"is_union", [Struct], 1>
+]>;
+def SubjectMatcherForEnum : AttrSubjectMatcherRule<"enum", [Enum]>;
+def SubjectMatcherForEnumConstant : AttrSubjectMatcherRule<"enum_constant",
+                                                           [EnumConstant]>;
+def SubjectMatcherForVar : AttrSubjectMatcherRule<"variable", [Var], [
+  AttrSubjectMatcherSubRule<"is_thread_local", [TLSVar]>,
+  AttrSubjectMatcherSubRule<"is_global", [GlobalVar]>,
+  AttrSubjectMatcherSubRule<"is_parameter", [ParmVar]>,
+  // unless(is_parameter)
+  AttrSubjectMatcherSubRule<"is_parameter", [NonParmVar], 1>
+]>;
+def SubjectMatcherForField : AttrSubjectMatcherRule<"field", [Field]>;
+def SubjectMatcherForNamespace : AttrSubjectMatcherRule<"namespace",
+                                                        [Namespace]> {
+  let LangOpts = [CPlusPlus];
+}
+def SubjectMatcherForObjCInterface : AttrSubjectMatcherRule<"objc_interface",
+                                                            [ObjCInterface]> {
+  let LangOpts = [ObjC];
+}
+def SubjectMatcherForObjCProtocol : AttrSubjectMatcherRule<"objc_protocol",
+                                                           [ObjCProtocol]> {
+  let LangOpts = [ObjC];
+}
+def SubjectMatcherForObjCCategory : AttrSubjectMatcherRule<"objc_category",
+                                                           [ObjCCategory]> {
+  let LangOpts = [ObjC];
+}
+def SubjectMatcherForObjCMethod : AttrSubjectMatcherRule<"objc_method",
+                                                         [ObjCMethod], [
+  AttrSubjectMatcherSubRule<"is_instance", [ObjCInstanceMethod]>
+]> {
+  let LangOpts = [ObjC];
+}
+def SubjectMatcherForObjCProperty : AttrSubjectMatcherRule<"objc_property",
+                                                           [ObjCProperty]> {
+  let LangOpts = [ObjC];
+}
+def SubjectMatcherForBlock : AttrSubjectMatcherRule<"block", [Block]> {
+  let LangOpts = [BlocksSupported];
+}
+
+// Aggregate attribute subject match rules are abstract match rules that can't
+// be used directly in #pragma clang attribute. Instead, users have to use
+// subject match rules that correspond to attribute subjects that derive from
+// the specified subject.
+class AttrSubjectMatcherAggregateRule<AttrSubject subject> {
+  AttrSubject Subject = subject;
+}
+
+def SubjectMatcherForNamed : AttrSubjectMatcherAggregateRule<Named>;
 
 class Attr {
   // The various ways in which an attribute can be spelled in source
@@ -305,6 +416,14 @@ class Attr {
   // Set to true if this attribute meaningful when applied to or inherited 
   // in a class template definition.
   bit MeaningfulToClassTemplateDefinition = 0;
+  // Set to true if this attribute can be used with '#pragma clang attribute'.
+  // By default, when this value is false, an attribute is supported by the
+  // '#pragma clang attribute' only when:
+  // - It has documentation.
+  // - It has a subject list whose subjects can be represented using subject
+  //   match rules.
+  // - It has GNU/CXX11 spelling and doesn't require delayed parsing.
+  bit ForcePragmaAttributeSupport = 0;
   // Lists language options, one of which is required to be true for the
   // attribute to be applicable. If empty, no language options are required.
   list<LangOpt> LangOpts = [];
@@ -478,6 +597,9 @@ def AnalyzerNoReturn : InheritableAttr {
 def Annotate : InheritableParamAttr {
   let Spellings = [GNU<"annotate">];
   let Args = [StringArgument<"Annotation">];
+  // Ensure that the annotate attribute can be used with
+  // '#pragma clang attribute' even though it has no subject list.
+  let ForcePragmaAttributeSupport = 1;
   let Documentation = [Undocumented];
 }
 
@@ -533,10 +655,34 @@ def Availability : InheritableAttr {
              .Case("tvos_app_extension", "tvOS (App Extension)")
              .Case("watchos_app_extension", "watchOS (App Extension)")
              .Default(llvm::StringRef());
+}
+static llvm::StringRef getPlatformNameSourceSpelling(llvm::StringRef Platform) {
+    return llvm::StringSwitch<llvm::StringRef>(Platform)
+             .Case("ios", "iOS")
+             .Case("macos", "macOS")
+             .Case("tvos", "tvOS")
+             .Case("watchos", "watchOS")
+             .Case("ios_app_extension", "iOSApplicationExtension")
+             .Case("macos_app_extension", "macOSApplicationExtension")
+             .Case("tvos_app_extension", "tvOSApplicationExtension")
+             .Case("watchos_app_extension", "watchOSApplicationExtension")
+             .Default(Platform);
+}
+static llvm::StringRef canonicalizePlatformName(llvm::StringRef Platform) {
+    return llvm::StringSwitch<llvm::StringRef>(Platform)
+             .Case("iOS", "ios")
+             .Case("macOS", "macos")
+             .Case("tvOS", "tvos")
+             .Case("watchOS", "watchos")
+             .Case("iOSApplicationExtension", "ios_app_extension")
+             .Case("macOSApplicationExtension", "macos_app_extension")
+             .Case("tvOSApplicationExtension", "tvos_app_extension")
+             .Case("watchOSApplicationExtension", "watchos_app_extension")
+             .Default(Platform);
 } }];
   let HasCustomParsing = 1;
   let DuplicatesAllowedWhileMerging = 1;
-//  let Subjects = SubjectList<[Named]>;
+  let Subjects = SubjectList<[Named]>;
   let Documentation = [AvailabilityDocs];
 }
 
@@ -547,7 +693,7 @@ def ExternalSourceSymbol : InheritableAttr {
               StringArgument<"definedIn", 1>,
               BoolArgument<"generatedDeclaration", 1>];
   let HasCustomParsing = 1;
-//  let Subjects = SubjectList<[Named]>;
+  let Subjects = SubjectList<[Named]>;
   let Documentation = [ExternalSourceSymbolDocs];
 }
 
@@ -743,6 +889,13 @@ def OpenCLUnrollHint : InheritableAttr {
   let Spellings = [GNU<"opencl_unroll_hint">];
   let Args = [UnsignedArgument<"UnrollHint">];
   let Documentation = [OpenCLUnrollHintDocs];
+}
+
+def OpenCLIntelReqdSubGroupSize: InheritableAttr {
+  let Spellings = [GNU<"intel_reqd_sub_group_size">];
+  let Args = [UnsignedArgument<"SubGroupSize">];
+  let Subjects = SubjectList<[Function], ErrorDiag>;
+  let Documentation = [OpenCLIntelReqdSubGroupSizeDocs];
 }
 
 // This attribute is both a type attribute, and a declaration attribute (for
@@ -1029,6 +1182,12 @@ def MipsInterrupt : InheritableAttr, TargetSpecificAttr<TargetMips> {
   let Documentation = [MipsInterruptDocs];
 }
 
+def MicroMips : InheritableAttr, TargetSpecificAttr<TargetMips> {
+  let Spellings = [GCC<"micromips">];
+  let Subjects = SubjectList<[Function], ErrorDiag>;
+  let Documentation = [MicroMipsDocs];
+}
+
 def Mode : Attr {
   let Spellings = [GCC<"mode">];
   let Subjects = SubjectList<[Var, Enum, TypedefName, Field], ErrorDiag,
@@ -1109,6 +1268,12 @@ def NoMips16 : InheritableAttr, TargetSpecificAttr<TargetMips> {
   let Spellings = [GCC<"nomips16">];
   let Subjects = SubjectList<[Function], ErrorDiag>;
   let Documentation = [Undocumented];
+}
+
+def NoMicroMips : InheritableAttr, TargetSpecificAttr<TargetMips> {
+  let Spellings = [GCC<"nomicromips">];
+  let Subjects = SubjectList<[Function], ErrorDiag>;
+  let Documentation = [MicroMipsDocs];
 }
 
 // This is not a TargetSpecificAttr so that is silently accepted and
@@ -1518,6 +1683,42 @@ def Section : InheritableAttr {
   let Documentation = [SectionDocs];
 }
 
+def PragmaClangBSSSection : InheritableAttr {
+  // This attribute has no spellings as it is only ever created implicitly.
+  let Spellings = [];
+  let Args = [StringArgument<"Name">];
+  let Subjects = SubjectList<[GlobalVar], ErrorDiag,
+                             "ExpectedFunctionMethodOrGlobalVar">;
+  let Documentation = [Undocumented];
+}
+
+def PragmaClangDataSection : InheritableAttr {
+  // This attribute has no spellings as it is only ever created implicitly.
+  let Spellings = [];
+  let Args = [StringArgument<"Name">];
+  let Subjects = SubjectList<[GlobalVar], ErrorDiag,
+                             "ExpectedFunctionMethodOrGlobalVar">;
+  let Documentation = [Undocumented];
+}
+
+def PragmaClangRodataSection : InheritableAttr {
+  // This attribute has no spellings as it is only ever created implicitly.
+  let Spellings = [];
+  let Args = [StringArgument<"Name">];
+  let Subjects = SubjectList<[GlobalVar], ErrorDiag,
+                             "ExpectedFunctionMethodOrGlobalVar">;
+  let Documentation = [Undocumented];
+}
+
+def PragmaClangTextSection : InheritableAttr {
+  // This attribute has no spellings as it is only ever created implicitly.
+  let Spellings = [];
+  let Args = [StringArgument<"Name">];
+  let Subjects = SubjectList<[Function], ErrorDiag,
+                             "ExpectedFunctionMethodOrGlobalVar">;
+  let Documentation = [Undocumented];
+}
+
 def Sentinel : InheritableAttr {
   let Spellings = [GCC<"sentinel">];
   let Args = [DefaultIntArgument<"Sentinel", 0>,
@@ -1601,11 +1802,18 @@ def Target : InheritableAttr {
   let Subjects = SubjectList<[Function], ErrorDiag>;
   let Documentation = [TargetDocs];
   let AdditionalMembers = [{
-    typedef std::pair<std::vector<std::string>, StringRef> ParsedTargetAttr;
+    struct ParsedTargetAttr {
+      std::vector<std::string> Features;
+      StringRef Architecture;
+      bool DuplicateArchitecture = false;
+    };
     ParsedTargetAttr parse() const {
+      return parse(getFeaturesStr());
+    }
+    static ParsedTargetAttr parse(StringRef Features) {
       ParsedTargetAttr Ret;
       SmallVector<StringRef, 1> AttrFeatures;
-      getFeaturesStr().split(AttrFeatures, ",");
+      Features.split(AttrFeatures, ",");
 
       // Grab the various features and prepend a "+" to turn on the feature to
       // the backend and add them to our existing set of features.
@@ -1622,12 +1830,15 @@ def Target : InheritableAttr {
 	  continue;
 
         // While we're here iterating check for a different target cpu.
-        if (Feature.startswith("arch="))
-          Ret.second = Feature.split("=").second.trim();
-        else if (Feature.startswith("no-"))
-          Ret.first.push_back("-" + Feature.split("-").second.str());
+        if (Feature.startswith("arch=")) {
+          if (!Ret.Architecture.empty())
+            Ret.DuplicateArchitecture = true;
+          else
+            Ret.Architecture = Feature.split("=").second.trim();
+        } else if (Feature.startswith("no-"))
+          Ret.Features.push_back("-" + Feature.split("-").second.str());
         else
-          Ret.first.push_back("+" + Feature.str());
+          Ret.Features.push_back("+" + Feature.str());
       }
       return Ret;
     }
@@ -1657,14 +1868,14 @@ def Unavailable : InheritableAttr {
 
 def DiagnoseIf : InheritableAttr {
   let Spellings = [GNU<"diagnose_if">];
-  let Subjects = SubjectList<[Function]>;
+  let Subjects = SubjectList<[Function, ObjCMethod, ObjCProperty]>;
   let Args = [ExprArgument<"Cond">, StringArgument<"Message">,
               EnumArgument<"DiagnosticType",
                            "DiagnosticType",
                            ["error", "warning"],
                            ["DT_Error", "DT_Warning"]>,
               BoolArgument<"ArgDependent", 0, /*fake*/ 1>,
-              FunctionArgument<"Parent", 0, /*fake*/ 1>];
+              NamedArgument<"Parent", 0, /*fake*/ 1>];
   let DuplicatesAllowedWhileMerging = 1;
   let LateParsed = 1;
   let AdditionalMembers = [{
@@ -1810,6 +2021,12 @@ def AnyX86Interrupt : InheritableAttr, TargetSpecificAttr<TargetAnyX86> {
   let ParseKind = "Interrupt";
   let HasCustomParsing = 1;
   let Documentation = [AnyX86InterruptDocs];
+}
+
+def AnyX86NoCallerSavedRegisters : InheritableAttr,
+                                   TargetSpecificAttr<TargetAnyX86> {
+  let Spellings = [GCC<"no_caller_saved_registers">];
+  let Documentation = [AnyX86NoCallerSavedRegistersDocs];
 }
 
 def X86ForceAlignArgPointer : InheritableAttr, TargetSpecificAttr<TargetX86> {
@@ -2242,9 +2459,8 @@ def DLLImport : InheritableAttr, TargetSpecificAttr<TargetWindows> {
   let Documentation = [DLLImportDocs];
 }
 
-def SelectAny : InheritableAttr {
-  let Spellings = [Declspec<"selectany">];
-  let LangOpts = [MicrosoftExt];
+def SelectAny : InheritableAttr, TargetSpecificAttr<TargetWindows> {
+  let Spellings = [Declspec<"selectany">, GCC<"selectany">];
   let Documentation = [Undocumented];
 }
 

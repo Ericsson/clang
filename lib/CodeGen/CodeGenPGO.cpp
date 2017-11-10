@@ -617,6 +617,9 @@ uint64_t PGOHash::finalize() {
 
 void CodeGenPGO::assignRegionCounters(GlobalDecl GD, llvm::Function *Fn) {
   const Decl *D = GD.getDecl();
+  if (!D->hasBody())
+    return;
+
   bool InstrumentRegions = CGM.getCodeGenOpts().hasProfileClangInstr();
   llvm::IndexedInstrProfReader *PGOReader = CGM.getPGOReader();
   if (!InstrumentRegions && !PGOReader)
@@ -666,7 +669,7 @@ void CodeGenPGO::mapRegionCounters(const Decl *D) {
 }
 
 bool CodeGenPGO::skipRegionMappingForDecl(const Decl *D) {
-  if (SkipCoverageMapping)
+  if (!D->getBody())
     return true;
 
   // Don't map the functions in system headers.

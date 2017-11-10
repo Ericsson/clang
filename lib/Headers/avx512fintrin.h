@@ -528,6 +528,116 @@ _mm512_mask2int(__mmask16 __a)
   return (int)__a;
 }
 
+/// \brief Constructs a 512-bit floating-point vector of [8 x double] from a
+///    128-bit floating-point vector of [2 x double]. The lower 128 bits
+///    contain the value of the source vector. The upper 384 bits are set
+///    to zero.
+///
+/// \headerfile <x86intrin.h>
+///
+/// This intrinsic has no corresponding instruction.
+///
+/// \param __a
+///    A 128-bit vector of [2 x double].
+/// \returns A 512-bit floating-point vector of [8 x double]. The lower 128 bits
+///    contain the value of the parameter. The upper 384 bits are set to zero.
+static __inline __m512d __DEFAULT_FN_ATTRS
+_mm512_zextpd128_pd512(__m128d __a)
+{
+  return __builtin_shufflevector((__v2df)__a, (__v2df)_mm_setzero_pd(), 0, 1, 2, 3, 2, 3, 2, 3);
+}
+
+/// \brief Constructs a 512-bit floating-point vector of [8 x double] from a
+///    256-bit floating-point vector of [4 x double]. The lower 256 bits
+///    contain the value of the source vector. The upper 256 bits are set
+///    to zero.
+///
+/// \headerfile <x86intrin.h>
+///
+/// This intrinsic has no corresponding instruction.
+///
+/// \param __a
+///    A 256-bit vector of [4 x double].
+/// \returns A 512-bit floating-point vector of [8 x double]. The lower 256 bits
+///    contain the value of the parameter. The upper 256 bits are set to zero.
+static __inline __m512d __DEFAULT_FN_ATTRS
+_mm512_zextpd256_pd512(__m256d __a)
+{
+  return __builtin_shufflevector((__v4df)__a, (__v4df)_mm256_setzero_pd(), 0, 1, 2, 3, 4, 5, 6, 7);
+}
+
+/// \brief Constructs a 512-bit floating-point vector of [16 x float] from a
+///    128-bit floating-point vector of [4 x float]. The lower 128 bits contain
+///    the value of the source vector. The upper 384 bits are set to zero.
+///
+/// \headerfile <x86intrin.h>
+///
+/// This intrinsic has no corresponding instruction.
+///
+/// \param __a
+///    A 128-bit vector of [4 x float].
+/// \returns A 512-bit floating-point vector of [16 x float]. The lower 128 bits
+///    contain the value of the parameter. The upper 384 bits are set to zero.
+static __inline __m512 __DEFAULT_FN_ATTRS
+_mm512_zextps128_ps512(__m128 __a)
+{
+  return __builtin_shufflevector((__v4sf)__a, (__v4sf)_mm_setzero_ps(), 0, 1, 2, 3, 4, 5, 6, 7, 4, 5, 6, 7, 4, 5, 6, 7);
+}
+
+/// \brief Constructs a 512-bit floating-point vector of [16 x float] from a
+///    256-bit floating-point vector of [8 x float]. The lower 256 bits contain
+///    the value of the source vector. The upper 256 bits are set to zero.
+///
+/// \headerfile <x86intrin.h>
+///
+/// This intrinsic has no corresponding instruction.
+///
+/// \param __a
+///    A 256-bit vector of [8 x float].
+/// \returns A 512-bit floating-point vector of [16 x float]. The lower 256 bits
+///    contain the value of the parameter. The upper 256 bits are set to zero.
+static __inline __m512 __DEFAULT_FN_ATTRS
+_mm512_zextps256_ps512(__m256 __a)
+{
+  return __builtin_shufflevector((__v8sf)__a, (__v8sf)_mm256_setzero_ps(), 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
+}
+
+/// \brief Constructs a 512-bit integer vector from a 128-bit integer vector.
+///    The lower 128 bits contain the value of the source vector. The upper
+///    384 bits are set to zero.
+///
+/// \headerfile <x86intrin.h>
+///
+/// This intrinsic has no corresponding instruction.
+///
+/// \param __a
+///    A 128-bit integer vector.
+/// \returns A 512-bit integer vector. The lower 128 bits contain the value of
+///    the parameter. The upper 384 bits are set to zero.
+static __inline __m512i __DEFAULT_FN_ATTRS
+_mm512_zextsi128_si512(__m128i __a)
+{
+  return __builtin_shufflevector((__v2di)__a, (__v2di)_mm_setzero_si128(), 0, 1, 2, 3, 2, 3, 2, 3);
+}
+
+/// \brief Constructs a 512-bit integer vector from a 256-bit integer vector.
+///    The lower 256 bits contain the value of the source vector. The upper
+///    256 bits are set to zero.
+///
+/// \headerfile <x86intrin.h>
+///
+/// This intrinsic has no corresponding instruction.
+///
+/// \param __a
+///    A 256-bit integer vector.
+/// \returns A 512-bit integer vector. The lower 256 bits contain the value of
+///    the parameter. The upper 256 bits are set to zero.
+static __inline __m512i __DEFAULT_FN_ATTRS
+_mm512_zextsi256_si512(__m256i __a)
+{
+  return __builtin_shufflevector((__v4di)__a, (__v4di)_mm256_setzero_si256(), 0, 1, 2, 3, 4, 5, 6, 7);
+}
+
 /* Bitwise operators */
 static __inline__ __m512i __DEFAULT_FN_ATTRS
 _mm512_and_epi32(__m512i __a, __m512i __b)
@@ -4179,7 +4289,7 @@ static __inline__ __m512i __DEFAULT_FN_ATTRS
 _mm512_maskz_cvtps_epu32 ( __mmask16 __U, __m512 __A)
 {
   return (__m512i) __builtin_ia32_cvtps2udq512_mask ((__v16sf) __A,
-                  (__v16si) 
+                  (__v16si)
                   _mm512_setzero_si512 (),
                   (__mmask16) __U ,
                   _MM_FROUND_CUR_DIRECTION);
@@ -8925,25 +9035,29 @@ _mm512_kxor (__mmask16 __A, __mmask16 __B)
 static __inline__ void __DEFAULT_FN_ATTRS
 _mm512_stream_si512 (__m512i * __P, __m512i __A)
 {
-  __builtin_nontemporal_store((__v8di)__A, (__v8di*)__P);
+  typedef __v8di __v8di_aligned __attribute__((aligned(64)));
+  __builtin_nontemporal_store((__v8di_aligned)__A, (__v8di_aligned*)__P);
 }
 
 static __inline__ __m512i __DEFAULT_FN_ATTRS
 _mm512_stream_load_si512 (void *__P)
 {
-  return __builtin_ia32_movntdqa512 ((__v8di *)__P);
+  typedef __v8di __v8di_aligned __attribute__((aligned(64)));
+  return (__m512i) __builtin_nontemporal_load((const __v8di_aligned *)__P);
 }
 
 static __inline__ void __DEFAULT_FN_ATTRS
 _mm512_stream_pd (double *__P, __m512d __A)
 {
-  __builtin_nontemporal_store((__v8df)__A, (__v8df*)__P);
+  typedef __v8df __v8df_aligned __attribute__((aligned(64)));
+  __builtin_nontemporal_store((__v8df_aligned)__A, (__v8df_aligned*)__P);
 }
 
 static __inline__ void __DEFAULT_FN_ATTRS
 _mm512_stream_ps (float *__P, __m512 __A)
 {
-  __builtin_nontemporal_store((__v16sf)__A, (__v16sf*)__P);
+  typedef __v16sf __v16sf_aligned __attribute__((aligned(64)));
+  __builtin_nontemporal_store((__v16sf_aligned)__A, (__v16sf_aligned*)__P);
 }
 
 static __inline__ __m512d __DEFAULT_FN_ATTRS
@@ -9107,39 +9221,39 @@ _mm512_maskz_moveldup_ps (__mmask16 __U, __m512 __A)
 static __inline__ __m128 __DEFAULT_FN_ATTRS
 _mm_mask_move_ss (__m128 __W, __mmask8 __U, __m128 __A, __m128 __B)
 {
-  __m128 res = __A; 
+  __m128 res = __A;
   res[0] = (__U & 1) ? __B[0] : __W[0];
-  return res; 
+  return res;
 }
 
 static __inline__ __m128 __DEFAULT_FN_ATTRS
 _mm_maskz_move_ss (__mmask8 __U, __m128 __A, __m128 __B)
 {
-  __m128 res = __A; 
-  res[0] = (__U & 1) ? __B[0] : 0; 
-  return res; 
+  __m128 res = __A;
+  res[0] = (__U & 1) ? __B[0] : 0;
+  return res;
 }
 
 static __inline__ __m128d __DEFAULT_FN_ATTRS
 _mm_mask_move_sd (__m128d __W, __mmask8 __U, __m128d __A, __m128d __B)
 {
-  __m128d res = __A; 
+  __m128d res = __A;
   res[0] = (__U & 1) ? __B[0] : __W[0];
-  return res; 
+  return res;
 }
 
 static __inline__ __m128d __DEFAULT_FN_ATTRS
 _mm_maskz_move_sd (__mmask8 __U, __m128d __A, __m128d __B)
 {
-  __m128d res = __A; 
-  res[0] = (__U & 1) ? __B[0] : 0; 
-  return res; 
+  __m128d res = __A;
+  res[0] = (__U & 1) ? __B[0] : 0;
+  return res;
 }
 
 static __inline__ void __DEFAULT_FN_ATTRS
 _mm_mask_store_ss (float * __W, __mmask8 __U, __m128 __A)
 {
-  __builtin_ia32_storess128_mask ((__v16sf *)__W, 
+  __builtin_ia32_storess128_mask ((__v16sf *)__W,
                 (__v16sf) _mm512_castps128_ps512(__A),
                 (__mmask16) __U & (__mmask16)1);
 }
@@ -9147,7 +9261,7 @@ _mm_mask_store_ss (float * __W, __mmask8 __U, __m128 __A)
 static __inline__ void __DEFAULT_FN_ATTRS
 _mm_mask_store_sd (double * __W, __mmask8 __U, __m128d __A)
 {
-  __builtin_ia32_storesd128_mask ((__v8df *)__W, 
+  __builtin_ia32_storesd128_mask ((__v8df *)__W,
                 (__v8df) _mm512_castpd128_pd512(__A),
                 (__mmask8) __U & 1);
 }
@@ -9496,7 +9610,7 @@ _mm_mask_cvtsd_ss (__m128 __W, __mmask8 __U, __m128 __A, __m128d __B)
 {
   return __builtin_ia32_cvtsd2ss_round_mask ((__v4sf)(__A),
                                              (__v2df)(__B),
-                                             (__v4sf)(__W), 
+                                             (__v4sf)(__W),
                                              (__mmask8)(__U), _MM_FROUND_CUR_DIRECTION);
 }
 
@@ -9505,7 +9619,7 @@ _mm_maskz_cvtsd_ss (__mmask8 __U, __m128 __A, __m128d __B)
 {
   return __builtin_ia32_cvtsd2ss_round_mask ((__v4sf)(__A),
                                              (__v2df)(__B),
-                                             (__v4sf)_mm_setzero_ps(), 
+                                             (__v4sf)_mm_setzero_ps(),
                                              (__mmask8)(__U), _MM_FROUND_CUR_DIRECTION);
 }
 
@@ -9570,7 +9684,7 @@ _mm_mask_cvtss_sd (__m128d __W, __mmask8 __U, __m128d __A, __m128 __B)
   return __builtin_ia32_cvtss2sd_round_mask((__v2df)(__A),
                                               (__v4sf)(__B),
                                               (__v2df)(__W),
-                                              (__mmask8)(__U), _MM_FROUND_CUR_DIRECTION); 
+                                              (__mmask8)(__U), _MM_FROUND_CUR_DIRECTION);
 }
 
 static __inline__ __m128d __DEFAULT_FN_ATTRS
@@ -9578,8 +9692,8 @@ _mm_maskz_cvtss_sd (__mmask8 __U, __m128d __A, __m128 __B)
 {
   return __builtin_ia32_cvtss2sd_round_mask((__v2df)(__A),
                                               (__v4sf)(__B),
-                                              (__v2df)_mm_setzero_pd(), 
-                                              (__mmask8)(__U), _MM_FROUND_CUR_DIRECTION); 
+                                              (__v2df)_mm_setzero_pd(),
+                                              (__mmask8)(__U), _MM_FROUND_CUR_DIRECTION);
 }
 
 static __inline__ __m128d __DEFAULT_FN_ATTRS
@@ -9825,7 +9939,7 @@ static __inline__ double __DEFAULT_FN_ATTRS _mm512_reduce_mul_pd(__m512d __W) {
 }
 
 // Vec512 - Vector with size 512.
-// Vec512Neutral - All vector elements set to the identity element. 
+// Vec512Neutral - All vector elements set to the identity element.
 // Identity element: {+,0},{*,1},{&,0xFFFFFFFFFFFFFFFF},{|,0}
 // Operator - Can be one of following: +,*,&,|
 // Mask - Intrinsic Mask
@@ -9855,19 +9969,19 @@ _mm512_mask_reduce_mul_epi64(__mmask8 __M, __m512i __W) {
 
 static __inline__ long long __DEFAULT_FN_ATTRS
 _mm512_mask_reduce_and_epi64(__mmask8 __M, __m512i __W) {
-  _mm512_mask_reduce_operator_64bit(__W, _mm512_set1_epi64(0xFFFFFFFFFFFFFFFF), 
+  _mm512_mask_reduce_operator_64bit(__W, _mm512_set1_epi64(0xFFFFFFFFFFFFFFFF),
                                     &, __M,  i, i, q);
 }
 
 static __inline__ long long __DEFAULT_FN_ATTRS
 _mm512_mask_reduce_or_epi64(__mmask8 __M, __m512i __W) {
-  _mm512_mask_reduce_operator_64bit(__W, _mm512_set1_epi64(0), |, __M, 
+  _mm512_mask_reduce_operator_64bit(__W, _mm512_set1_epi64(0), |, __M,
                                     i, i, q);
 }
 
 static __inline__ double __DEFAULT_FN_ATTRS
 _mm512_mask_reduce_add_pd(__mmask8 __M, __m512d __W) {
-  _mm512_mask_reduce_operator_64bit(__W, _mm512_set1_pd(0), +, __M, 
+  _mm512_mask_reduce_operator_64bit(__W, _mm512_set1_pd(0), +, __M,
                                     f, d, pd);
 }
 
@@ -9929,17 +10043,17 @@ _mm512_reduce_add_epi32(__m512i __W) {
   _mm512_reduce_operator_32bit(__W, +, i, i);
 }
 
-static __inline__ int __DEFAULT_FN_ATTRS 
+static __inline__ int __DEFAULT_FN_ATTRS
 _mm512_reduce_mul_epi32(__m512i __W) {
   _mm512_reduce_operator_32bit(__W, *, i, i);
 }
 
-static __inline__ int __DEFAULT_FN_ATTRS 
+static __inline__ int __DEFAULT_FN_ATTRS
 _mm512_reduce_and_epi32(__m512i __W) {
   _mm512_reduce_operator_32bit(__W, &, i, i);
 }
 
-static __inline__ int __DEFAULT_FN_ATTRS 
+static __inline__ int __DEFAULT_FN_ATTRS
 _mm512_reduce_or_epi32(__m512i __W) {
   _mm512_reduce_operator_32bit(__W, |, i, i);
 }
@@ -9955,7 +10069,7 @@ _mm512_reduce_mul_ps(__m512 __W) {
 }
 
 // Vec512 - Vector with size 512.
-// Vec512Neutral - All vector elements set to the identity element. 
+// Vec512Neutral - All vector elements set to the identity element.
 // Identity element: {+,0},{*,1},{&,0xFFFFFFFF},{|,0}
 // Operator - Can be one of following: +,*,&,|
 // Mask - Intrinsic Mask
@@ -9985,7 +10099,7 @@ _mm512_mask_reduce_mul_epi32( __mmask16 __M, __m512i __W) {
 
 static __inline__ int __DEFAULT_FN_ATTRS
 _mm512_mask_reduce_and_epi32( __mmask16 __M, __m512i __W) {
-  _mm512_mask_reduce_operator_32bit(__W, _mm512_set1_epi32(0xFFFFFFFF), &, __M, 
+  _mm512_mask_reduce_operator_32bit(__W, _mm512_set1_epi32(0xFFFFFFFF), &, __M,
                                     i, i, d);
 }
 
@@ -10048,7 +10162,7 @@ _mm512_mask_reduce_mul_ps(__mmask16 __M, __m512 __W) {
     return Vec512[0];                                                          \
   })
 
-static __inline__ long long __DEFAULT_FN_ATTRS 
+static __inline__ long long __DEFAULT_FN_ATTRS
 _mm512_reduce_max_epi64(__m512i __V) {
   _mm512_reduce_maxMin_64bit(__V, max_epi64, i, i);
 }
@@ -10058,7 +10172,7 @@ _mm512_reduce_max_epu64(__m512i __V) {
   _mm512_reduce_maxMin_64bit(__V, max_epu64, i, i);
 }
 
-static __inline__ double __DEFAULT_FN_ATTRS 
+static __inline__ double __DEFAULT_FN_ATTRS
 _mm512_reduce_max_pd(__m512d __V) {
   _mm512_reduce_maxMin_64bit(__V, max_pd, d, f);
 }
@@ -10073,7 +10187,7 @@ _mm512_reduce_min_epu64(__m512i __V) {
   _mm512_reduce_maxMin_64bit(__V, min_epu64, i, i);
 }
 
-static __inline__ double __DEFAULT_FN_ATTRS 
+static __inline__ double __DEFAULT_FN_ATTRS
 _mm512_reduce_min_pd(__m512d __V) {
   _mm512_reduce_maxMin_64bit(__V, min_pd, d, f);
 }

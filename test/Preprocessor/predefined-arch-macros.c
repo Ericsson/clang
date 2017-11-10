@@ -986,6 +986,81 @@
 // CHECK_ATOM_M64: #define __x86_64 1
 // CHECK_ATOM_M64: #define __x86_64__ 1
 //
+// RUN: %clang -march=goldmont -m32 -E -dM %s -o - 2>&1 \
+// RUN:     -target i386-unknown-linux \
+// RUN:   | FileCheck %s -check-prefix=CHECK_GLM_M32
+// CHECK_GLM_M32: #define __AES__ 1
+// CHECK_GLM_M32: #define __CLFLUSHOPT__ 1
+// CHECK_GLM_M32: #define __FXSR__ 1
+// CHECK_GLM_M32: #define __MMX__ 1
+// CHECK_GLM_M32: #define __MPX__ 1
+// CHECK_GLM_M32: #define __PCLMUL__ 1
+// CHECK_GLM_M32: #define __POPCNT__ 1
+// CHECK_GLM_M32: #define __RDRND__ 1
+// CHECK_GLM_M32: #define __RDSEED__ 1
+// CHECK_GLM_M32: #define __SHA__ 1
+// CHECK_GLM_M32: #define __SSE2__ 1
+// CHECK_GLM_M32: #define __SSE3__ 1
+// CHECK_GLM_M32: #define __SSE4_1__ 1
+// CHECK_GLM_M32: #define __SSE4_2__ 1
+// CHECK_GLM_M32: #define __SSE_MATH__ 1
+// CHECK_GLM_M32: #define __SSE__ 1
+// CHECK_GLM_M32: #define __SSSE3__ 1
+// CHECK_GLM_M32: #define __XSAVEC__ 1
+// CHECK_GLM_M32: #define __XSAVEOPT__ 1
+// CHECK_GLM_M32: #define __XSAVES__ 1
+// CHECK_GLM_M32: #define __XSAVE__ 1
+// CHECK_GLM_M32: #define __clang__ 1
+// CHECK_GLM_M32: #define __goldmont 1
+// CHECK_GLM_M32: #define __goldmont__ 1
+// CHECK_GLM_M32: #define __i386 1
+// CHECK_GLM_M32: #define __i386__ 1
+// CHECK_GLM_M32: #define __linux 1
+// CHECK_GLM_M32: #define __linux__ 1
+// CHECK_GLM_M32: #define __llvm__ 1
+// CHECK_GLM_M32: #define __tune_goldmont__ 1
+// CHECK_GLM_M32: #define __unix 1
+// CHECK_GLM_M32: #define __unix__ 1
+// CHECK_GLM_M32: #define i386 1
+// CHECK_GLM_M32: #define linux 1
+// CHECK_GLM_M32: #define unix 1
+//
+// RUN: %clang -march=goldmont -m64 -E -dM %s -o - 2>&1 \
+// RUN:     -target i386-unknown-linux \
+// RUN:   | FileCheck %s -check-prefix=CHECK_GLM_M64
+// CHECK_GLM_M64: #define __AES__ 1
+// CHECK_GLM_M64: #define __CLFLUSHOPT__ 1
+// CHECK_GLM_M64: #define __FXSR__ 1
+// CHECK_GLM_M64: #define __MMX__ 1
+// CHECK_GLM_M64: #define __MPX__ 1
+// CHECK_GLM_M64: #define __PCLMUL__ 1
+// CHECK_GLM_M64: #define __POPCNT__ 1
+// CHECK_GLM_M64: #define __RDRND__ 1
+// CHECK_GLM_M64: #define __RDSEED__ 1
+// CHECK_GLM_M64: #define __SSE2__ 1
+// CHECK_GLM_M64: #define __SSE3__ 1
+// CHECK_GLM_M64: #define __SSE4_1__ 1
+// CHECK_GLM_M64: #define __SSE4_2__ 1
+// CHECK_GLM_M64: #define __SSE__ 1
+// CHECK_GLM_M64: #define __SSSE3__ 1
+// CHECK_GLM_M64: #define __XSAVEC__ 1
+// CHECK_GLM_M64: #define __XSAVEOPT__ 1
+// CHECK_GLM_M64: #define __XSAVES__ 1
+// CHECK_GLM_M64: #define __XSAVE__ 1
+// CHECK_GLM_M64: #define __gnu_linux__ 1
+// CHECK_GLM_M64: #define __goldmont 1
+// CHECK_GLM_M64: #define __goldmont__ 1
+// CHECK_GLM_M64: #define __linux 1
+// CHECK_GLM_M64: #define __linux__ 1
+// CHECK_GLM_M64: #define __llvm__ 1
+// CHECK_GLM_M64: #define __tune_goldmont__ 1
+// CHECK_GLM_M64: #define __unix 1
+// CHECK_GLM_M64: #define __unix__ 1
+// CHECK_GLM_M64: #define __x86_64 1
+// CHECK_GLM_M64: #define __x86_64__ 1
+// CHECK_GLM_M64: #define linux 1
+// CHECK_GLM_M64: #define unix 1
+//
 // RUN: %clang -march=slm -m32 -E -dM %s -o - 2>&1 \
 // RUN:     -target i386-unknown-linux \
 // RUN:   | FileCheck -match-full-lines %s -check-prefix=CHECK_SLM_M32
@@ -1601,6 +1676,7 @@
 // CHECK_BDVER1_M32: #define __AES__ 1
 // CHECK_BDVER1_M32: #define __AVX__ 1
 // CHECK_BDVER1_M32: #define __FMA4__ 1
+// CHECK_BDVER1_M32: #define __LWP__ 1
 // CHECK_BDVER1_M32: #define __LZCNT__ 1
 // CHECK_BDVER1_M32: #define __MMX__ 1
 // CHECK_BDVER1_M32: #define __PCLMUL__ 1
@@ -1630,6 +1706,7 @@
 // CHECK_BDVER1_M64: #define __AES__ 1
 // CHECK_BDVER1_M64: #define __AVX__ 1
 // CHECK_BDVER1_M64: #define __FMA4__ 1
+// CHECK_BDVER1_M64: #define __LWP__ 1
 // CHECK_BDVER1_M64: #define __LZCNT__ 1
 // CHECK_BDVER1_M64: #define __MMX__ 1
 // CHECK_BDVER1_M64: #define __PCLMUL__ 1
@@ -1664,6 +1741,7 @@
 // CHECK_BDVER2_M32: #define __F16C__ 1
 // CHECK_BDVER2_M32: #define __FMA4__ 1
 // CHECK_BDVER2_M32: #define __FMA__ 1
+// CHECK_BDVER2_M32: #define __LWP__ 1
 // CHECK_BDVER2_M32: #define __LZCNT__ 1
 // CHECK_BDVER2_M32: #define __MMX__ 1
 // CHECK_BDVER2_M32: #define __PCLMUL__ 1
@@ -1697,6 +1775,7 @@
 // CHECK_BDVER2_M64: #define __F16C__ 1
 // CHECK_BDVER2_M64: #define __FMA4__ 1
 // CHECK_BDVER2_M64: #define __FMA__ 1
+// CHECK_BDVER2_M64: #define __LWP__ 1
 // CHECK_BDVER2_M64: #define __LZCNT__ 1
 // CHECK_BDVER2_M64: #define __MMX__ 1
 // CHECK_BDVER2_M64: #define __PCLMUL__ 1
@@ -1733,6 +1812,7 @@
 // CHECK_BDVER3_M32: #define __FMA4__ 1
 // CHECK_BDVER3_M32: #define __FMA__ 1
 // CHECK_BDVER3_M32: #define __FSGSBASE__ 1
+// CHECK_BDVER3_M32: #define __LWP__ 1
 // CHECK_BDVER3_M32: #define __LZCNT__ 1
 // CHECK_BDVER3_M32: #define __MMX__ 1
 // CHECK_BDVER3_M32: #define __PCLMUL__ 1
@@ -1768,6 +1848,7 @@
 // CHECK_BDVER3_M64: #define __FMA4__ 1
 // CHECK_BDVER3_M64: #define __FMA__ 1
 // CHECK_BDVER3_M64: #define __FSGSBASE__ 1
+// CHECK_BDVER3_M64: #define __LWP__ 1
 // CHECK_BDVER3_M64: #define __LZCNT__ 1
 // CHECK_BDVER3_M64: #define __MMX__ 1
 // CHECK_BDVER3_M64: #define __PCLMUL__ 1
@@ -1807,6 +1888,7 @@
 // CHECK_BDVER4_M32: #define __FMA4__ 1
 // CHECK_BDVER4_M32: #define __FMA__ 1
 // CHECK_BDVER4_M32: #define __FSGSBASE__ 1
+// CHECK_BDVER4_M32: #define __LWP__ 1
 // CHECK_BDVER4_M32: #define __LZCNT__ 1
 // CHECK_BDVER4_M32: #define __MMX__ 1
 // CHECK_BDVER4_M32: #define __PCLMUL__ 1
@@ -1843,6 +1925,7 @@
 // CHECK_BDVER4_M64: #define __FMA4__ 1
 // CHECK_BDVER4_M64: #define __FMA__ 1
 // CHECK_BDVER4_M64: #define __FSGSBASE__ 1
+// CHECK_BDVER4_M64: #define __LWP__ 1
 // CHECK_BDVER4_M64: #define __LZCNT__ 1
 // CHECK_BDVER4_M64: #define __MMX__ 1
 // CHECK_BDVER4_M64: #define __PCLMUL__ 1
@@ -1957,6 +2040,14 @@
 // End X86/GCC/Linux tests ------------------
 
 // Begin PPC/GCC/Linux tests ----------------
+// Check that VSX also turns on altivec.
+// RUN: %clang -mvsx -E -dM %s -o - 2>&1 \
+// RUN:     -target powerpc-unknown-linux \
+// RUN:   | FileCheck -match-full-lines %s -check-prefix=CHECK_PPC_VSX_M32
+//
+// CHECK_PPC_VSX_M32: #define __ALTIVEC__ 1
+// CHECK_PPC_VSX_M32: #define __VSX__ 1
+//
 // RUN: %clang -mvsx -E -dM %s -o - 2>&1 \
 // RUN:     -target powerpc64-unknown-linux \
 // RUN:   | FileCheck -match-full-lines %s -check-prefix=CHECK_PPC_VSX_M64
@@ -2146,6 +2237,25 @@
 // CHECK_SYSTEMZ_ARCH11: #define __s390x__ 1
 // CHECK_SYSTEMZ_ARCH11: #define __zarch__ 1
 //
+// RUN: %clang -march=arch12 -E -dM %s -o - 2>&1 \
+// RUN:     -target s390x-unknown-linux \
+// RUN:   | FileCheck -match-full-lines %s -check-prefix=CHECK_SYSTEMZ_ARCH12
+// RUN: %clang -march=z14 -E -dM %s -o - 2>&1 \
+// RUN:     -target s390x-unknown-linux \
+// RUN:   | FileCheck -match-full-lines %s -check-prefix=CHECK_SYSTEMZ_ARCH12
+//
+// CHECK_SYSTEMZ_ARCH12: #define __ARCH__ 12
+// CHECK_SYSTEMZ_ARCH12: #define __GCC_HAVE_SYNC_COMPARE_AND_SWAP_1 1
+// CHECK_SYSTEMZ_ARCH12: #define __GCC_HAVE_SYNC_COMPARE_AND_SWAP_2 1
+// CHECK_SYSTEMZ_ARCH12: #define __GCC_HAVE_SYNC_COMPARE_AND_SWAP_4 1
+// CHECK_SYSTEMZ_ARCH12: #define __GCC_HAVE_SYNC_COMPARE_AND_SWAP_8 1
+// CHECK_SYSTEMZ_ARCH12: #define __HTM__ 1
+// CHECK_SYSTEMZ_ARCH12: #define __LONG_DOUBLE_128__ 1
+// CHECK_SYSTEMZ_ARCH12: #define __VX__ 1
+// CHECK_SYSTEMZ_ARCH12: #define __s390__ 1
+// CHECK_SYSTEMZ_ARCH12: #define __s390x__ 1
+// CHECK_SYSTEMZ_ARCH12: #define __zarch__ 1
+//
 // RUN: %clang -mhtm -E -dM %s -o - 2>&1 \
 // RUN:     -target s390x-unknown-linux \
 // RUN:   | FileCheck -match-full-lines %s -check-prefix=CHECK_SYSTEMZ_HTM
@@ -2165,7 +2275,7 @@
 // RUN:     -target s390x-unknown-linux \
 // RUN:   | FileCheck -match-full-lines %s -check-prefix=CHECK_SYSTEMZ_ZVECTOR
 //
-// CHECK_SYSTEMZ_ZVECTOR: #define __VEC__ 10301
+// CHECK_SYSTEMZ_ZVECTOR: #define __VEC__ 10302
 
 // Begin amdgcn tests ----------------
 //

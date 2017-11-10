@@ -79,6 +79,17 @@ static const DeclContext *getEffectiveDeclContext(const Decl *D) {
     if (FD->isExternC())
       return FD->getASTContext().getTranslationUnitDecl();
 
+  // Avoid infinite recursion with code like:
+  //   void f(struct S* p);
+  // Where this is the first declaration of S. This is only valid for C.
+  // For some tools it makes sense to mangle C functions (e.g. avoid collisions
+  // when indexing). It might be nicer to check whether the Decl is in
+  // FunctionPrototypeScope, but this information is lost after the Sema is
+  // done.
+  if (!D->getASTContext().getLangOpts().CPlusPlus && DC->isFunctionOrMethod() &&
+      isa<TagDecl>(D))
+    return D->getASTContext().getTranslationUnitDecl();
+
   return DC->getRedeclContext();
 }
 
@@ -1455,7 +1466,7 @@ void CXXNameMangler::mangleNestedName(const NamedDecl *ND,
   Out << 'N';
   if (const CXXMethodDecl *Method = dyn_cast<CXXMethodDecl>(ND)) {
     Qualifiers MethodQuals =
-        Qualifiers::fromCVRMask(Method->getTypeQualifiers());
+        Qualifiers::fromCVRUMask(Method->getTypeQualifiers());
     // We do not consider restrict a distinguishing attribute for overloading
     // purposes so we must not mangle it.
     MethodQuals.removeRestrict();
@@ -2138,7 +2149,8 @@ CXXNameMangler::mangleOperatorName(OverloadedOperatorKind OO, unsigned Arity) {
 }
 
 void CXXNameMangler::mangleQualifiers(Qualifiers Quals) {
-  // Vendor qualifiers come first.
+  // Vendor qualifiers come first and if they are order-insensitive they must
+  // be emitted in reversed alphabetical order, see Itanium ABI 5.1.5.
 
   // Address space qualifiers start with an ordinary letter.
   if (Quals.hasAddressSpace()) {
@@ -2174,17 +2186,28 @@ void CXXNameMangler::mangleQualifiers(Qualifiers Quals) {
   }
 
   // The ARC ownership qualifiers start with underscores.
-  switch (Quals.getObjCLifetime()) {
   // Objective-C ARC Extension:
   //
   //   <type> ::= U "__strong"
   //   <type> ::= U "__weak"
   //   <type> ::= U "__autoreleasing"
+  //
+  // Note: we emit __weak first to preserve the order as
+  // required by the Itanium ABI.
+  if (Quals.getObjCLifetime() == Qualifiers::OCL_Weak)
+    mangleVendorQualifier("__weak");
+
+  // __unaligned (from -fms-extensions)
+  if (Quals.hasUnaligned())
+    mangleVendorQualifier("__unaligned");
+
+  // Remaining ARC ownership qualifiers.
+  switch (Quals.getObjCLifetime()) {
   case Qualifiers::OCL_None:
     break;
     
   case Qualifiers::OCL_Weak:
-    mangleVendorQualifier("__weak");
+    // Do nothing as we already handled this case above.
     break;
     
   case Qualifiers::OCL_Strong:
@@ -2517,7 +2540,7 @@ StringRef CXXNameMangler::getCallingConvQualifierName(CallingConv CC) {
   case CC_X86ThisCall:
   case CC_X86VectorCall:
   case CC_X86Pascal:
-  case CC_X86_64Win64:
+  case CC_Win64:
   case CC_X86_64SysV:
   case CC_X86RegCall:
   case CC_AAPCS:
@@ -3773,6 +3796,7 @@ recurse:
     Out << "v1U" << Kind.size() << Kind;
   }
   // Fall through to mangle the cast itself.
+  LLVM_FALLTHROUGH;
       
   case Expr::CStyleCastExprClass:
     mangleCastExpression(E, "cv");
@@ -4325,7 +4349,7 @@ bool CXXNameMangler::mangleSubstitution(const NamedDecl *ND) {
 /// substitutions.
 static bool hasMangledSubstitutionQualifiers(QualType T) {
   Qualifiers Qs = T.getQualifiers();
-  return Qs.getCVRQualifiers() || Qs.hasAddressSpace();
+  return Qs.getCVRQualifiers() || Qs.hasAddressSpace() || Qs.hasUnaligned();
 }
 
 bool CXXNameMangler::mangleSubstitution(QualType T) {
@@ -4537,9 +4561,11 @@ CXXNameMangler::makeFunctionReturnTypeTags(const FunctionDecl *FD) {
 
   const FunctionProtoType *Proto =
       cast<FunctionProtoType>(FD->getType()->getAs<FunctionType>());
+  FunctionTypeDepthState saved = TrackReturnTypeTags.FunctionTypeDepth.push();
   TrackReturnTypeTags.FunctionTypeDepth.enterResultType();
   TrackReturnTypeTags.mangleType(Proto->getReturnType());
   TrackReturnTypeTags.FunctionTypeDepth.leaveResultType();
+  TrackReturnTypeTags.FunctionTypeDepth.pop(saved);
 
   return TrackReturnTypeTags.AbiTagsRoot.getSortedUniqueUsedAbiTags();
 }

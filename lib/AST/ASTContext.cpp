@@ -13,6 +13,7 @@
 
 #include "clang/AST/ASTContext.h"
 #include "CXXABI.h"
+#include "clang/AST/ASTImporter.h"
 #include "clang/AST/ASTMutationListener.h"
 #include "clang/AST/Attr.h"
 #include "clang/AST/CharUnits.h"
@@ -34,10 +35,14 @@
 #include "clang/Basic/Builtins.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetInfo.h"
+#include "clang/Frontend/ASTUnit.h"
+#include "clang/Frontend/CompilerInstance.h"
+#include "clang/StaticAnalyzer/Core/AnalyzerOptions.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/Support/Capacity.h"
 #include "llvm/Support/MathExtras.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
 #include <map>
 
@@ -703,6 +708,7 @@ static const LangAS::Map *getAddressSpaceMap(const TargetInfo &T,
     // The fake address space map must have a distinct entry for each
     // language-specific address space.
     static const unsigned FakeAddrSpaceMap[] = {
+      0, // Default
       1, // opencl_global
       3, // opencl_local
       2, // opencl_constant
@@ -893,7 +899,7 @@ void ASTContext::mergeDefinitionIntoModule(NamedDecl *ND, Module *M,
   if (getLangOpts().ModulesLocalVisibility)
     MergedDefModules[ND].push_back(M);
   else
-    ND->setHidden(false);
+    ND->setVisibleDespiteOwningModule();
 }
 
 void ASTContext::deduplicateMergedDefinitonsFor(NamedDecl *ND) {
@@ -1938,9 +1944,8 @@ TypeInfo ASTContext::getTypeInfoImpl(const Type *T) const {
   break;
 
   case Type::Pipe: {
-    TypeInfo Info = getTypeInfo(cast<PipeType>(T)->getElementType());
-    Width = Info.Width;
-    Align = Info.Align;
+    Width = Target->getPointerWidth(getTargetAddressSpace(LangAS::opencl_global));
+    Align = Target->getPointerAlign(getTargetAddressSpace(LangAS::opencl_global));
   }
 
   }
@@ -3565,7 +3570,7 @@ QualType ASTContext::getSubstTemplateTypeParmPackType(
     = new (*this, TypeAlignment) SubstTemplateTypeParmPackType(Parm, Canon,
                                                                ArgPack);
   Types.push_back(SubstParm);
-  SubstTemplateTypeParmTypes.InsertNode(SubstParm, InsertPos);
+  SubstTemplateTypeParmPackTypes.InsertNode(SubstParm, InsertPos);
   return QualType(SubstParm, 0);  
 }
 
@@ -4523,6 +4528,12 @@ QualType ASTContext::getTagDeclType(const TagDecl *Decl) const {
 /// needs to agree with the definition in <stddef.h>.
 CanQualType ASTContext::getSizeType() const {
   return getFromTargetType(Target->getSizeType());
+}
+
+/// Return the unique signed counterpart of the integer type 
+/// corresponding to size_t.
+CanQualType ASTContext::getSignedSizeType() const {
+  return getFromTargetType(Target->getSignedSizeType());
 }
 
 /// getIntMaxType - Return the unique type for "intmax_t" (C99 7.18.1.5).
@@ -5990,9 +6001,19 @@ static void EncodeBitField(const ASTContext *Ctx, std::string& S,
   // compatibility with GCC, although providing it breaks anything that
   // actually uses runtime introspection and wants to work on both runtimes...
   if (Ctx->getLangOpts().ObjCRuntime.isGNUFamily()) {
-    const RecordDecl *RD = FD->getParent();
-    const ASTRecordLayout &RL = Ctx->getASTRecordLayout(RD);
-    S += llvm::utostr(RL.getFieldOffset(FD->getFieldIndex()));
+    uint64_t Offset;
+
+    if (const auto *IVD = dyn_cast<ObjCIvarDecl>(FD)) {
+      Offset = Ctx->lookupFieldBitOffset(IVD->getContainingInterface(), nullptr,
+                                         IVD);
+    } else {
+      const RecordDecl *RD = FD->getParent();
+      const ASTRecordLayout &RL = Ctx->getASTRecordLayout(RD);
+      Offset = RL.getFieldOffset(FD->getFieldIndex());
+    }
+
+    S += llvm::utostr(Offset);
+
     if (const EnumType *ET = T->getAs<EnumType>())
       S += ObjCEncodingForEnumType(Ctx, ET);
     else {
@@ -6239,6 +6260,8 @@ void ASTContext::getObjCEncodingForTypeImpl(QualType T, std::string& S,
       S += "{objc_class=}";
       return;
     }
+    // TODO: Double check to make sure this intentially falls through.
+    LLVM_FALLTHROUGH;
   }
   
   case Type::ObjCInterface: {
@@ -7917,6 +7940,8 @@ QualType ASTContext::mergeFunctionTypes(QualType lhs, QualType rhs,
 
   if (lbaseInfo.getProducesResult() != rbaseInfo.getProducesResult())
     return QualType();
+  if (lbaseInfo.getNoCallerSavedRegs() != rbaseInfo.getNoCallerSavedRegs())
+    return QualType();
 
   // FIXME: some uses, e.g. conditional exprs, really want this to be 'both'.
   bool NoReturn = lbaseInfo.getNoReturn() || rbaseInfo.getNoReturn();
@@ -8510,6 +8535,9 @@ static QualType DecodeTypeFromStr(const char *&Str, const ASTContext &Context,
   
   // Read the prefixed modifiers first.
   bool Done = false;
+  #ifndef NDEBUG
+  bool IsSpecialLong = false;
+  #endif
   while (!Done) {
     switch (*Str++) {
     default: Done = true; --Str; break;
@@ -8527,12 +8555,28 @@ static QualType DecodeTypeFromStr(const char *&Str, const ASTContext &Context,
       Unsigned = true;
       break;
     case 'L':
+      assert(!IsSpecialLong && "Can't use 'L' with 'W' or 'N' modifiers");
       assert(HowLong <= 2 && "Can't have LLLL modifier");
       ++HowLong;
       break;
+    case 'N': {
+      // 'N' behaves like 'L' for all non LP64 targets and 'int' otherwise.
+      assert(!IsSpecialLong && "Can't use two 'N' or 'W' modifiers!");
+      assert(HowLong == 0 && "Can't use both 'L' and 'N' modifiers!");
+      #ifndef NDEBUG
+      IsSpecialLong = true;
+      #endif
+      if (Context.getTargetInfo().getLongWidth() == 32)
+        ++HowLong;
+      break;
+    }
     case 'W':
       // This modifier represents int64 type.
+      assert(!IsSpecialLong && "Can't use two 'N' or 'W' modifiers!");
       assert(HowLong == 0 && "Can't use both 'L' and 'W' modifiers!");
+      #ifndef NDEBUG
+      IsSpecialLong = true;
+      #endif
       switch (Context.getTargetInfo().getInt64Type()) {
       default:
         llvm_unreachable("Unexpected integer type");
@@ -8543,6 +8587,7 @@ static QualType DecodeTypeFromStr(const char *&Str, const ASTContext &Context,
         HowLong = 2;
         break;
       }
+      break;
     }
   }
 
@@ -8727,7 +8772,8 @@ static QualType DecodeTypeFromStr(const char *&Str, const ASTContext &Context,
       char *End;
       unsigned AddrSpace = strtoul(Str, &End, 10);
       if (End != Str && AddrSpace != 0) {
-        Type = Context.getAddrSpaceQualType(Type, AddrSpace);
+        Type = Context.getAddrSpaceQualType(
+            Type, AddrSpace + LangAS::FirstTargetAddressSpace);
         Str = End;
       }
       if (c == '*')
@@ -8895,7 +8941,7 @@ GVALinkage ASTContext::GetGVALinkageForFunction(const FunctionDecl *FD) const {
       *this, basicGVALinkageForFunction(*this, FD), FD);
   auto EK = ExternalASTSource::EK_ReplyHazy;
   if (auto *Ext = getExternalSource())
-    EK = Ext->hasExternalDefinitions(FD->getOwningModuleID());
+    EK = Ext->hasExternalDefinitions(FD);
   switch (EK) {
   case ExternalASTSource::EK_Never:
     if (L == GVA_DiscardableODR)
@@ -8991,7 +9037,7 @@ GVALinkage ASTContext::GetGVALinkageForVariable(const VarDecl *VD) {
       *this, basicGVALinkageForVariable(*this, VD), VD);
 }
 
-bool ASTContext::DeclMustBeEmitted(const Decl *D, bool ForModularCodegen) {
+bool ASTContext::DeclMustBeEmitted(const Decl *D) {
   if (const VarDecl *VD = dyn_cast<VarDecl>(D)) {
     if (!VD->isFileVarDecl())
       return false;
@@ -9056,9 +9102,6 @@ bool ASTContext::DeclMustBeEmitted(const Decl *D, bool ForModularCodegen) {
     }
 
     GVALinkage Linkage = GetGVALinkageForFunction(FD);
-
-    if (Linkage == GVA_DiscardableODR && ForModularCodegen)
-      return true;
 
     // static, static inline, always_inline, and extern inline functions can
     // always be deferred.  Normal inline functions can be deferred in C99/C++.
@@ -9415,10 +9458,8 @@ createDynTypedNode(const NestedNameSpecifierLoc &Node) {
           if (!NodeOrVector.template is<ASTContext::ParentVector *>()) {
             auto *Vector = new ASTContext::ParentVector(
                 1, getSingleDynTypedNodeFromParentMap(NodeOrVector));
-            if (auto *Node =
-                    NodeOrVector
-                        .template dyn_cast<ast_type_traits::DynTypedNode *>())
-              delete Node;
+            delete NodeOrVector
+                    .template dyn_cast<ast_type_traits::DynTypedNode *>();
             NodeOrVector = Vector;
           }
 
@@ -9544,6 +9585,13 @@ uint64_t ASTContext::getTargetNullPointerValue(QualType QT) const {
     AS = QT->getPointeeType().getAddressSpace();
 
   return getTargetInfo().getNullPointerValue(AS);
+}
+
+unsigned ASTContext::getTargetAddressSpace(unsigned AS) const {
+  if (AS >= LangAS::FirstTargetAddressSpace)
+    return AS - LangAS::FirstTargetAddressSpace;
+  else
+    return (*AddrSpaceMap)[AS];
 }
 
 // Explicitly instantiate this in case a Redeclarable<T> is used from a TU that

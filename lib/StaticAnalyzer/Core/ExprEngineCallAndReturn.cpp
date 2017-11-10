@@ -19,6 +19,7 @@
 #include "clang/Analysis/Analyses/LiveVariables.h"
 #include "clang/StaticAnalyzer/Core/CheckerManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
+#include "clang/Tooling/CrossTranslationUnit.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Support/SaveAndRestore.h"
@@ -447,6 +448,7 @@ bool ExprEngine::inlineCall(const CallEvent &Call, const Decl *D,
   Bldr.takeNodes(Pred);
 
   NumInlinedCalls++;
+  Engine.FunctionSummaries->bumpNumTimesInlined(D);
 
   // Mark the decl as visited.
   if (VisitedCallees)
@@ -791,6 +793,9 @@ bool ExprEngine::shouldInlineCall(const CallEvent &Call, const Decl *D,
   if (!D)
     return false;
 
+  if (CTU.isInvalidFunction(dyn_cast<FunctionDecl>(D)))
+    return false;
+
   AnalysisManager &AMgr = getAnalysisManager();
   AnalyzerOptions &Opts = AMgr.options;
   AnalysisDeclContextManager &ADCMgr = AMgr.getAnalysisDeclContextManager();
@@ -867,8 +872,6 @@ bool ExprEngine::shouldInlineCall(const CallEvent &Call, const Decl *D,
       (CalleeCFG->getNumBlockIDs() > Opts.getAlwaysInlineSize()
       || IsRecursive))
     return false;
-
-  Engine.FunctionSummaries->bumpNumTimesInlined(D);
 
   return true;
 }

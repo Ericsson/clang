@@ -61,17 +61,21 @@ bool index::isFunctionLocalSymbol(const Decl *D) {
   if (isa<ObjCTypeParamDecl>(D))
     return true;
 
+  if (isa<UsingDirectiveDecl>(D))
+    return false;
   if (!D->getParentFunctionOrMethod())
     return false;
 
   if (const NamedDecl *ND = dyn_cast<NamedDecl>(D)) {
     switch (ND->getFormalLinkage()) {
       case NoLinkage:
-      case VisibleNoLinkage:
       case InternalLinkage:
         return true;
+      case VisibleNoLinkage:
       case UniqueExternalLinkage:
+      case ModuleInternalLinkage:
         llvm_unreachable("Not a sema linkage");
+      case ModuleLinkage:
       case ExternalLinkage:
         return false;
     }
@@ -299,6 +303,10 @@ SymbolInfo index::getSymbolInfo(const Decl *D) {
       Info.Kind = SymbolKind::TypeAlias;
       Info.Lang = SymbolLanguage::CXX;
       break;
+    case Decl::Binding:
+      Info.Kind = SymbolKind::Variable;
+      Info.Lang = SymbolLanguage::CXX;
+      break;
     default:
       break;
     }
@@ -317,6 +325,11 @@ SymbolInfo index::getSymbolInfo(const Decl *D) {
 
   if (Info.Properties & (unsigned)SymbolProperty::Generic)
     Info.Lang = SymbolLanguage::CXX;
+
+  if (auto *attr = D->getExternalSourceSymbolAttr()) {
+    if (attr->getLanguage() == "Swift")
+      Info.Lang = SymbolLanguage::Swift;
+  }
 
   return Info;
 }
@@ -346,6 +359,7 @@ bool index::applyForEachSymbolRoleInterruptible(SymbolRoleSet Roles,
   APPLY_FOR_ROLE(RelationAccessorOf);
   APPLY_FOR_ROLE(RelationContainedBy);
   APPLY_FOR_ROLE(RelationIBTypeOf);
+  APPLY_FOR_ROLE(RelationSpecializationOf);
 
 #undef APPLY_FOR_ROLE
 
@@ -386,6 +400,7 @@ void index::printSymbolRoles(SymbolRoleSet Roles, raw_ostream &OS) {
     case SymbolRole::RelationAccessorOf: OS << "RelAcc"; break;
     case SymbolRole::RelationContainedBy: OS << "RelCont"; break;
     case SymbolRole::RelationIBTypeOf: OS << "RelIBType"; break;
+    case SymbolRole::RelationSpecializationOf: OS << "RelSpecialization"; break;
     }
   });
 }
@@ -456,6 +471,7 @@ StringRef index::getSymbolLanguageString(SymbolLanguage K) {
   case SymbolLanguage::C: return "C";
   case SymbolLanguage::ObjC: return "ObjC";
   case SymbolLanguage::CXX: return "C++";
+  case SymbolLanguage::Swift: return "Swift";
   }
   llvm_unreachable("invalid symbol language kind");
 }

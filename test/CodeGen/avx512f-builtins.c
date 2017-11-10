@@ -1,4 +1,7 @@
 // RUN: %clang_cc1 -ffreestanding %s -triple=x86_64-apple-darwin -target-feature +avx512f -emit-llvm -o - -Wall -Werror | FileCheck %s
+
+// FIXME: It's wrong to check LLVM IR transformations from clang. This run should be removed and tests added to the appropriate LLVM pass.
+
 // RUN: %clang_cc1 -ffreestanding %s -triple=x86_64-apple-darwin -target-feature +avx512f -O2 -emit-llvm -o - -Wall -Werror | FileCheck %s -check-prefix=O2
 
 #include <immintrin.h>
@@ -6251,7 +6254,7 @@ void test_mm512_stream_si512(__m512i * __P, __m512i __A) {
 
 __m512i test_mm512_stream_load_si512(void *__P) {
   // CHECK-LABEL: @test_mm512_stream_load_si512
-  // CHECK: @llvm.x86.avx512.movntdqa
+  // CHECK: load <8 x i64>, <8 x i64>* %{{.*}}, align 64, !nontemporal
   return _mm512_stream_load_si512(__P); 
 }
 
@@ -8240,10 +8243,10 @@ __m128 test_mm_mask_move_ss (__m128 __W, __mmask8 __U, __m128 __A, __m128 __B)
 {
   // O2-LABEL: @test_mm_mask_move_ss
   // O2: %[[M:.*]] = and i8 %__U, 1
-  // O2: %[[M2:.*]] = icmp ne i8 %[[M]], 0
-  // O2: %[[ELM1:.*]] = extractelement <4 x float> %__B, i32 0
-  // O2: %[[ELM2:.*]] = extractelement <4 x float> %__W, i32 0
-  // O2: %[[SEL:.*]] = select i1 %[[M2]], float %[[ELM1]], float %[[ELM2]]
+  // O2: %[[M2:.*]] = icmp 
+  // O2: %[[ELM1:.*]] = extractelement <4 x float> 
+  // O2: %[[ELM2:.*]] = extractelement <4 x float> 
+  // O2: %[[SEL:.*]] = select i1 %[[M2]]
   // O2: %[[RES:.*]] = insertelement <4 x float> %__A, float %[[SEL]], i32 0
   // O2: ret <4 x float> %[[RES]]
   return _mm_mask_move_ss ( __W,  __U,  __A,  __B);
@@ -8253,9 +8256,9 @@ __m128 test_mm_maskz_move_ss (__mmask8 __U, __m128 __A, __m128 __B)
 {
   // O2-LABEL: @test_mm_maskz_move_ss
   // O2: %[[M:.*]] = and i8 %__U, 1
-  // O2: %[[M2:.*]] = icmp ne i8 %[[M]], 0
+  // O2: %[[M2:.*]] = icmp
   // O2: %[[ELM1:.*]] = extractelement <4 x float> %__B, i32 0
-  // O2: %[[SEL:.*]] = select i1 %[[M2]], float %[[ELM1]], float 0.0 
+  // O2: %[[SEL:.*]] = select i1 %[[M2]] 
   // O2: %[[RES:.*]] = insertelement <4 x float> %__A, float %[[SEL]], i32 0
   // O2: ret <4 x float> %[[RES]]
   return _mm_maskz_move_ss (__U, __A, __B);
@@ -8265,10 +8268,10 @@ __m128d test_mm_mask_move_sd (__m128d __W, __mmask8 __U, __m128d __A, __m128d __
 {
   // O2-LABEL: @test_mm_mask_move_sd
   // O2: %[[M:.*]] = and i8 %__U, 1
-  // O2: %[[M2:.*]] = icmp ne i8 %[[M]], 0
-  // O2: %[[ELM1:.*]] = extractelement <2 x double> %__B, i32 0
-  // O2: %[[ELM2:.*]] = extractelement <2 x double> %__W, i32 0
-  // O2: %[[SEL:.*]] = select i1 %[[M2]], double %[[ELM1]], double %[[ELM2]]
+  // O2: %[[M2:.*]] = icmp
+  // O2: %[[ELM1:.*]] = extractelement <2 x double>
+  // O2: %[[ELM2:.*]] = extractelement <2 x double>
+  // O2: %[[SEL:.*]] = select i1 %[[M2]]
   // O2: %[[RES:.*]] = insertelement <2 x double> %__A, double %[[SEL]], i32 0
   // O2: ret <2 x double> %[[RES]]
   return _mm_mask_move_sd ( __W,  __U,  __A,  __B);
@@ -8278,9 +8281,9 @@ __m128d test_mm_maskz_move_sd (__mmask8 __U, __m128d __A, __m128d __B)
 {
   // O2-LABEL: @test_mm_maskz_move_sd
   // O2: %[[M:.*]] = and i8 %__U, 1
-  // O2: %[[M2:.*]] = icmp ne i8 %[[M]], 0
+  // O2: %[[M2:.*]] = icmp
   // O2: %[[ELM1:.*]] = extractelement <2 x double> %__B, i32 0
-  // O2: %[[SEL:.*]] = select i1 %[[M2]], double %[[ELM1]], double 0.0
+  // O2: %[[SEL:.*]] = select i1 %[[M2]]
   // O2: %[[RES:.*]] = insertelement <2 x double> %__A, double %[[SEL]], i32 0
   // O2: ret <2 x double> %[[RES]]
   return _mm_maskz_move_sd (__U, __A, __B);
@@ -8387,3 +8390,44 @@ __m512 test_mm512_mask_abs_ps(__m512 __W, __mmask16 __U, __m512 __A){
   return _mm512_mask_abs_ps( __W, __U, __A);
 }
 
+__m512d test_mm512_zextpd128_pd512(__m128d A) {
+  // CHECK-LABEL: test_mm512_zextpd128_pd512
+  // CHECK: store <2 x double> zeroinitializer
+  // CHECK: shufflevector <2 x double> %{{.*}}, <2 x double> %{{.*}}, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 2, i32 3, i32 2, i32 3>
+  return _mm512_zextpd128_pd512(A);
+}
+
+__m512d test_mm512_zextpd256_pd512(__m256d A) {
+  // CHECK-LABEL: test_mm512_zextpd256_pd512
+  // CHECK: store <4 x double> zeroinitializer
+  // CHECK: shufflevector <4 x double> %{{.*}}, <4 x double> %{{.*}}, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
+  return _mm512_zextpd256_pd512(A);
+}
+
+__m512 test_mm512_zextps128_ps512(__m128 A) {
+  // CHECK-LABEL: test_mm512_zextps128_ps512
+  // CHECK: store <4 x float> zeroinitializer
+  // CHECK: shufflevector <4 x float> %{{.*}}, <4 x float> %{{.*}}, <16 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7, i32 4, i32 5, i32 6, i32 7, i32 4, i32 5, i32 6, i32 7>
+  return _mm512_zextps128_ps512(A);
+}
+
+__m512 test_mm512_zextps256_ps512(__m256 A) {
+  // CHECK-LABEL: test_mm512_zextps256_ps512
+  // CHECK: store <8 x float> zeroinitializer
+  // CHECK: shufflevector <8 x float> %{{.*}}, <8 x float> %{{.*}}, <16 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7, i32 8, i32 9, i32 10, i32 11, i32 12, i32 13, i32 14, i32 15>
+  return _mm512_zextps256_ps512(A);
+}
+
+__m512i test_mm512_zextsi128_si512(__m128i A) {
+  // CHECK-LABEL: test_mm512_zextsi128_si512
+  // CHECK: store <2 x i64> zeroinitializer
+  // CHECK: shufflevector <2 x i64> %{{.*}}, <2 x i64> %{{.*}}, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 2, i32 3, i32 2, i32 3>
+  return _mm512_zextsi128_si512(A);
+}
+
+__m512i test_mm512_zextsi256_si512(__m256i A) {
+  // CHECK-LABEL: test_mm512_zextsi256_si512
+  // CHECK: store <4 x i64> zeroinitializer
+  // CHECK: shufflevector <4 x i64> %{{.*}}, <4 x i64> %{{.*}}, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
+  return _mm512_zextsi256_si512(A);
+}

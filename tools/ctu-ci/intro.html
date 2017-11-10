@@ -1,0 +1,24 @@
+These are the measurement result of the Cross Translation Unit (CTU) prototype for 
+Clang Static Analyzer on some open source projects.
+CTU allows Clang Static Analyzer to analyze called functions even if they are defined in different translation units (C/C++ source files).
+The resuts show that this analysis mode can find many additional bugs compared to the single TU analysis.
+
+<br><br>
+You can find the CTU patched clang 4.0 in the following GitHub fork:
+<a href="https://github.com/Ericsson/clang/tree/ctu-master">https://github.com/Ericsson/clang/tree/ctu-master</a>
+<br><br>
+The design concept is described <a href="http://cc.elte.hu/clang-ctu/eurollvm17/abstract.pdf">here</a>.
+<br>
+The analysis is run in 2 phases
+
+<figure>
+  <img src="http://cc.elte.hu/clang-ctu/eurollvm17/ctu.png" alt="2-phase analysis" width="50%">
+</figure>
+
+
+<h2>Notes</h2>
+<ul>
+  <li>Where you find "Max heap usage..." other than 0 clang was executed with Valgrind memory analysis which increased the analysis time. 
+      Don't use these measurements for comaparing analysis time.</li>
+  <li>The analysis of some files failed in CTU mode, due to some faults in ASTImporter. By incrementally fixing ASTImporter, these failures will disappear. </li>
+</ul>

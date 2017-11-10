@@ -16,8 +16,13 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
 #include "clang/AST/ParentMap.h"
 #include "clang/Analysis/ProgramPoint.h"
+#include "clang/Frontend/ASTUnit.h"
+#include "clang/Frontend/CompilerInstance.h"
+#include "clang/Frontend/TextDiagnosticPrinter.h"
+#include "clang/Index/USRGeneration.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/DynamicTypeMap.h"
+#include "clang/Tooling/CrossTranslationUnit.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/raw_ostream.h"
@@ -354,6 +359,36 @@ void AnyFunctionCall::getInitialStackFrameContents(
   addParameterValuesToBindings(CalleeCtx, Bindings, SVB, *this,
                                D->parameters());
 }
+
+RuntimeDefinition AnyFunctionCall::getRuntimeDefinition() const {
+  const FunctionDecl *FD = getDecl();
+  // Note that the AnalysisDeclContext will have the FunctionDecl with
+  // the definition (if one exists).
+  if (!FD)
+    return RuntimeDefinition();
+
+  AnalysisDeclContext *AD =
+    getLocationContext()->getAnalysisDeclContext()->
+    getManager()->getContext(FD);
+  if (AD->getBody())
+    return RuntimeDefinition(AD->getDecl());
+
+  auto Engine = static_cast<ExprEngine *>(
+      getState()->getStateManager().getOwningEngine());
+  tooling::CrossTranslationUnit &CTU = Engine->getCrossTranslationUnit();
+  AnalysisManager &AMgr = Engine->getAnalysisManager();
+
+  if (AMgr.options.getCTUDir().empty())
+    return RuntimeDefinition();
+
+  const FunctionDecl *CTUDecl = CTU.getCrossTUDefinition(
+      FD, AMgr.options.getCTUDir(), "externalFnMap.txt",
+      AMgr.options.getCTUReparseOnDemand(),
+      AMgr.options.AnalyzerDisplayCtuProgress);
+
+  return RuntimeDefinition(CTUDecl);
+}
+
 
 bool AnyFunctionCall::argumentsMayEscape() const {
   if (CallEvent::argumentsMayEscape() || hasVoidPointerToNonConstArg())
@@ -695,13 +730,15 @@ void ObjCMethodCall::getExtraInvalidatedValues(
   if (const ObjCPropertyDecl *PropDecl = getAccessedProperty()) {
     if (const ObjCIvarDecl *PropIvar = PropDecl->getPropertyIvarDecl()) {
       SVal IvarLVal = getState()->getLValue(PropIvar, getReceiverSVal());
-      const MemRegion *IvarRegion = IvarLVal.getAsRegion();
-      ETraits->setTrait(
+      if (const MemRegion *IvarRegion = IvarLVal.getAsRegion()) {
+        ETraits->setTrait(
           IvarRegion,
           RegionAndSymbolInvalidationTraits::TK_DoNotInvalidateSuperRegion);
-      ETraits->setTrait(IvarRegion,
-                        RegionAndSymbolInvalidationTraits::TK_SuppressEscape);
-      Values.push_back(IvarLVal);
+        ETraits->setTrait(
+          IvarRegion,
+          RegionAndSymbolInvalidationTraits::TK_SuppressEscape);
+        Values.push_back(IvarLVal);
+      }
       return;
     }
   }
@@ -955,6 +992,12 @@ RuntimeDefinition ObjCMethodCall::getRuntimeDefinition() const {
         return RuntimeDefinition();
 
       DynamicTypeInfo DTI = getDynamicTypeInfo(getState(), Receiver);
+      if (!DTI.isValid()) {
+        assert(isa<AllocaRegion>(Receiver) &&
+               "Unhandled untyped region class!");
+        return RuntimeDefinition();
+      }
+
       QualType DynType = DTI.getType();
       CanBeSubClassed = DTI.canBeASubClass();
       ReceiverT = dyn_cast<ObjCObjectPointerType>(DynType.getCanonicalType());

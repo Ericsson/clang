@@ -172,6 +172,17 @@ bool AnalyzerOptions::includeTemporaryDtorsInCFG() {
                           /* Default = */ false);
 }
 
+bool AnalyzerOptions::includeImplicitDtorsInCFG() {
+  return getBooleanOption(IncludeImplicitDtorsInCFG,
+                          "cfg-implicit-dtors",
+                          /* Default = */ true);
+}
+
+bool AnalyzerOptions::includeLifetimeInCFG() {
+  return getBooleanOption(IncludeLifetimeInCFG, "cfg-lifetime",
+                          /* Default = */ false);
+}
+
 bool AnalyzerOptions::mayInlineCXXStandardLibrary() {
   return getBooleanOption(InlineCXXStandardLibrary,
                           "c++-stdlib-inlining",
@@ -293,7 +304,7 @@ unsigned AnalyzerOptions::getMaxInlinableSize() {
         DefaultValue = 4;
         break;
       case UMK_Deep:
-        DefaultValue = 50;
+        DefaultValue = 100;
         break;
     }
 
@@ -332,7 +343,7 @@ unsigned AnalyzerOptions::getMaxNodesPerTopLevelFunction() {
         DefaultValue = 75000;
         break;
       case UMK_Deep:
-        DefaultValue = 150000;
+        DefaultValue = 225000;
         break;
     }
     MaxNodesPerTopLevelFunction = getOptionAsInteger("max-nodes", DefaultValue);
@@ -370,3 +381,22 @@ bool AnalyzerOptions::shouldDisplayNotesAsEvents() {
         getBooleanOption("notes-as-events", /*Default=*/false);
   return DisplayNotesAsEvents.getValue();
 }
+
+StringRef AnalyzerOptions::getCTUDir() {
+  if (!CTUDir.hasValue() || !llvm::sys::fs::is_directory(*CTUDir))
+    CTUDir = getOptionAsString("ctu-dir", "");
+  return CTUDir.getValue();
+}
+
+StringRef AnalyzerOptions::getCTUReparseOnDemand() {
+  if (!CTUReparseOnDemand.hasValue())
+    CTUReparseOnDemand = getOptionAsString("ctu-reparse", "");
+  return CTUReparseOnDemand.getValue();
+}
+
+StringRef AnalyzerOptions::coverageExportDir() {
+  if (!CoverageExportDir.hasValue())
+    CoverageExportDir = getOptionAsString("record-coverage", /*Default=*/"");
+  return CoverageExportDir.getValue();
+}
+

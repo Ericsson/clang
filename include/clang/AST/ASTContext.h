@@ -78,7 +78,6 @@ struct fltSemantics;
 } // end namespace llvm
 
 namespace clang {
-
 class ASTMutationListener;
 class ASTRecordLayout;
 class AtomicExpr;
@@ -935,7 +934,7 @@ public:
 
   /// \brief Get the additional modules in which the definition \p Def has
   /// been merged.
-  ArrayRef<Module*> getModulesWithMergedDefinition(NamedDecl *Def) {
+  ArrayRef<Module*> getModulesWithMergedDefinition(const NamedDecl *Def) {
     auto MergedIt = MergedDefModules.find(Def);
     if (MergedIt == MergedDefModules.end())
       return None;
@@ -1440,6 +1439,10 @@ public:
   ///
   /// The sizeof operator requires this (C99 6.5.3.4p4).
   CanQualType getSizeType() const;
+
+  /// \brief Return the unique signed counterpart of 
+  /// the integer type corresponding to size_t.
+  CanQualType getSignedSizeType() const;
 
   /// \brief Return the unique type for "intmax_t" (C99 7.18.1.5), defined in
   /// <stdint.h>.
@@ -2050,6 +2053,11 @@ public:
   /// Get the offset of a FieldDecl or IndirectFieldDecl, in bits.
   uint64_t getFieldOffset(const ValueDecl *FD) const;
 
+  /// Get the offset of an ObjCIvarDecl in bits.
+  uint64_t lookupFieldBitOffset(const ObjCInterfaceDecl *OID,
+                                const ObjCImplementationDecl *ID,
+                                const ObjCIvarDecl *Ivar) const;
+
   bool isNearlyEmpty(const CXXRecordDecl *RD) const;
 
   VTableContextBase *getVTableContext();
@@ -2317,21 +2325,14 @@ public:
     return getTargetAddressSpace(Q.getAddressSpace());
   }
 
-  unsigned getTargetAddressSpace(unsigned AS) const {
-    if (AS < LangAS::Offset || AS >= LangAS::Offset + LangAS::Count)
-      return AS;
-    else
-      return (*AddrSpaceMap)[AS - LangAS::Offset];
-  }
+  unsigned getTargetAddressSpace(unsigned AS) const;
 
   /// Get target-dependent integer value for null pointer which is used for
   /// constant folding.
   uint64_t getTargetNullPointerValue(QualType QT) const;
 
   bool addressSpaceMapManglingFor(unsigned AS) const {
-    return AddrSpaceMapMangling ||
-           AS < LangAS::Offset ||
-           AS >= LangAS::Offset + LangAS::Count;
+    return AddrSpaceMapMangling || AS >= LangAS::FirstTargetAddressSpace;
   }
 
 private:
@@ -2516,7 +2517,7 @@ public:
   ///
   /// \returns true if the function/var must be CodeGen'ed/deserialized even if
   /// it is not used.
-  bool DeclMustBeEmitted(const Decl *D, bool ForModularCodegen = false);
+  bool DeclMustBeEmitted(const Decl *D);
 
   const CXXConstructorDecl *
   getCopyConstructorForExceptionObject(CXXRecordDecl *RD);

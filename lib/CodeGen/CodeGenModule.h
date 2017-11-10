@@ -315,14 +315,9 @@ private:
 
   /// This is a list of deferred decls which we have seen that *are* actually
   /// referenced. These get code generated when the module is done.
-  struct DeferredGlobal {
-    DeferredGlobal(llvm::GlobalValue *GV, GlobalDecl GD) : GV(GV), GD(GD) {}
-    llvm::TrackingVH<llvm::GlobalValue> GV;
-    GlobalDecl GD;
-  };
-  std::vector<DeferredGlobal> DeferredDeclsToEmit;
-  void addDeferredDeclToEmit(llvm::GlobalValue *GV, GlobalDecl GD) {
-    DeferredDeclsToEmit.emplace_back(GV, GD);
+  std::vector<GlobalDecl> DeferredDeclsToEmit;
+  void addDeferredDeclToEmit(GlobalDecl GD) {
+    DeferredDeclsToEmit.emplace_back(GD);
   }
 
   /// List of alias we have emitted. Used to make sure that what they point to
@@ -346,11 +341,14 @@ private:
   /// A queue of (optional) vtables to consider emitting.
   std::vector<const CXXRecordDecl*> DeferredVTables;
 
+  /// A queue of (optional) vtables that may be emitted opportunistically.
+  std::vector<const CXXRecordDecl *> OpportunisticVTables;
+
   /// List of global values which are required to be present in the object file;
   /// bitcast to i8*. This is used for forcing visibility of symbols which may
   /// otherwise be optimized out.
-  std::vector<llvm::WeakVH> LLVMUsed;
-  std::vector<llvm::WeakVH> LLVMCompilerUsed;
+  std::vector<llvm::WeakTrackingVH> LLVMUsed;
+  std::vector<llvm::WeakTrackingVH> LLVMCompilerUsed;
 
   /// Store the list of global constructors and their respective priorities to
   /// be emitted when the translation unit is complete.
@@ -421,7 +419,7 @@ private:
   SmallVector<GlobalInitData, 8> PrioritizedCXXGlobalInits;
 
   /// Global destructor functions and arguments that need to run on termination.
-  std::vector<std::pair<llvm::WeakVH,llvm::Constant*> > CXXGlobalDtors;
+  std::vector<std::pair<llvm::WeakTrackingVH, llvm::Constant *>> CXXGlobalDtors;
 
   /// \brief The complete set of modules that has been imported.
   llvm::SetVector<clang::Module *> ImportedModules;
@@ -431,14 +429,14 @@ private:
   llvm::SmallPtrSet<clang::Module *, 16> EmittedModuleInitializers;
 
   /// \brief A vector of metadata strings.
-  SmallVector<llvm::Metadata *, 16> LinkerOptionsMetadata;
+  SmallVector<llvm::MDNode *, 16> LinkerOptionsMetadata;
 
   /// @name Cache for Objective-C runtime types
   /// @{
 
   /// Cached reference to the class for constant strings. This value has type
   /// int * but is actually an Obj-C class pointer.
-  llvm::WeakVH CFConstantStringClassRef;
+  llvm::WeakTrackingVH CFConstantStringClassRef;
 
   /// \brief The type used to describe the state of a fast enumeration in
   /// Objective-C's for..in loop.
@@ -455,7 +453,7 @@ private:
 
   bool isTriviallyRecursive(const FunctionDecl *F);
   bool shouldEmitFunction(GlobalDecl GD);
-
+  bool shouldOpportunisticallyEmitVTables();
   /// Map used to be sure we don't emit the same CompoundLiteral twice.
   llvm::DenseMap<const CompoundLiteralExpr *, llvm::GlobalVariable *>
       EmittedCompoundLiterals;
@@ -712,11 +710,15 @@ public:
                                      SourceLocation Loc = SourceLocation(),
                                      bool TLS = false);
 
-  /// Return the address space of the underlying global variable for D, as
+  /// Return the AST address space of the underlying global variable for D, as
   /// determined by its declaration. Normally this is the same as the address
   /// space of D's type, but in CUDA, address spaces are associated with
-  /// declarations, not types.
-  unsigned GetGlobalVarAddressSpace(const VarDecl *D, unsigned AddrSpace);
+  /// declarations, not types. If D is nullptr, return the default address
+  /// space for global variable.
+  ///
+  /// For languages without explicit address spaces, if D has default address
+  /// space, target-specific global or constant address space may be returned.
+  unsigned GetGlobalVarAddressSpace(const VarDecl *D);
 
   /// Return the llvm::Constant for the address of the given global variable.
   /// If Ty is non-null and if the global doesn't exist, then it will be created
@@ -1020,11 +1022,12 @@ public:
   /// \param CalleeInfo - The callee information these attributes are being
   /// constructed for. If valid, the attributes applied to this decl may
   /// contribute to the function attributes and calling convention.
-  /// \param PAL [out] - On return, the attribute list to use.
+  /// \param Attrs [out] - On return, the attribute list to use.
   /// \param CallingConv [out] - On return, the LLVM calling convention to use.
   void ConstructAttributeList(StringRef Name, const CGFunctionInfo &Info,
-                              CGCalleeInfo CalleeInfo, AttributeListType &PAL,
-                              unsigned &CallingConv, bool AttrOnCallSite);
+                              CGCalleeInfo CalleeInfo,
+                              llvm::AttributeList &Attrs, unsigned &CallingConv,
+                              bool AttrOnCallSite);
 
   /// Adds attributes to F according to our CodeGenOptions and LangOptions, as
   /// though we had emitted it ourselves.  We remove any attributes on F that
@@ -1059,13 +1062,14 @@ public:
 
   void RefreshTypeCacheForClass(const CXXRecordDecl *Class);
 
-  /// \brief Appends Opts to the "Linker Options" metadata value.
+  /// \brief Appends Opts to the "llvm.linker.options" metadata value.
   void AppendLinkerOptions(StringRef Opts);
 
   /// \brief Appends a detect mismatch command to the linker options.
   void AddDetectMismatch(StringRef Name, StringRef Value);
 
-  /// \brief Appends a dependent lib to the "Linker Options" metadata value.
+  /// \brief Appends a dependent lib to the "llvm.linker.options" metadata
+  /// value.
   void AddDependentLib(StringRef Lib);
 
   llvm::GlobalVariable::LinkageTypes getFunctionLinkage(GlobalDecl GD);
@@ -1282,6 +1286,12 @@ private:
   /// Emit any needed decls for which code generation was deferred.
   void EmitDeferred();
 
+  /// Try to emit external vtables as available_externally if they have emitted
+  /// all inlined virtual functions.  It runs after EmitDeferred() and therefore
+  /// is not allowed to create new references to things that need to be emitted
+  /// lazily.
+  void EmitVTablesOpportunistically();
+
   /// Call replaceAllUsesWith on all pairs in Replacements.
   void applyReplacements();
 
@@ -1314,6 +1324,9 @@ private:
 
   /// Emits target specific Metadata for global declarations.
   void EmitTargetMetadata();
+
+  /// Emits OpenCL specific Metadata e.g. OpenCL version.
+  void EmitOpenCLMetadata();
 
   /// Emit the llvm.gcov metadata used to tell LLVM where to emit the .gcno and
   /// .gcda files in a way that persists in .bc files.

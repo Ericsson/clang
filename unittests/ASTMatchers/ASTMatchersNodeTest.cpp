@@ -666,6 +666,12 @@ TEST(Matcher, IntegerLiterals) {
   EXPECT_TRUE(notMatches("int i = 'a';", HasIntLiteral));
   EXPECT_TRUE(notMatches("int i = 1e10;", HasIntLiteral));
   EXPECT_TRUE(notMatches("int i = 10.0;", HasIntLiteral));
+
+  // Negative integers.
+  EXPECT_TRUE(
+      matches("int i = -10;",
+              unaryOperator(hasOperatorName("-"),
+                            hasUnaryOperand(integerLiteral(equals(10))))));
 }
 
 TEST(Matcher, FloatLiterals) {
@@ -1018,6 +1024,29 @@ TEST(InitListExpression, MatchesInitListExpression) {
                       declRefExpr(to(functionDecl(hasName("f"))))));
   EXPECT_TRUE(
     matches("int i[1] = {42, [0] = 43};", integerLiteral(equals(42))));
+}
+
+TEST(CXXStdInitializerListExpression, MatchesCXXStdInitializerListExpression) {
+  const std::string code = "namespace std {"
+                           "template <typename> class initializer_list {"
+                           "  public: initializer_list() noexcept {}"
+                           "};"
+                           "}"
+                           "struct A {"
+                           "  A(std::initializer_list<int>) {}"
+                           "};";
+  EXPECT_TRUE(matches(code + "A a{0};",
+                      cxxConstructExpr(has(cxxStdInitializerListExpr()),
+                                       hasDeclaration(cxxConstructorDecl(
+                                           ofClass(hasName("A")))))));
+  EXPECT_TRUE(matches(code + "A a = {0};",
+                      cxxConstructExpr(has(cxxStdInitializerListExpr()),
+                                       hasDeclaration(cxxConstructorDecl(
+                                           ofClass(hasName("A")))))));
+
+  EXPECT_TRUE(notMatches("int a[] = { 1, 2 };", cxxStdInitializerListExpr()));
+  EXPECT_TRUE(notMatches("struct B { int x, y; }; B b = { 5, 6 };",
+                         cxxStdInitializerListExpr()));
 }
 
 TEST(UsingDeclaration, MatchesUsingDeclarations) {

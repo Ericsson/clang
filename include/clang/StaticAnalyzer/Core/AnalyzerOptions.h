@@ -155,6 +155,7 @@ public:
   unsigned ShowEnabledCheckerList : 1;
   unsigned AnalyzeAll : 1;
   unsigned AnalyzerDisplayProgress : 1;
+  unsigned AnalyzerDisplayCtuProgress : 1;
   unsigned AnalyzeNestedBlocks : 1;
 
   /// \brief The flag regulates if we should eagerly assume evaluations of
@@ -205,9 +206,15 @@ private:
   /// Controls which C++ member functions will be considered for inlining.
   CXXInlineableMemberKind CXXMemberInliningMode;
   
+  /// \sa includeImplicitDtorsInCFG
+  Optional<bool> IncludeImplicitDtorsInCFG;
+
   /// \sa includeTemporaryDtorsInCFG
   Optional<bool> IncludeTemporaryDtorsInCFG;
-  
+
+  /// \sa IncludeLifetimeInCFG
+  Optional<bool> IncludeLifetimeInCFG;
+
   /// \sa mayInlineCXXStandardLibrary
   Optional<bool> InlineCXXStandardLibrary;
   
@@ -271,6 +278,15 @@ private:
 
   /// \sa shouldDisplayNotesAsEvents
   Optional<bool> DisplayNotesAsEvents;
+
+  /// \sa getCTUDir
+  Optional<StringRef> CTUDir;
+
+  /// \sa getCTUReparseOnDemand
+  Optional<StringRef> CTUReparseOnDemand;
+
+  /// \sa shouldRecordCoverage
+  Optional<StringRef> CoverageExportDir;  
 
   /// A helper function that retrieves option for a given full-qualified
   /// checker name.
@@ -394,6 +410,20 @@ public:
   /// This is controlled by the 'cfg-temporary-dtors' config option, which
   /// accepts the values "true" and "false".
   bool includeTemporaryDtorsInCFG();
+
+  /// Returns whether or not implicit destructors for C++ objects should
+  /// be included in the CFG.
+  ///
+  /// This is controlled by the 'cfg-implicit-dtors' config option, which
+  /// accepts the values "true" and "false".
+  bool includeImplicitDtorsInCFG();
+
+  /// Returns whether or not end-of-lifetime information should be included in
+  /// the CFG.
+  ///
+  /// This is controlled by the 'cfg-lifetime' config option, which accepts
+  /// the values "true" and "false".
+  bool includeLifetimeInCFG();
 
   /// Returns whether or not C++ standard library functions may be considered
   /// for inlining.
@@ -548,6 +578,18 @@ public:
   /// to false when unset.
   bool shouldDisplayNotesAsEvents();
 
+  /// Returns the directory containing the CTU related files.
+  StringRef getCTUDir();
+ 
+  /// When a compilation database is passed, the analyzer will compile the
+  /// translation units during the CTU analysis on demand instead of reading
+  /// the binary representations from disk.
+  StringRef getCTUReparseOnDemand();
+
+  /// Determines where the coverage info should be dumped to. The coverage
+  /// information is recorded on the basic block level granularity.
+  StringRef coverageExportDir();
+
 public:
   AnalyzerOptions() :
     AnalysisStoreOpt(RegionStoreModel),
@@ -559,6 +601,7 @@ public:
     ShowEnabledCheckerList(0),
     AnalyzeAll(0),
     AnalyzerDisplayProgress(0),
+    AnalyzerDisplayCtuProgress(0),
     AnalyzeNestedBlocks(0),
     eagerlyAssumeBinOpBifurcation(0),
     TrimGraph(0),

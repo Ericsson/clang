@@ -71,42 +71,34 @@ void Sema::ActOnTranslationUnitScope(Scope *S) {
 }
 
 Sema::Sema(Preprocessor &pp, ASTContext &ctxt, ASTConsumer &consumer,
-           TranslationUnitKind TUKind,
-           CodeCompleteConsumer *CodeCompleter)
-  : ExternalSource(nullptr),
-    isMultiplexExternalSource(false), FPFeatures(pp.getLangOpts()),
-    LangOpts(pp.getLangOpts()), PP(pp), Context(ctxt), Consumer(consumer),
-    Diags(PP.getDiagnostics()), SourceMgr(PP.getSourceManager()),
-    CollectStats(false), CodeCompleter(CodeCompleter),
-    CurContext(nullptr), OriginalLexicalContext(nullptr),
-    MSStructPragmaOn(false),
-    MSPointerToMemberRepresentationMethod(
-        LangOpts.getMSPointerToMemberRepresentationMethod()),
-    VtorDispStack(MSVtorDispAttr::Mode(LangOpts.VtorDispMode)),
-    PackStack(0), DataSegStack(nullptr), BSSSegStack(nullptr),
-    ConstSegStack(nullptr), CodeSegStack(nullptr), CurInitSeg(nullptr),
-    VisContext(nullptr),
-    IsBuildingRecoveryCallExpr(false),
-    Cleanup{}, LateTemplateParser(nullptr),
-    LateTemplateParserCleanup(nullptr), OpaqueParser(nullptr), IdResolver(pp),
-    StdExperimentalNamespaceCache(nullptr), StdInitializerList(nullptr),
-    CXXTypeInfoDecl(nullptr), MSVCGuidDecl(nullptr),
-    NSNumberDecl(nullptr), NSValueDecl(nullptr),
-    NSStringDecl(nullptr), StringWithUTF8StringMethod(nullptr),
-    ValueWithBytesObjCTypeMethod(nullptr),
-    NSArrayDecl(nullptr), ArrayWithObjectsMethod(nullptr),
-    NSDictionaryDecl(nullptr), DictionaryWithObjectsMethod(nullptr),
-    GlobalNewDeleteDeclared(false),
-    TUKind(TUKind),
-    NumSFINAEErrors(0),
-    CachedFakeTopLevelModule(nullptr),
-    AccessCheckingSFINAE(false), InNonInstantiationSFINAEContext(false),
-    NonInstantiationEntries(0), ArgumentPackSubstitutionIndex(-1),
-    CurrentInstantiationScope(nullptr), DisableTypoCorrection(false),
-    TyposCorrected(0), AnalysisWarnings(*this), ThreadSafetyDeclCache(nullptr),
-    VarDataSharingAttributesStack(nullptr), CurScope(nullptr),
-    Ident_super(nullptr), Ident___float128(nullptr)
-{
+           TranslationUnitKind TUKind, CodeCompleteConsumer *CodeCompleter)
+    : ExternalSource(nullptr), isMultiplexExternalSource(false),
+      FPFeatures(pp.getLangOpts()), LangOpts(pp.getLangOpts()), PP(pp),
+      Context(ctxt), Consumer(consumer), Diags(PP.getDiagnostics()),
+      SourceMgr(PP.getSourceManager()), CollectStats(false),
+      CodeCompleter(CodeCompleter), CurContext(nullptr),
+      OriginalLexicalContext(nullptr), MSStructPragmaOn(false),
+      MSPointerToMemberRepresentationMethod(
+          LangOpts.getMSPointerToMemberRepresentationMethod()),
+      VtorDispStack(MSVtorDispAttr::Mode(LangOpts.VtorDispMode)), PackStack(0),
+      DataSegStack(nullptr), BSSSegStack(nullptr), ConstSegStack(nullptr),
+      CodeSegStack(nullptr), CurInitSeg(nullptr), VisContext(nullptr),
+      PragmaAttributeCurrentTargetDecl(nullptr),
+      IsBuildingRecoveryCallExpr(false), Cleanup{}, LateTemplateParser(nullptr),
+      LateTemplateParserCleanup(nullptr), OpaqueParser(nullptr), IdResolver(pp),
+      StdExperimentalNamespaceCache(nullptr), StdInitializerList(nullptr),
+      CXXTypeInfoDecl(nullptr), MSVCGuidDecl(nullptr), NSNumberDecl(nullptr),
+      NSValueDecl(nullptr), NSStringDecl(nullptr),
+      StringWithUTF8StringMethod(nullptr),
+      ValueWithBytesObjCTypeMethod(nullptr), NSArrayDecl(nullptr),
+      ArrayWithObjectsMethod(nullptr), NSDictionaryDecl(nullptr),
+      DictionaryWithObjectsMethod(nullptr), GlobalNewDeleteDeclared(false),
+      TUKind(TUKind), NumSFINAEErrors(0), AccessCheckingSFINAE(false),
+      InNonInstantiationSFINAEContext(false), NonInstantiationEntries(0),
+      ArgumentPackSubstitutionIndex(-1), CurrentInstantiationScope(nullptr),
+      DisableTypoCorrection(false), TyposCorrected(0), AnalysisWarnings(*this),
+      ThreadSafetyDeclCache(nullptr), VarDataSharingAttributesStack(nullptr),
+      CurScope(nullptr), Ident_super(nullptr), Ident___float128(nullptr) {
   TUScope = nullptr;
 
   LoadedExternalKnownNamespaces = false;
@@ -390,6 +382,19 @@ void Sema::diagnoseNullableToNonnullConversion(QualType DstType,
   Diag(Loc, diag::warn_nullability_lost) << SrcType << DstType;
 }
 
+void Sema::diagnoseZeroToNullptrConversion(CastKind Kind, const Expr* E) {
+  if (Kind != CK_NullToPointer && Kind != CK_NullToMemberPointer)
+    return;
+  if (E->getType()->isNullPtrType())
+    return;
+  // nullptr only exists from C++11 on, so don't warn on its absence earlier.
+  if (!getLangOpts().CPlusPlus11)
+    return;
+
+  Diag(E->getLocStart(), diag::warn_zero_as_null_pointer_constant)
+      << FixItHint::CreateReplacement(E->getSourceRange(), "nullptr");
+}
+
 /// ImpCastExprToType - If Expr is not of type 'Type', insert an implicit cast.
 /// If there is already an implicit cast, merge into the existing one.
 /// The result is of the given category.
@@ -414,6 +419,7 @@ ExprResult Sema::ImpCastExprToType(Expr *E, QualType Ty,
 #endif
 
   diagnoseNullableToNonnullConversion(Ty, E->getType(), E->getLocStart());
+  diagnoseZeroToNullptrConversion(Kind, E);
 
   QualType ExprTy = Context.getCanonicalType(E->getType());
   QualType TypeTy = Context.getCanonicalType(Ty);
@@ -470,6 +476,13 @@ static bool ShouldRemoveFromUnused(Sema *SemaRef, const DeclaratorDecl *D) {
     return true;
 
   if (const FunctionDecl *FD = dyn_cast<FunctionDecl>(D)) {
+    // If this is a function template and none of its specializations is used,
+    // we should warn.
+    if (FunctionTemplateDecl *Template = FD->getDescribedFunctionTemplate())
+      for (const auto *Spec : Template->specializations())
+        if (ShouldRemoveFromUnused(SemaRef, Spec))
+          return true;
+
     // UnusedFileScopedDecls stores the first declaration.
     // The declaration may have become definition so check again.
     const FunctionDecl *DeclToCheck;
@@ -492,6 +505,13 @@ static bool ShouldRemoveFromUnused(Sema *SemaRef, const DeclaratorDecl *D) {
     if (VD->isReferenced() &&
         VD->isUsableInConstantExpressions(SemaRef->Context))
       return true;
+
+    if (VarTemplateDecl *Template = VD->getDescribedVarTemplate())
+      // If this is a variable template and none of its specializations is used,
+      // we should warn.
+      for (const auto *Spec : Template->specializations())
+        if (ShouldRemoveFromUnused(SemaRef, Spec))
+          return true;
 
     // UnusedFileScopedDecls stores the first declaration.
     // The declaration may have become definition so check again.
@@ -521,6 +541,9 @@ void Sema::getUndefinedButUsed(
 
     // __attribute__((weakref)) is basically a definition.
     if (ND->hasAttr<WeakRefAttr>()) continue;
+
+    if (isa<CXXDeductionGuideDecl>(ND))
+      continue;
 
     if (FunctionDecl *FD = dyn_cast<FunctionDecl>(ND)) {
       if (FD->isDefined())
@@ -685,6 +708,18 @@ void Sema::emitAndClearUnusedLocalTypedefWarnings() {
   UnusedLocalTypedefNameCandidates.clear();
 }
 
+/// This is called before the very first declaration in the translation unit
+/// is parsed. Note that the ASTContext may have already injected some
+/// declarations.
+void Sema::ActOnStartOfTranslationUnit() {
+  if (getLangOpts().ModulesTS) {
+    // We start in the global module; all those declarations are implicitly
+    // module-private (though they do not have module linkage).
+    Context.getTranslationUnitDecl()->setModuleOwnershipKind(
+        Decl::ModuleOwnershipKind::ModulePrivate);
+  }
+}
+
 /// ActOnEndOfTranslationUnit - This is called at the very end of the
 /// translation unit when EOF is reached and all but the top-level scope is
 /// popped.
@@ -720,6 +755,9 @@ void Sema::ActOnEndOfTranslationUnit() {
       // Load pending instantiations from the external source.
       SmallVector<PendingImplicitInstantiation, 4> Pending;
       ExternalSource->ReadPendingInstantiations(Pending);
+      for (auto PII : Pending)
+        if (auto Func = dyn_cast<FunctionDecl>(PII.first))
+          Func->setInstantiationIsPending(true);
       PendingInstantiations.insert(PendingInstantiations.begin(),
                                    Pending.begin(), Pending.end());
     }
@@ -730,6 +768,8 @@ void Sema::ActOnEndOfTranslationUnit() {
 
     CheckDelayedMemberExceptionSpecs();
   }
+
+  DiagnoseUnterminatedPragmaAttribute();
 
   // All delayed member exception specs should be checked or we end up accepting
   // incompatible declarations.
@@ -813,7 +853,8 @@ void Sema::ActOnEndOfTranslationUnit() {
     emitAndClearUnusedLocalTypedefWarnings();
 
     // Modules don't need any of the checking below.
-    TUScope = nullptr;
+    if (!PP.isIncrementalProcessingEnabled())
+      TUScope = nullptr;
     return;
   }
 
@@ -896,10 +937,14 @@ void Sema::ActOnEndOfTranslationUnit() {
                    << /*function*/0 << DiagD->getDeclName();
           }
         } else {
-          Diag(DiagD->getLocation(),
-               isa<CXXMethodDecl>(DiagD) ? diag::warn_unused_member_function
-                                         : diag::warn_unused_function)
-                << DiagD->getDeclName();
+          if (FD->getDescribedFunctionTemplate())
+            Diag(DiagD->getLocation(), diag::warn_unused_template)
+              << /*function*/0 << DiagD->getDeclName();
+          else
+            Diag(DiagD->getLocation(),
+                 isa<CXXMethodDecl>(DiagD) ? diag::warn_unused_member_function
+                                           : diag::warn_unused_function)
+              << DiagD->getDeclName();
         }
       } else {
         const VarDecl *DiagD = cast<VarDecl>(*I)->getDefinition();
@@ -915,7 +960,11 @@ void Sema::ActOnEndOfTranslationUnit() {
             Diag(DiagD->getLocation(), diag::warn_unused_const_variable)
                 << DiagD->getDeclName();
         } else {
-          Diag(DiagD->getLocation(), diag::warn_unused_variable)
+          if (DiagD->getDescribedVarTemplate())
+            Diag(DiagD->getLocation(), diag::warn_unused_template)
+              << /*variable*/1 << DiagD->getDeclName();
+          else
+            Diag(DiagD->getLocation(), diag::warn_unused_variable)
               << DiagD->getDeclName();
         }
       }
@@ -1166,10 +1215,14 @@ void Sema::PushFunctionScope() {
     // memory for a new scope.
     FunctionScopes.back()->Clear();
     FunctionScopes.push_back(FunctionScopes.back());
+    if (LangOpts.OpenMP)
+      pushOpenMPFunctionRegion();
     return;
   }
 
   FunctionScopes.push_back(new FunctionScopeInfo(getDiagnostics()));
+  if (LangOpts.OpenMP)
+    pushOpenMPFunctionRegion();
 }
 
 void Sema::PushBlockScope(Scope *BlockScope, BlockDecl *Block) {
@@ -1196,6 +1249,9 @@ void Sema::PopFunctionScopeInfo(const AnalysisBasedWarnings::Policy *WP,
                                 const Decl *D, const BlockExpr *blkExpr) {
   FunctionScopeInfo *Scope = FunctionScopes.pop_back_val();
   assert(!FunctionScopes.empty() && "mismatched push/pop!");
+
+  if (LangOpts.OpenMP)
+    popOpenMPFunctionRegion(Scope);
 
   // Issue any analysis-based warnings.
   if (WP && D)
@@ -1648,7 +1704,8 @@ bool Sema::checkOpenCLDisabledTypeDeclSpec(const DeclSpec &DS, QualType QT) {
                                        QT, OpenCLTypeExtMap);
 }
 
-bool Sema::checkOpenCLDisabledDecl(const Decl &D, const Expr &E) {
-  return checkOpenCLDisabledTypeOrDecl(&D, E.getLocStart(), "",
+bool Sema::checkOpenCLDisabledDecl(const NamedDecl &D, const Expr &E) {
+  IdentifierInfo *FnName = D.getIdentifier();
+  return checkOpenCLDisabledTypeOrDecl(&D, E.getLocStart(), FnName,
                                        OpenCLDeclExtMap, 1, D.getSourceRange());
 }

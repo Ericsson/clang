@@ -216,6 +216,11 @@ public:
   /// Use lazy precompiled headers for PCH support.
   unsigned CCCUsePCH : 1;
 
+  /// Force clang to emit reproducer for driver invocation. This is enabled
+  /// indirectly by setting FORCE_CLANG_DIAGNOSTICS_CRASH environment variable
+  /// or when using the -gen-reproducer driver flag.
+  unsigned GenReproducer : 1;
+
 private:
   /// Certain options suppress the 'no input files' warning.
   unsigned SuppressMissingInputWarning : 1;
@@ -336,7 +341,8 @@ public:
 
   /// ParseArgStrings - Parse the given list of strings into an
   /// ArgList.
-  llvm::opt::InputArgList ParseArgStrings(ArrayRef<const char *> Args);
+  llvm::opt::InputArgList ParseArgStrings(ArrayRef<const char *> Args,
+                                          bool &ContainsError);
 
   /// BuildInputs - Construct the list of inputs and their types from 
   /// the given arguments.

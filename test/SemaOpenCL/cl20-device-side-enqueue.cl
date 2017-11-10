@@ -1,12 +1,14 @@
-// RUN: %clang_cc1 %s -cl-std=CL2.0 -triple "spir-unknown-unknown" -verify -pedantic -fsyntax-only -DB32
-// RUN: %clang_cc1 %s -cl-std=CL2.0 -triple "spir64-unknown-unknown" -verify -pedantic -fsyntax-only -Wconversion -DWCONV
+// RUN: %clang_cc1 %s -cl-std=CL2.0 -triple "spir-unknown-unknown" -verify -pedantic -fsyntax-only -DB32 -DQUALS=
+// RUN: %clang_cc1 %s -cl-std=CL2.0 -triple "spir-unknown-unknown" -verify -pedantic -fsyntax-only -DB32 -DQUALS="const volatile"
+// RUN: %clang_cc1 %s -cl-std=CL2.0 -triple "spir64-unknown-unknown" -verify -pedantic -fsyntax-only -Wconversion -DWCONV -DQUALS=
+// RUN: %clang_cc1 %s -cl-std=CL2.0 -triple "spir64-unknown-unknown" -verify -pedantic -fsyntax-only -Wconversion -DWCONV -DQUALS="const volatile"
 
 typedef struct {int a;} ndrange_t;
 // Diagnostic tests for different overloads of enqueue_kernel from Table 6.13.17.1 of OpenCL 2.0 Spec.
 kernel void enqueue_kernel_tests() {
   queue_t default_queue;
   unsigned flags = 0;
-  ndrange_t ndrange;
+  QUALS ndrange_t ndrange;
   clk_event_t evt;
   clk_event_t event_wait_list;
   clk_event_t event_wait_list2[] = {evt, evt};
@@ -17,19 +19,19 @@ kernel void enqueue_kernel_tests() {
     return 0;
   });
 
-  enqueue_kernel(vptr, flags, ndrange, ^(void) { // expected-error{{illegal call to enqueue_kernel, expected 'queue_t' argument type}}
+  enqueue_kernel(vptr, flags, ndrange, ^(void) { // expected-error{{illegal call to 'enqueue_kernel', expected 'queue_t' argument type}}
     return 0;
   });
 
-  enqueue_kernel(default_queue, vptr, ndrange, ^(void) { // expected-error{{illegal call to enqueue_kernel, expected 'kernel_enqueue_flags_t' (i.e. uint) argument type}}
+  enqueue_kernel(default_queue, vptr, ndrange, ^(void) { // expected-error{{illegal call to 'enqueue_kernel', expected 'kernel_enqueue_flags_t' (i.e. uint) argument type}}
     return 0;
   });
 
-  enqueue_kernel(default_queue, flags, vptr, ^(void) { // expected-error{{illegal call to enqueue_kernel, expected 'ndrange_t' argument type}}
+  enqueue_kernel(default_queue, flags, vptr, ^(void) { // expected-error{{illegal call to 'enqueue_kernel', expected 'ndrange_t' argument type}}
     return 0;
   });
 
-  enqueue_kernel(default_queue, flags, ndrange, vptr); // expected-error{{illegal call to enqueue_kernel, expected block argument}}
+  enqueue_kernel(default_queue, flags, ndrange, vptr); // expected-error{{illegal call to 'enqueue_kernel', expected block argument}}
 
   enqueue_kernel(default_queue, flags, ndrange, ^(int i) { // expected-error{{blocks with parameters are not accepted in this prototype of enqueue_kernel call}}
     return 0;
@@ -44,21 +46,21 @@ kernel void enqueue_kernel_tests() {
                                                            return 0;
                                                          });
 
-  enqueue_kernel(default_queue, flags, ndrange, vptr, &event_wait_list, &evt, ^(void) { // expected-error{{illegal call to enqueue_kernel, expected integer argument type}}
+  enqueue_kernel(default_queue, flags, ndrange, vptr, &event_wait_list, &evt, ^(void) { // expected-error{{illegal call to 'enqueue_kernel', expected integer argument type}}
     return 0;
   });
 
-  enqueue_kernel(default_queue, flags, ndrange, 1, vptr, &evt, ^(void) // expected-error{{illegal call to enqueue_kernel, expected 'clk_event_t *' argument type}}
+  enqueue_kernel(default_queue, flags, ndrange, 1, vptr, &evt, ^(void) // expected-error{{illegal call to 'enqueue_kernel', expected 'clk_event_t *' argument type}}
                                                                {
                                                                  return 0;
                                                                });
 
-  enqueue_kernel(default_queue, flags, ndrange, 1, &event_wait_list, vptr, ^(void) // expected-error{{illegal call to enqueue_kernel, expected 'clk_event_t *' argument type}}
+  enqueue_kernel(default_queue, flags, ndrange, 1, &event_wait_list, vptr, ^(void) // expected-error{{illegal call to 'enqueue_kernel', expected 'clk_event_t *' argument type}}
                                                                            {
                                                                              return 0;
                                                                            });
 
-  enqueue_kernel(default_queue, flags, ndrange, 1, &event_wait_list, &evt, vptr); // expected-error{{illegal call to enqueue_kernel, expected block argument}}
+  enqueue_kernel(default_queue, flags, ndrange, 1, &event_wait_list, &evt, vptr); // expected-error{{illegal call to 'enqueue_kernel', expected block argument}}
 
   // Testing the third overload type
   enqueue_kernel(default_queue, flags, ndrange,

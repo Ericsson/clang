@@ -228,7 +228,10 @@ namespace clang {
           Ctx.getDiagnosticHandler();
       void *OldDiagnosticContext = Ctx.getDiagnosticContext();
       Ctx.setDiagnosticHandler(DiagnosticHandler, this);
-      Ctx.setDiagnosticHotnessRequested(CodeGenOpts.DiagnosticsWithHotness);
+      Ctx.setDiagnosticsHotnessRequested(CodeGenOpts.DiagnosticsWithHotness);
+      if (CodeGenOpts.DiagnosticsHotnessThreshold != 0)
+        Ctx.setDiagnosticsHotnessThreshold(
+            CodeGenOpts.DiagnosticsHotnessThreshold);
 
       std::unique_ptr<llvm::tool_output_file> OptRecordFile;
       if (!CodeGenOpts.OptRecordFile.empty()) {
@@ -246,7 +249,7 @@ namespace clang {
             llvm::make_unique<yaml::Output>(OptRecordFile->os()));
 
         if (CodeGenOpts.getProfileUse() != CodeGenOptions::ProfileNone)
-          Ctx.setDiagnosticHotnessRequested(true);
+          Ctx.setDiagnosticsHotnessRequested(true);
       }
 
       // Link each LinkModule into our module.
@@ -548,9 +551,9 @@ void BackendConsumer::UnsupportedDiagHandler(
 
   StringRef Filename;
   unsigned Line, Column;
-  bool BadDebugInfo;
-  FullSourceLoc Loc = getBestLocationFromDebugLoc(D, BadDebugInfo, Filename,
-      Line, Column);
+  bool BadDebugInfo = false;
+  FullSourceLoc Loc =
+      getBestLocationFromDebugLoc(D, BadDebugInfo, Filename, Line, Column);
 
   Diags.Report(Loc, diag::err_fe_backend_unsupported) << D.getMessage().str();
 
@@ -572,8 +575,8 @@ void BackendConsumer::EmitOptimizationMessage(
   StringRef Filename;
   unsigned Line, Column;
   bool BadDebugInfo = false;
-  FullSourceLoc Loc = getBestLocationFromDebugLoc(D, BadDebugInfo, Filename,
-      Line, Column);
+  FullSourceLoc Loc =
+      getBestLocationFromDebugLoc(D, BadDebugInfo, Filename, Line, Column);
 
   std::string Msg;
   raw_string_ostream MsgStream(Msg);
@@ -944,7 +947,7 @@ std::unique_ptr<llvm::Module> CodeGenAction::loadModule(MemoryBufferRef MBRef) {
 
 void CodeGenAction::ExecuteAction() {
   // If this is an IR file, we have to treat it specially.
-  if (getCurrentFileKind() == IK_LLVM_IR) {
+  if (getCurrentFileKind().getLanguage() == InputKind::LLVM_IR) {
     BackendAction BA = static_cast<BackendAction>(Act);
     CompilerInstance &CI = getCompilerInstance();
     std::unique_ptr<raw_pwrite_stream> OS =

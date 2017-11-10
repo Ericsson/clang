@@ -227,12 +227,11 @@ void mips::getMIPSTargetFeatures(const Driver &D, const llvm::Triple &Triple,
          O.matches(options::OPT_fno_PIE) || O.matches(options::OPT_fno_pie));
   }
 
-  if (IsN64 && NonPIC) {
+  if (IsN64 && NonPIC)
     Features.push_back("+noabicalls");
-  } else {
+  else
     AddTargetFeature(Args, Features, options::OPT_mno_abicalls,
                      options::OPT_mabicalls, "noabicalls");
-  }
 
   mips::FloatABI FloatABI = mips::getMipsFloatABI(D, Args);
   if (FloatABI == mips::FloatABI::Soft) {
@@ -282,22 +281,27 @@ void mips::getMIPSTargetFeatures(const Driver &D, const llvm::Triple &Triple,
   if (Arg *A = Args.getLastArg(options::OPT_mfp32, options::OPT_mfpxx,
                                options::OPT_mfp64)) {
     if (A->getOption().matches(options::OPT_mfp32))
-      Features.push_back(Args.MakeArgString("-fp64"));
+      Features.push_back("-fp64");
     else if (A->getOption().matches(options::OPT_mfpxx)) {
-      Features.push_back(Args.MakeArgString("+fpxx"));
-      Features.push_back(Args.MakeArgString("+nooddspreg"));
+      Features.push_back("+fpxx");
+      Features.push_back("+nooddspreg");
     } else
-      Features.push_back(Args.MakeArgString("+fp64"));
+      Features.push_back("+fp64");
   } else if (mips::shouldUseFPXX(Args, Triple, CPUName, ABIName, FloatABI)) {
-    Features.push_back(Args.MakeArgString("+fpxx"));
-    Features.push_back(Args.MakeArgString("+nooddspreg"));
+    Features.push_back("+fpxx");
+    Features.push_back("+nooddspreg");
   } else if (mips::isFP64ADefault(Triple, CPUName)) {
-    Features.push_back(Args.MakeArgString("+fp64"));
-    Features.push_back(Args.MakeArgString("+nooddspreg"));
+    Features.push_back("+fp64");
+    Features.push_back("+nooddspreg");
   }
 
   AddTargetFeature(Args, Features, options::OPT_mno_odd_spreg,
                    options::OPT_modd_spreg, "nooddspreg");
+  AddTargetFeature(Args, Features, options::OPT_mno_madd4, options::OPT_mmadd4,
+                   "nomadd4");
+  AddTargetFeature(Args, Features, options::OPT_mlong_calls,
+                   options::OPT_mno_long_calls, "long-calls");
+  AddTargetFeature(Args, Features, options::OPT_mmt, options::OPT_mno_mt,"mt");
 }
 
 mips::NanEncoding mips::getSupportedNanEncoding(StringRef &CPU) {
