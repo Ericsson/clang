@@ -847,7 +847,6 @@ QualType ASTNodeImporter::VisitDependentNameType(const DependentNameType *T) {
 
 QualType ASTNodeImporter::VisitPackExpansionType(const PackExpansionType *T) {
   QualType Pattern = Importer.Import(T->getPattern());
-  assert(!Pattern.isNull());
   if (Pattern.isNull())
     return QualType();
 
@@ -1702,7 +1701,7 @@ Decl *ASTNodeImporter::VisitTypeAliasTemplateDecl(TypeAliasTemplateDecl *D) {
     for (unsigned I = 0, N = FoundDecls.size(); I != N; ++I) {
       if (!FoundDecls[I]->isInIdentifierNamespace(IDNS))
         continue;
-      if (TypeAliasTemplateDecl *FoundAlias =
+      if (auto *FoundAlias =
             dyn_cast<TypeAliasTemplateDecl>(FoundDecls[I]))
           return Importer.Imported(D, FoundAlias);
       ConflictingDecls.push_back(FoundDecls[I]);
@@ -1719,12 +1718,11 @@ Decl *ASTNodeImporter::VisitTypeAliasTemplateDecl(TypeAliasTemplateDecl *D) {
 
   TemplateParameterList *Params = ImportTemplateParameterList(
         D->getTemplateParameters());
-  assert(Params);
   if (!Params)
     return nullptr;
 
-  NamedDecl *TemplDecl = cast<NamedDecl>(Importer.Import(D->getTemplatedDecl()));
-  assert(TemplDecl);
+  NamedDecl *TemplDecl = cast_or_null<NamedDecl>(
+        Importer.Import(D->getTemplatedDecl()));
   if (!TemplDecl)
     return nullptr;
 
@@ -5731,16 +5729,13 @@ ASTNodeImporter::VisitMaterializeTemporaryExpr(MaterializeTemporaryExpr *E) {
 
 Expr *ASTNodeImporter::VisitPackExpansionExpr(PackExpansionExpr *E) {
   QualType T = Importer.Import(E->getType());
-  if (T.isNull()) {
-    assert(false);
+  if (T.isNull())
     return nullptr;
-  }
 
   Expr *Pattern = Importer.Import(E->getPattern());
-  if (!Pattern) {
-    assert(false);
+  if (!Pattern)
     return nullptr;
-  }
+
   return new (Importer.getToContext()) PackExpansionExpr(
         T, Pattern, Importer.Import(E->getEllipsisLoc()),
         E->getNumExpansions());

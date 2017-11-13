@@ -492,7 +492,7 @@ TEST(ImportType, ImportAtomicType) {
 TEST(ImportType, ImportTypeAliasTemplate) {
   MatchVerifier<Decl> Verifier;
   EXPECT_TRUE(testImport("template <int K>"
-                         "  struct dummy { static const int i = K; };"
+                         "struct dummy { static const int i = K; };"
                          "template <int K> using dummy2 = dummy<K>;"
                          "int declToImport() { return dummy2<3>::i; }",
                          Lang_CXX11, "", Lang_CXX11, Verifier,
@@ -511,10 +511,10 @@ TEST(ImportType, ImportTypeAliasTemplate) {
 TEST(ImportType, ImportPackExpansion) {
   MatchVerifier<Decl> Verifier;
   EXPECT_TRUE(testImport("template <typename... Args>"
-                         "  struct dummy {"
-                         "    dummy(Args... args) {}"
-                         "    static const int i = 4;"
-                         "  };"
+                         "struct dummy {"
+                         "  dummy(Args... args) {}"
+                         "  static const int i = 4;"
+                         "};"
                          "int declToImport() { return dummy<int>::i; }",
                          Lang_CXX11, "", Lang_CXX11, Verifier,
                          functionDecl(
