@@ -135,7 +135,7 @@ def validate_args_for_analyze(parser, args, from_build_command):
                 and not os.path.exists(args.ctu_dir):
             parser.error(message='missing CTU directory')
         # Check CTU capability via checking clang-func-mapping
-        if not is_ctu_capable(args.clang, args.func_map_cmd):
+        if not is_ctu_capable(args.func_map_cmd):
             parser.error(message="""This version of clang does not support CTU
             functionality or clang-func-mapping command not found.""")
 
