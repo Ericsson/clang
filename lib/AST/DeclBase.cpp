@@ -1321,6 +1321,8 @@ bool DeclContext::containsDecl(Decl *D) const {
           (D->NextInContextAndBits.getPointer() || D == LastDecl));
 }
 
+static bool shouldBeHidden(NamedDecl *D);
+
 void DeclContext::removeDecl(Decl *D) {
   assert(D->getLexicalDeclContext() == this &&
          "decl being removed from non-lexical context");
@@ -1350,6 +1352,10 @@ void DeclContext::removeDecl(Decl *D) {
   // Remove D from the lookup table if necessary.
   if (isa<NamedDecl>(D)) {
     NamedDecl *ND = cast<NamedDecl>(D);
+
+    // Do not try to remove the declaration if that is invisible to qualified
+    // lookup.  E.g. template sepcializations are skipped.
+    if (shouldBeHidden(ND)) return;
 
     // Remove only decls that have a name
     if (!ND->getDeclName()) return;

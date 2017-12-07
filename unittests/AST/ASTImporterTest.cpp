@@ -554,6 +554,38 @@ TEST(ImportDecl, ImportFunctionTemplateDecl) {
               has(returnStmt(has(integerLiteral(equals(2)))))))))))))))))));
 }
 
+TEST(ImportExpr, ImportClassTemplatePartialSpecialization) {
+  MatchVerifier<Decl> Verifier;
+  EXPECT_TRUE(testImport(
+      R"s(
+// excerpt from <functional>
+
+namespace declToImport {
+
+template <typename _MemberPointer>
+class _Mem_fn;
+
+template <typename _Tp, typename _Class>
+_Mem_fn<_Tp _Class::*> mem_fn(_Tp _Class::*);
+
+template <typename _Res, typename _Class>
+class _Mem_fn<_Res _Class::*> {
+    template <typename _Signature>
+    struct result;
+
+    template <typename _CVMem, typename _Tp>
+    struct result<_CVMem(_Tp)> {};
+
+    template <typename _CVMem, typename _Tp>
+    struct result<_CVMem(_Tp&)> {};
+};
+
+} // namespace
+          )s",
+      Lang_CXX, "",
+      Lang_CXX, Verifier, namespaceDecl()));
+}
+
 TEST(ImportExpr, ImportUnresolvedLookupExpr) {
 MatchVerifier<Decl> Verifier;
 EXPECT_TRUE(
