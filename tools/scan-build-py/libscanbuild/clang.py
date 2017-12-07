@@ -156,13 +156,12 @@ def get_checkers(clang, plugins):
     return checkers
 
 
-def is_ctu_capable(clang_cmd, func_map_cmd):
+def is_ctu_capable(func_map_cmd):
     """ Detects if the current (or given) clang and function mapping
     executables are CTU compatible. """
 
     try:
         run_command([func_map_cmd, '-version'])
-        run_command([clang_cmd, '--version'])
     except (OSError, subprocess.CalledProcessError):
         return False
     return True
@@ -173,10 +172,8 @@ def get_triple_arch(command, cwd):
     compilation command. """
 
     cmd = get_arguments(command, cwd)
-    arch = ""
-    i = 0
-    while i < len(cmd) and cmd[i] != "-triple":
-        i += 1
-    if i < (len(cmd) - 1):
-        arch = cmd[i + 1]
-    return arch
+    try:
+        separator = cmd.index("-triple")
+        return cmd[separator + 1]
+    except (IndexError, ValueError):
+        return ""
