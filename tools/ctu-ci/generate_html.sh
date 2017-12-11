@@ -51,25 +51,25 @@ echo "<th>Analysis Coverage</th>" >> index.html
 echo "</tr>" >>index.html
 cat $STATFILE | while read LINE ; do
   PROJECT=$(echo $LINE | cut -d" " -f1)
-  RUNID_XTU=$(./get_run_prop_by_name.py --host localhost --port $CODECHECKER_PORT -n "$PROJECT"_XTU)
-  RUNID_noXTU=$(./get_run_prop_by_name.py --host localhost --port $CODECHECKER_PORT -n "$PROJECT"_noXTU)
-  RESCOUNT_noXTU=$(./get_run_prop_by_name.py --host localhost --port $CODECHECKER_PORT -n "$PROJECT"_noXTU -p resultCount)
-  RESCOUNT_XTU=$(./get_run_prop_by_name.py --host localhost --port $CODECHECKER_PORT -n "$PROJECT"_XTU -p resultCount)
-  echo "runid:"$RUNID_XTU
+  RUNID_CTU=$(./get_run_prop_by_name.py --host localhost --port $CODECHECKER_PORT -n "$PROJECT"_CTU)
+  RUNID_noCTU=$(./get_run_prop_by_name.py --host localhost --port $CODECHECKER_PORT -n "$PROJECT"_noCTU)
+  RESCOUNT_noCTU=$(./get_run_prop_by_name.py --host localhost --port $CODECHECKER_PORT -n "$PROJECT"_noCTU -p resultCount)
+  RESCOUNT_CTU=$(./get_run_prop_by_name.py --host localhost --port $CODECHECKER_PORT -n "$PROJECT"_CTU -p resultCount)
+  echo "runid:"$RUNID_CTU
   echo "<tr>" >>index.html
   echo "<td>"$(echo $LINE | cut -d" " -f1)"</td>" >>index.html
-  echo "<td><a href=\"http://cc.elte.hu:$CODECHECKER_PORT/#run=$RUNID_noXTU\">"$RESCOUNT_noXTU"</a></td>" >>index.html
-  echo "<td><a href=\"http://cc.elte.hu:$CODECHECKER_PORT/#run=$RUNID_XTU\">"$RESCOUNT_XTU"</a></td>" >>index.html
-  echo "<td><a href=\"http://cc.elte.hu:$CODECHECKER_PORT/#baseline="$RUNID_noXTU"&newcheck="$RUNID_XTU"\">"new findings"</a></td>" >>index.html
+  echo "<td><a href=\"http://cc.elte.hu:$CODECHECKER_PORT/#run=$RUNID_noCTU\">"$RESCOUNT_noCTU"</a></td>" >>index.html
+  echo "<td><a href=\"http://cc.elte.hu:$CODECHECKER_PORT/#run=$RUNID_CTU\">"$RESCOUNT_CTU"</a></td>" >>index.html
+  echo "<td><a href=\"http://cc.elte.hu:$CODECHECKER_PORT/#baseline="$RUNID_noCTU"&newcheck="$RUNID_CTU"\">"new findings"</a></td>" >>index.html
   echo "<td>"$(echo $LINE | cut -d" " -f2)"</td>" >>index.html
   echo "<td>"$(echo $LINE | cut -d" " -f3)"</td>" >>index.html
   echo "<td>"$(echo $LINE | cut -d" " -f4)"</td>" >>index.html
   echo "<td>"$(echo $LINE | cut -d" " -f6)"</td>" >>index.html
   echo "<td>"$(echo $LINE | cut -d" " -f7)"</td>" >>index.html
   echo "<td>"$(echo $LINE | cut -d" " -f5)"</td>" >>index.html
-  echo "<td><a href=$WEB_ROOT/""$PROJECT""_NoXTU_heap_usage.txt>"$(echo $LINE | cut -d" " -f8)"</a></td>" >>index.html
-  echo "<td><a href=$WEB_ROOT/""$PROJECT""_XTU_heap_usage.txt>"$(echo $LINE | cut -d" " -f9)"</a></td>" >>index.html
-  echo "<td><a href=$WEB_ROOT/""$PROJECT""_gcovNoXtu/coverage.html>Single TU Coverage</a><br><a href=$WEB_ROOT/""$PROJECT""_gcovXtu/coverage.html>CTU Coverage</a><br><a href=$WEB_ROOT/""$PROJECT""_gcovDiff/coverage.html>Diff Coverage</a></td>" >>index.html
+  echo "<td><a href=$WEB_ROOT/""$PROJECT""_NoCTU_heap_usage.txt>"$(echo $LINE | cut -d" " -f8)"</a></td>" >>index.html
+  echo "<td><a href=$WEB_ROOT/""$PROJECT""_CTU_heap_usage.txt>"$(echo $LINE | cut -d" " -f9)"</a></td>" >>index.html
+  echo "<td><a href=$WEB_ROOT/""$PROJECT""_gcovNoCtu/coverage.html>Single TU Coverage</a><br><a href=$WEB_ROOT/""$PROJECT""_gcovCtu/coverage.html>CTU Coverage</a><br><a href=$WEB_ROOT/""$PROJECT""_gcovDiff/coverage.html>Diff Coverage</a></td>" >>index.html
   echo "</tr>" >>index.html
 done
 echo "</table></body></html>" >>index.html

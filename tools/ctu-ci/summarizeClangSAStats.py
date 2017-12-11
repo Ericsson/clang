@@ -9,8 +9,8 @@ FunctionsAsToplevel = 0
 PercentReachableBasicBlocks = 0
 MaximumBBsInFunction = 0
 NumPathsAnalyzed = 0
-NumXTUCalled = 0
-NumXTUSuccess = 0
+NumCTUCalled = 0
+NumCTUSuccess = 0
 NumStepsExecuted = 0
 NumStepsExecuted50P = 0
 NumStepsExecutedMax = 0
@@ -28,8 +28,8 @@ LastAnalyzedBasicBlocks = 0
 AllBBs = 0
 
 
-NumXTUCalledPat = re.compile("(\d+) ASTContext       - The # of getXTUDefinition function called")
-NumXTUSuccessPat = re.compile("(\d+) ASTContext       - The # of getXTUDefinition successfully return the requested function's body")
+NumCTUCalledPat = re.compile("(\d+) ASTContext       - The # of getCTUDefinition function called")
+NumCTUSuccessPat = re.compile("(\d+) ASTContext       - The # of getCTUDefinition successfully return the requested function's body")
 NumReachedMaxStepsPat = re.compile("(\d+) CoreEngine       - The # of times we reached the max number of steps.")
 InlineCountMaxPat = re.compile("(\d+) ExprEngine       - The # of times we reached inline count maximum")
 NumStepsExecutedMaxPat = re.compile("(\d+) CoreEngine       - The max # of steps in a path.")
@@ -51,13 +51,13 @@ NumCallReevalPat = re.compile("(\d+) ExprEngine       - The # of times we re-eva
 with open(sys.argv[1]) as f:
     content = f.readlines()
     for line in content:
-        m = NumXTUCalledPat.search(line)
+        m = NumCTUCalledPat.search(line)
         if m:
-            NumXTUCalled += int(m.group(1))
+            NumCTUCalled += int(m.group(1))
 
-        m = NumXTUSuccessPat.search(line)
+        m = NumCTUSuccessPat.search(line)
         if m:
-            NumXTUSuccess += int(m.group(1))
+            NumCTUSuccess += int(m.group(1))
 
         m = InlineCountMaxPat.search(line)
         if m:
@@ -133,8 +133,8 @@ with open(sys.argv[1]) as f:
             NumCallReeval += int(m.group(1))
 
 
-print str(NumXTUCalled) + "-The # of getXTUDefinition function called"
-print str(NumXTUSuccess) + "-The # of getXTUDefinition successfully return the requested function's body"
+print str(NumCTUCalled) + "-The # of getCTUDefinition function called"
+print str(NumCTUSuccess) + "-The # of getCTUDefinition successfully return the requested function's body"
 print str(AnalyzedBasicBlocks) + "-The # of basic blocks in the analyzed functions."
 print str(FunctionsAndBlocksAnalyzed) + "-The # of functions and blocks analyzed (as top level with inlining turned on)."
 print str(FunctionsAsToplevel) + "-The # of functions at top level."

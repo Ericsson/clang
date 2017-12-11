@@ -21,21 +21,21 @@ TEMP_EXTERNAL_FNMAP_FOLDER = 'tmpExternalFnMaps'
 
 
 parser = argparse.ArgumentParser(
-    description='Executes 1st pass of XTU analysis')
+    description='Executes 1st pass of CTU analysis')
 parser.add_argument('-b', required=True, dest='buildlog',
                     metavar='build.json',
                     help='Use a JSON Compilation Database')
-parser.add_argument('-p', metavar='preanalyze-dir', dest='xtuindir',
+parser.add_argument('-p', metavar='preanalyze-dir', dest='ctuindir',
                     help='Use directory for generating preanalyzation data '
-                         '(default=".xtu")',
-                    default='.xtu')
+                         '(default=".ctu")',
+                    default='.ctu')
 parser.add_argument('-j', metavar='threads', dest='threads',
                     help='Number of threads used (default=' +
                     str(threading_factor) + ')',
                     default=threading_factor)
 parser.add_argument('-v', dest='verbose', action='store_true',
                     help='Verbose output of every command executed')
-parser.add_argument('--xtu-reparse', dest='reparse', action='store_true',
+parser.add_argument('--ctu-reparse', dest='reparse', action='store_true',
                     help='Use on-demand reparsing of external TUs (and do not dump ASTs).')
 parser.add_argument('--clang-path', metavar='clang-path', dest='clang_path',
                     help='Set path of clang binaries to be used '
@@ -77,7 +77,7 @@ def check_executable_available(exe_name, arg_path):
             'argument' if arg_path is not None else 'environment')
         sys.exit(1)
     elif mainargs.verbose:
-        print 'XTU uses {} dir: {}, taken from {}.'.format(
+        print 'CTU uses {} dir: {}, taken from {}.'.format(
             exe_name,
             found_path,
             'argument' if arg_path is not None else 'environment')
@@ -116,6 +116,19 @@ def clear_file(filename):
     except OSError:
         pass
 
+def ensure_dir(dir):
+    """Creates the directory if it does not exists.
+
+    Ignores the directory already exists error, but does not
+    unnecessarily suppresses others.
+    """
+
+    try:
+        os.makedirs(dir)
+    except OSError:
+        if not os.path.isdir(dir):
+            raise
+
 
 def get_command_arguments(cmd):
     had_command = False
@@ -135,23 +148,23 @@ def get_triple_arch(clang_path, clang_args,source):
     clang_cmd.append(os.path.join(clang_path, 'clang'))
     clang_cmd.append("-###")
     clang_cmd.extend(clang_args)
-    clang_cmd.append(source)    
-    clang_out = subprocess.check_output(clang_cmd, stderr=subprocess.STDOUT, shell=False)    
+    clang_cmd.append(source)
+    clang_out = subprocess.check_output(clang_cmd, stderr=subprocess.STDOUT, shell=False)
     clang_params=shlex.split(clang_out)
-    i=0
-    while i<len(clang_params) and clang_params[i]!="-triple":        
-        i=i+1
-    if i<(len(clang_params) - 1):
-        arch=clang_params[i+1].split("-")[0]              
+    i = 0
+    while i < len(clang_params) and clang_params[i] != "-triple":
+        i = i + 1
+    if i < (len(clang_params) - 1):
+        arch = clang_params[i + 1]
     return arch
-    
+
 
 def generate_ast(source):
     cmd = src_2_cmd[source]
-    args = get_command_arguments(cmd)        
-    arch=get_triple_arch(clang_path,args,source)    
-    ast_path = os.path.abspath(os.path.join(mainargs.xtuindir,
-                               os.path.join('/ast/' + arch,
+    args = get_command_arguments(cmd)
+    arch = get_triple_arch(clang_path,args,source)
+    ast_path = os.path.abspath(os.path.join(mainargs.ctuindir, arch,
+                               os.path.join('/ast/',
                                             os.path.realpath(source)[1:] +
                                             '.ast')[1:]))
     try:
@@ -190,21 +203,24 @@ def map_functions(params):
         path = fn_txt[dpos + 1:]
         ast_path = path
         if not reparse:
-            ast_path = os.path.join("ast", arch, path[1:] + ".ast")
-        output.append(mangled_name + "@" + arch + " " + ast_path)
+            ast_path = os.path.join("ast", path[1:] + ".ast")
+        output.append(mangled_name + " " + ast_path)
     extern_fns_map_folder = os.path.join(ctuindir,
-                                         TEMP_EXTERNAL_FNMAP_FOLDER)
+                                         TEMP_EXTERNAL_FNMAP_FOLDER, arch)
     if output:
+        ensure_dir(extern_fns_map_folder)
         with tempfile.NamedTemporaryFile(mode='w',
                                          dir=extern_fns_map_folder,
                                          delete=False) as out_file:
             out_file.write("\n".join(output) + "\n")
 
 
-def create_external_fn_maps(ctuindir):
+def create_external_fn_maps_for_triple(ctuindir, triple):
+    """Collects the function mapping file for a given triple (architecture)."""
+
     files = glob.glob(os.path.join(ctuindir, TEMP_EXTERNAL_FNMAP_FOLDER,
-                                   '*'))
-    extern_fns_map_file = os.path.join(ctuindir,
+                                   triple, '*'))
+    extern_fns_map_file = os.path.join(ctuindir, triple,
                                        EXTERNAL_FUNCTION_MAP_FILENAME)
     mangled_to_asts = {}
     for filename in files:
@@ -221,15 +237,24 @@ def create_external_fn_maps(ctuindir):
                 out_file.write('%s %s\n' % (mangled_name, ast_files.pop()))
 
 
-if not os.path.exists(mainargs.xtuindir):
-    os.makedirs(mainargs.xtuindir)
-clear_file(os.path.join(mainargs.xtuindir, 'cfg.txt'))
-clear_file(os.path.join(mainargs.xtuindir, 'definedFns.txt'))
-clear_file(os.path.join(mainargs.xtuindir, 'externalFns.txt'))
-clear_file(os.path.join(mainargs.xtuindir, 'externalFnMap.txt'))
+def create_external_fn_maps(ctuindir):
+    """Creates the function maping file for each triple."""
+
+    triple_paths = glob.glob(os.path.join(ctuindir, TEMP_EXTERNAL_FNMAP_FOLDER, '*'))
+    triple_dirs = filter(os.path.isdir, triple_paths)
+    triples = map(os.path.basename, triple_dirs)
+    for triple in triples:
+        create_external_fn_maps_for_triple(ctuindir, triple)
+
+
+if not os.path.exists(mainargs.ctuindir):
+    os.makedirs(mainargs.ctuindir)
+clear_file(os.path.join(mainargs.ctuindir, 'definedFns.txt'))
+clear_file(os.path.join(mainargs.ctuindir, 'externalFns.txt'))
+clear_file(os.path.join(mainargs.ctuindir, 'externalFnMap.txt'))
 
 original_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
-if not mainargs.reparse:   #only generate AST dumps is reparse is off     
+if not mainargs.reparse:   #only generate AST dumps is reparse is off
     ast_workers = multiprocessing.Pool(processes=int(mainargs.threads))
     signal.signal(signal.SIGINT, original_handler)
     try:
@@ -245,15 +270,15 @@ if not mainargs.reparse:   #only generate AST dumps is reparse is off
         ast_workers.join()
 
 
-shutil.rmtree(os.path.join(mainargs.xtuindir, TEMP_EXTERNAL_FNMAP_FOLDER), ignore_errors=True)
-os.mkdir(os.path.join(mainargs.xtuindir, TEMP_EXTERNAL_FNMAP_FOLDER))
+shutil.rmtree(os.path.join(mainargs.ctuindir, TEMP_EXTERNAL_FNMAP_FOLDER), ignore_errors=True)
+os.mkdir(os.path.join(mainargs.ctuindir, TEMP_EXTERNAL_FNMAP_FOLDER))
 original_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
 funcmap_workers = multiprocessing.Pool(processes=int(mainargs.threads))
 signal.signal(signal.SIGINT, original_handler)
 try:
     res = funcmap_workers.map_async(map_functions,
                                     [(cmd, cmd_2_src[cmd], src_2_dir[cmd_2_src[cmd][0]],
-                                      clang_path, mainargs.xtuindir, mainargs.reparse) for cmd in cmd_order])
+                                      clang_path, mainargs.ctuindir, mainargs.reparse) for cmd in cmd_order])
     res.get(mainargs.timeout)
 except KeyboardInterrupt:
     funcmap_workers.terminate()
@@ -266,6 +291,6 @@ else:
 
 # Generate externalFnMap.txt
 
-create_external_fn_maps(mainargs.xtuindir)
-shutil.rmtree(os.path.join(mainargs.xtuindir, TEMP_EXTERNAL_FNMAP_FOLDER), ignore_errors=True)
+create_external_fn_maps(mainargs.ctuindir)
+shutil.rmtree(os.path.join(mainargs.ctuindir, TEMP_EXTERNAL_FNMAP_FOLDER), ignore_errors=True)
 
