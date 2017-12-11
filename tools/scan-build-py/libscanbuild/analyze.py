@@ -110,8 +110,8 @@ def prefix_with(constant, pieces):
     return [elem for piece in pieces for elem in [constant, piece]]
 
 
-def get_ctu_config(args):
-    """ CTU configuration is created from the chosen phases and dir """
+def get_ctu_config_from_args(args):
+    """ CTU configuration is created from the chosen phases and dir. """
 
     return (
         CtuConfig(collect=args.ctu_phases.collect,
@@ -120,6 +120,17 @@ def get_ctu_config(args):
                   func_map_cmd=args.func_map_cmd)
         if hasattr(args, 'ctu_phases') and hasattr(args.ctu_phases, 'dir')
         else CtuConfig(collect=False, analyze=False, dir='', func_map_cmd=''))
+
+
+def get_ctu_config_from_json(ctu_conf_json):
+    """ CTU configuration is created from the chosen phases and dir. """
+
+    ctu_config = json.loads(ctu_conf_json)
+    # Recover namedtuple from json when coming from analyze-cc or analyze-c++
+    return CtuConfig(collect=ctu_config[0],
+                     analyze=ctu_config[1],
+                     dir=ctu_config[2],
+                     func_map_cmd=ctu_config[3])
 
 
 def create_global_ctu_function_map(func_map_lines):
@@ -207,7 +218,7 @@ def run_analyzer_parallel(args):
         'output_failures': args.output_failures,
         'direct_args': analyzer_params(args),
         'force_debug': args.force_debug,
-        'ctu': get_ctu_config(args)
+        'ctu': get_ctu_config_from_args(args)
     }
 
     logging.debug('run analyzer against compilation database')
@@ -228,7 +239,7 @@ def run_analyzer_parallel(args):
 def govern_analyzer_runs(args):
     """ Governs multiple runs in CTU mode or runs once in normal mode. """
 
-    ctu_config = get_ctu_config(args)
+    ctu_config = get_ctu_config_from_args(args)
     # If we do a CTU collect (1st phase) we remove all previous collection
     # data first.
     if ctu_config.collect:
@@ -271,7 +282,7 @@ def setup_environment(args):
         'ANALYZE_BUILD_REPORT_FAILURES': 'yes' if args.output_failures else '',
         'ANALYZE_BUILD_PARAMETERS': ' '.join(analyzer_params(args)),
         'ANALYZE_BUILD_FORCE_DEBUG': 'yes' if args.force_debug else '',
-        'ANALYZE_BUILD_CTU': json.dumps(get_ctu_config(args))
+        'ANALYZE_BUILD_CTU': json.dumps(get_ctu_config_from_args(args))
     })
     return environment
 
@@ -305,7 +316,7 @@ def analyze_compiler_wrapper_impl(result, execution):
         'force_debug': os.getenv('ANALYZE_BUILD_FORCE_DEBUG'),
         'directory': execution.cwd,
         'command': [execution.cmd[0], '-c'] + compilation.flags,
-        'ctu': json.loads(os.getenv('ANALYZE_BUILD_CTU'))
+        'ctu': get_ctu_config_from_json(os.getenv('ANALYZE_BUILD_CTU'))
     }
     # call static analyzer against the compilation
     for source in compilation.files:
@@ -617,13 +628,6 @@ def dispatch_ctu(opts, continuation=run_analyzer):
     """ Execute only one phase of 2 phases of CTU if needed. """
 
     ctu_config = opts['ctu']
-    # Recover namedtuple from json when coming from analyze_cc
-    if not hasattr(ctu_config, 'collect'):
-        ctu_config = CtuConfig(collect=ctu_config[0],
-                               analyze=ctu_config[1],
-                               dir=ctu_config[2],
-                               func_map_cmd=ctu_config[3])
-    opts['ctu'] = ctu_config
 
     if ctu_config.collect or ctu_config.analyze:
         assert ctu_config.collect != ctu_config.analyze

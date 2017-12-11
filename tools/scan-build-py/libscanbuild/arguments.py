@@ -373,6 +373,7 @@ def create_analyze_parser(from_build_command):
         ctu.add_argument(
             '--ctu-dir',
             metavar='<ctu-dir>',
+            dest='ctu_dir',
             default='ctu-dir',
             help="""Defines the temporary directory used between ctu
             phases.""")
