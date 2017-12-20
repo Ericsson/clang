@@ -136,6 +136,14 @@ def check_executable_available(exe_name, arg_path):
             'argument' if arg_path is not None else 'environment')
     return found_path
 
+def get_command_from_arguments(arguments):
+    command_tmp = ""
+    arguments.reverse()
+    while len(arguments) > 0:
+        opt = arguments.pop()
+        command_tmp += opt + " "
+    command_tmp.rstrip(" ")
+    return command_tmp  
 
 clang_path = check_executable_available('clang', mainargs.clang_path)
 analyze_path = check_executable_available('analyze-cc', mainargs.analyze_path)
@@ -195,6 +203,15 @@ passed_buildlog = []
 dircmd_2_original_orders = {}
 for step in buildlog:
     if src_pattern.match(step['file']):
+        if 'command' not in step:
+            if 'arguments' in step:
+                # change arguments to command
+                command_from_arg = get_command_from_arguments(step['arguments'])
+                step['command'] = command_from_arg
+            else:
+                print "have no field \"command\" and \"arguments\" to deal, exit..."
+                exit(2)
+                
         uid = step['directory'] + dircmd_separator + step['command']
         if uid not in dircmd_2_orders:
             dircmd_2_orders[uid] = [src_build_steps]
