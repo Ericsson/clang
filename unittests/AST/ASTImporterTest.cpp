@@ -791,5 +791,16 @@ TEST(ImportExpr, DependentSizedArrayType) {
                              hasType(dependentSizedArrayType()))))))));
 }
 
+TEST(ImportExpr, CXXOperatorCallExpr) {
+  MatchVerifier<Decl> Verifier;
+  EXPECT_TRUE(testImport("class declToImport {"
+                         "  void f() { *this = declToImport(); }"
+                         "};",
+                         Lang_CXX, "", Lang_CXX, Verifier,
+                         cxxRecordDecl(has(cxxMethodDecl(hasBody(compoundStmt(
+                             has(exprWithCleanups(
+                                 has(cxxOperatorCallExpr()))))))))));
+}
+
 } // end namespace ast_matchers
 } // end namespace clang

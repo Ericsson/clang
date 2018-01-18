@@ -287,6 +287,7 @@ namespace clang {
     Expr *VisitCXXDeleteExpr(CXXDeleteExpr *E);
     Expr *VisitCXXConstructExpr(CXXConstructExpr *E);
     Expr *VisitCXXMemberCallExpr(CXXMemberCallExpr *E);
+    Expr *VisitCXXOperatorCallExpr(CXXOperatorCallExpr *E);
     Expr *VisitCXXDependentScopeMemberExpr(CXXDependentScopeMemberExpr *E);
     Expr *VisitDependentScopeDeclRefExpr(DependentScopeDeclRefExpr *E);
     Expr *VisitCXXUnresolvedConstructExpr(CXXUnresolvedConstructExpr *CE);
@@ -5882,6 +5883,25 @@ Expr *ASTNodeImporter::VisitCXXMemberCallExpr(CXXMemberCallExpr *E) {
   return new (Importer.getToContext()) CXXMemberCallExpr(
         Importer.getToContext(), ToFn, ToArgs, T, E->getValueKind(),
         Importer.Import(E->getRParenLoc()));
+}
+
+Expr *ASTNodeImporter::VisitCXXOperatorCallExpr(CXXOperatorCallExpr *E) {
+  QualType T = Importer.Import(E->getType());
+  if (T.isNull())
+    return nullptr;
+
+  Expr *ToFn = Importer.Import(E->getCallee());
+  if (!ToFn)
+    return nullptr;
+
+  SmallVector<Expr *, 4> ToArgs(E->getNumArgs());
+  if (ImportContainerChecked(E->arguments(), ToArgs))
+    return nullptr;
+
+  return new (Importer.getToContext()) CXXOperatorCallExpr(
+        Importer.getToContext(), E->getOperator(), ToFn, ToArgs, T,
+        E->getValueKind(), Importer.Import(E->getRParenLoc()),
+        E->getFPFeatures());
 }
 
 Expr *ASTNodeImporter::VisitCXXThisExpr(CXXThisExpr *E) {
