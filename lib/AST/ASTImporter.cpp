@@ -6166,6 +6166,46 @@ Expr *ASTNodeImporter::VisitMemberExpr(MemberExpr *E) {
                             E->getValueKind(), E->getObjectKind());
 }
 
+Expr *ASTNodeImporter::VisitCXXDependentScopeMemberExpr(
+        CXXDependentScopeMemberExpr *E) {
+
+  // A CXXDependentScopeMemberExpr is not necessary to have a base object if it
+  // is a static function call expression with dependent type.
+  Expr *Base = E->isImplicitAccess() ? nullptr : Importer.Import(E->getBase());
+  QualType BaseType = Importer.Import(E->getBaseType());
+
+  TemplateArgumentListInfo ToTAInfo(Importer.Import(E->getLAngleLoc()),
+                                    Importer.Import(E->getRAngleLoc()));
+  TemplateArgumentListInfo *ResInfo = nullptr;
+  if (E->hasExplicitTemplateArgs()) {
+    for (const auto &FromLoc : E->template_arguments()) {
+      if (auto ToTALoc = ImportTemplateArgumentLoc(FromLoc))
+        ToTAInfo.addArgument(*ToTALoc);
+      else
+        return nullptr;
+    }
+    ResInfo = &ToTAInfo;
+  }
+
+  DeclarationName Name = Importer.Import(E->getMember());
+  if(E->getMember().isEmpty() && Name.isEmpty())
+    return nullptr;
+  DeclarationNameInfo MemberNameInfo(Name, Importer.Import(E->getMemberLoc()));
+  // Import additional name location/type info.
+  ImportDeclarationNameLoc(E->getMemberNameInfo(), MemberNameInfo);
+
+  return CXXDependentScopeMemberExpr::Create(Importer.getToContext(),
+                                             Base, BaseType,
+                                             E->isArrow(),
+                                             Importer.Import(E->getOperatorLoc()),
+                                             Importer.Import(E->getQualifierLoc()),
+                                             Importer.Import(E->getTemplateKeywordLoc()),
+                                             cast_or_null<NamedDecl>(
+                                                     Importer.Import(E->getFirstQualifierFoundInScope())),
+                                             MemberNameInfo,
+                                             ResInfo);
+}
+
 Expr *
 ASTNodeImporter::VisitDependentScopeDeclRefExpr(DependentScopeDeclRefExpr *E) {
   DeclarationName Name = Importer.Import(E->getDeclName());
