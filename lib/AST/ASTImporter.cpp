@@ -1577,6 +1577,9 @@ Decl *ASTNodeImporter::VisitStaticAssertDecl(StaticAssertDecl *D) {
   DeclContext *DC = Importer.ImportContext(D->getDeclContext());
   if (!DC)
     return nullptr;
+  Decl *AlreadyImportedD = Importer.GetAlreadyImportedOrNull(D);
+  if (AlreadyImportedD)
+    return AlreadyImportedD;
 
   DeclContext *LexicalDC = DC;
 
@@ -2392,6 +2395,9 @@ Decl *ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
   DeclarationNameInfo NameInfo(Name, Loc);
   // Import additional name location/type info.
   ImportDeclarationNameLoc(D->getNameInfo(), NameInfo);
+  Decl *AlreadyImportedD = Importer.GetAlreadyImportedOrNull(D);
+  if (AlreadyImportedD)
+    return AlreadyImportedD;
 
   QualType FromTy = D->getType();
   bool usedDifferentExceptionSpec = false;
@@ -2417,6 +2423,10 @@ Decl *ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
   QualType T = Importer.Import(FromTy);
   if (T.isNull())
     return nullptr;
+  // the one verified case for this check
+  AlreadyImportedD = Importer.GetAlreadyImportedOrNull(D);
+  if (AlreadyImportedD)
+    return AlreadyImportedD;
 
   // Import the function parameters.
   SmallVector<ParmVarDecl *, 8> Parameters;
@@ -2424,6 +2434,9 @@ Decl *ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
     ParmVarDecl *ToP = cast_or_null<ParmVarDecl>(Importer.Import(P));
     if (!ToP)
       return nullptr;
+    AlreadyImportedD = Importer.GetAlreadyImportedOrNull(D);
+    if (AlreadyImportedD)
+      return AlreadyImportedD;
 
     Parameters.push_back(ToP);
   }
@@ -2431,6 +2444,9 @@ Decl *ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
   TypeSourceInfo *TInfo = Importer.Import(D->getTypeSourceInfo());
   if (D->getTypeSourceInfo() && !TInfo)
     return nullptr;
+  AlreadyImportedD = Importer.GetAlreadyImportedOrNull(D);
+  if (AlreadyImportedD)
+    return AlreadyImportedD;
 
   // Create the imported function.
   FunctionDecl *ToFunction = nullptr;
@@ -3071,7 +3087,7 @@ Decl *ASTNodeImporter::VisitParmVarDecl(ParmVarDecl *D) {
 
   if (D->isUsed())
     ToParm->setIsUsed();
-
+  
   return Importer.Imported(D, ToParm);
 }
 
@@ -6759,7 +6775,13 @@ Decl *ASTImporter::Import(Decl *FromD) {
   Decl *ToD = Importer.Visit(FromD);
   if (!ToD)
     return nullptr;
-
+  
+  Pos = ImportedDecls.find(FromD);
+  if (Pos != ImportedDecls.end()) {
+    assert((Pos->second == ToD) && "Try to import an already imported Decl");
+    return ToD;
+  }
+  
   // Record the imported declaration.
   ImportedDecls[FromD] = ToD;
   
@@ -7392,6 +7414,9 @@ void ASTImporter::CompleteDecl (Decl *D) {
 }
 
 Decl *ASTImporter::Imported(Decl *From, Decl *To) {
+  llvm::DenseMap<Decl *, Decl *>::iterator Pos = ImportedDecls.find(From);
+  assert((Pos == ImportedDecls.end() || Pos->second == To) && "Try to import an already imported Decl");
+  
   if (From->hasAttrs()) {
     for (Attr *FromAttr : From->getAttrs())
       To->addAttr(FromAttr->clone(To->getASTContext()));
