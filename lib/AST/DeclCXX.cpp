@@ -1521,8 +1521,9 @@ bool CXXRecordDecl::mayBeAbstract() const {
     return false;
   
   for (const auto &B : bases()) {
-    CXXRecordDecl *BaseDecl 
-      = cast<CXXRecordDecl>(B.getType()->getAs<RecordType>()->getDecl());
+    const RecordType* RecT = B.getType()->getAs<RecordType>();
+    assert(RecT);
+    CXXRecordDecl *BaseDecl = cast<CXXRecordDecl>(RecT->getDecl());
     if (BaseDecl->isAbstract())
       return true;
   }

@@ -34,7 +34,7 @@ namespace clang {
   class NestedNameSpecifier;
   class Stmt;
   class TypeSourceInfo;
-  
+
   /// \brief Imports selected nodes from one AST context into another context,
   /// merging AST nodes where appropriate.
   class ASTImporter {
@@ -63,6 +63,8 @@ namespace clang {
     /// \brief Mapping from the already-imported declarations in the "from"
     /// context to the corresponding declarations in the "to" context.
     llvm::DenseMap<Decl *, Decl *> ImportedDecls;
+
+    llvm::DenseSet<Decl *> VisitedDecls;
 
     /// \brief Mapping from the already-imported statements in the "from"
     /// context to the corresponding statements in the "to" context.
@@ -108,7 +110,7 @@ namespace clang {
                 bool MinimalImport);
     
     virtual ~ASTImporter();
-    
+
     /// \brief Whether the importer will perform a minimal import, creating
     /// to-be-completed forward declarations when possible.
     bool isMinimalImport() const { return Minimal; }
@@ -137,7 +139,7 @@ namespace clang {
     /// \brief Return the copy of the given declaration in the "to" context if
     /// it has already been imported from the "from" context.  Otherwise return
     /// NULL.
-    Decl *GetAlreadyImportedOrNull(Decl *FromD);
+    Decl *GetAlreadyImportedOrNull(Decl *FromD) const;
 
     /// \brief Return the declaration of the built-in type "__va_list_tag" from
     /// the ASTContext instead of importing it.

@@ -217,6 +217,7 @@ const FunctionDecl *CrossTranslationUnit::getCrossTUDefinition(
       }
 
       const auto& TripleTo = Context.getTargetInfo().getTriple();
+      assert(Unit);
       const auto& TripleFrom = Unit->getASTContext().getTargetInfo().getTriple();
       // The imported AST had been generated for a different target
       // TODO use equality operator. Note, for some unknown reason when we do
