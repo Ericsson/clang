@@ -2585,7 +2585,10 @@ Decl *ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
     // "void f(); void f() { f(); }"
     // This is because in the definition the CallExpression refers to the
     // definition, not to the prototype.
-    Importer.Imported(const_cast<FunctionDecl*>(FromDefinition), ToFunction);
+    if (!Importer.GetAlreadyImportedOrNull(
+            const_cast<FunctionDecl *>(FromDefinition))) {
+      Importer.Imported(const_cast<FunctionDecl *>(FromDefinition), ToFunction);
+    }
 
     if (Stmt *ToBody = Importer.Import(FromBody)) {
       ToFunction->setBody(ToBody);
