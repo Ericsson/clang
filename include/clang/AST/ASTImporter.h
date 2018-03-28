@@ -311,8 +311,10 @@ namespace clang {
     ///
     /// Subclasses can override this function to observe all of the \c From ->
     /// \c To declaration mappings as they are imported.
-    virtual Decl *Imported(Decl *From, Decl *To);
-      
+    virtual Decl *NotifyWhenImported(Decl *From, Decl *To) { return To; }
+
+    Decl *Imported(Decl *From, Decl *To);
+
     /// \brief Called by StructuralEquivalenceContext.  If a RecordDecl is
     /// being compared to another RecordDecl as part of import, completing the
     /// other RecordDecl may trigger importation of the first RecordDecl. This

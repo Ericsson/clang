@@ -316,7 +316,7 @@ protected:
   friend class ASTDeclWriter;
   friend class ASTDeclReader;
   friend class ASTReader;
-  friend class ASTImporter;
+  friend class ASTNodeImporter;
   friend class LinkageComputer;
 
   template<typename decl_type> friend class Redeclarable;

@@ -39,14 +39,14 @@ public:
                   ASTContext &FromContext, FileManager &FromFileManager)
       : ASTImporter(ToContext, ToFileManager, FromContext, FromFileManager,
                     /*MinimalImport=*/true) {}
-  Decl *Imported(Decl *From, Decl *To) override {
+  Decl *NotifyWhenImported(Decl *From, Decl *To) override {
     if (auto ToTag = dyn_cast<TagDecl>(To)) {
       ToTag->setHasExternalLexicalStorage();
       ToTag->setMustBuildLookupTable();
     } else if (auto ToNamespace = dyn_cast<NamespaceDecl>(To)) {
       ToNamespace->setHasExternalVisibleStorage();
     }
-    return ASTImporter::Imported(From, To);
+    return To;
   }
 };
 

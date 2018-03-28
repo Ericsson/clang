@@ -289,4 +289,6 @@ def err_odr_non_type_parameter_type_inconsistent : Warning<
 def err_unsupported_ast_node: Warning<"cannot import unsupported AST node %0">;
 def warn_ast_importer_missing_decl_in_decl_context : Warning<
   "missing %0Decl in imported DeclContext <%1:%2:%3>">;
+def warn_ast_importer_leaking_node : Warning<
+  "leaking %0Decl during import of %1">;
 }
