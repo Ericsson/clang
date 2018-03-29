@@ -199,10 +199,10 @@ CrossTranslationUnitContext::getCrossTUDefinition(const FunctionDecl *FD,
                                                   StringRef CrossTUDir,
                                                   StringRef IndexName,
                                                   bool DisplayCTUProgress) {
-  assert(!FD->hasBody() && "FD has a definition in current translation unit!");
+  assert(!FD || (!FD->hasBody() && "FD has a definition in current translation unit!"));
   ++NumGetCTUCalled;
-  const std::string LookupFnName = getLookupName(FD);
-  if (LookupFnName.empty())
+  const std::string LookupFnName = FD ? getLookupName(FD) : std::string();
+  if (!FD || LookupFnName.empty())
     return llvm::make_error<IndexError>(
         index_error_code::failed_to_generate_usr);
   llvm::Expected<ASTUnit *> ASTUnitOrError =
