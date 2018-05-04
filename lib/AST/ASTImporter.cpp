@@ -1545,7 +1545,7 @@ bool ASTNodeImporter::IsStructuralMatch(RecordDecl *FromRecord,
                                    ToRecord->getASTContext(),
                                    Importer.getNonEquivalentDecls(),
                                    false, Complain);
-  return Ctx.IsStructurallyEquivalent(FromRecord, ToRecord);
+  return Ctx.IsEquivalent(FromRecord, ToRecord);
 }
 
 bool ASTNodeImporter::IsStructuralMatch(VarDecl *FromVar, VarDecl *ToVar,
@@ -1553,7 +1553,7 @@ bool ASTNodeImporter::IsStructuralMatch(VarDecl *FromVar, VarDecl *ToVar,
   StructuralEquivalenceContext Ctx(
       Importer.getFromContext(), Importer.getToContext(),
       Importer.getNonEquivalentDecls(), false, Complain);
-  return Ctx.IsStructurallyEquivalent(FromVar, ToVar);
+  return Ctx.IsEquivalent(FromVar, ToVar);
 }
 
 bool ASTNodeImporter::IsStructuralMatch(EnumDecl *FromEnum, EnumDecl *ToEnum,
@@ -1562,7 +1562,7 @@ bool ASTNodeImporter::IsStructuralMatch(EnumDecl *FromEnum, EnumDecl *ToEnum,
                                    Importer.getToContext(),
                                    Importer.getNonEquivalentDecls(),
                                    false, Complain);
-  return Ctx.IsStructurallyEquivalent(FromEnum, ToEnum);
+  return Ctx.IsEquivalent(FromEnum, ToEnum);
 }
 
 bool ASTNodeImporter::IsStructuralMatch(FunctionTemplateDecl *From,
@@ -1571,14 +1571,14 @@ bool ASTNodeImporter::IsStructuralMatch(FunctionTemplateDecl *From,
                                    Importer.getToContext(),
                                    Importer.getNonEquivalentDecls(),
                                    false, false);
-  return Ctx.IsStructurallyEquivalent(From, To);
+  return Ctx.IsEquivalent(From, To);
 }
 
 bool ASTNodeImporter::IsStructuralMatch(FunctionDecl *From, FunctionDecl *To) {
   StructuralEquivalenceContext Ctx(
       Importer.getFromContext(), Importer.getToContext(),
       Importer.getNonEquivalentDecls(), false, false);
-  return Ctx.IsStructurallyEquivalent(From, To);
+  return Ctx.IsEquivalent(From, To);
 }
 
 bool ASTNodeImporter::IsStructuralMatch(EnumConstantDecl *FromEC,
@@ -1602,7 +1602,7 @@ bool ASTNodeImporter::IsStructuralMatch(ClassTemplateDecl *From,
   StructuralEquivalenceContext Ctx(Importer.getFromContext(),
                                    Importer.getToContext(),
                                    Importer.getNonEquivalentDecls());
-  return Ctx.IsStructurallyEquivalent(From, To);
+  return Ctx.IsEquivalent(From, To);
 }
 
 bool ASTNodeImporter::IsStructuralMatch(VarTemplateDecl *From,
@@ -1610,7 +1610,7 @@ bool ASTNodeImporter::IsStructuralMatch(VarTemplateDecl *From,
   StructuralEquivalenceContext Ctx(Importer.getFromContext(),
                                    Importer.getToContext(),
                                    Importer.getNonEquivalentDecls());
-  return Ctx.IsStructurallyEquivalent(From, To);
+  return Ctx.IsEquivalent(From, To);
 }
 
 Decl *ASTNodeImporter::VisitDecl(Decl *D) {
@@ -2953,8 +2953,8 @@ Decl *ASTNodeImporter::VisitFriendDecl(FriendDecl *D) {
 
   while (ImportedFriend) {
     if (D->getFriendDecl() && ImportedFriend->getFriendDecl()) {
-      if (Context.IsStructurallyEquivalent(D->getFriendDecl(),
-                                           ImportedFriend->getFriendDecl()))
+      if (Context.IsEquivalent(D->getFriendDecl(),
+                               ImportedFriend->getFriendDecl()))
         return Importer.MapImported(D, ImportedFriend);
 
     } else if (D->getFriendType() && ImportedFriend->getFriendType()) {
@@ -7679,5 +7679,5 @@ bool ASTImporter::IsStructurallyEquivalent(QualType From, QualType To,
 
   StructuralEquivalenceContext Ctx(FromContext, ToContext, NonEquivalentDecls,
                                    false, Complain);
-  return Ctx.IsStructurallyEquivalent(From, To);
+  return Ctx.IsEquivalent(From, To);
 }

@@ -7415,7 +7415,7 @@ bool Sema::hasStructuralCompatLayout(Decl *D, Decl *Suggested) {
       D->getASTContext(), Suggested->getASTContext(), NonEquivalentDecls,
       false /*StrictTypeSpelling*/, true /*Complain*/,
       true /*ErrorOnTagTypeMismatch*/);
-  return Ctx.IsStructurallyEquivalent(D, Suggested);
+  return Ctx.IsEquivalent(D, Suggested);
 }
 
 /// \brief Determine whether there is any declaration of \p D that was ever a
