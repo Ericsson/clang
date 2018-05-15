@@ -1279,8 +1279,14 @@ static bool IsStructurallyEquivalent(StructuralEquivalenceContext &Context,
 
   // Determine whether we've already produced a tentative equivalence for D1.
   Decl *&EquivToD1 = Context.TentativeEquivalences[D1->getCanonicalDecl()];
-  if (EquivToD1)
-    return EquivToD1 == D2->getCanonicalDecl();
+  if (EquivToD1) {
+    if (EquivToD1 == D2->getCanonicalDecl()) // we encountered an already
+                                             // visited (D1, D2) pair
+      return true;
+    else
+      llvm_unreachable("Corrupted AST with multiple redundant definitions in "
+                       "the To context");
+  }
 
   // Produce a tentative equivalence D1 <-> D2, which will be checked later.
   EquivToD1 = D2->getCanonicalDecl();
