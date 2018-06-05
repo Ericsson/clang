@@ -232,7 +232,8 @@ class ASTImporterTestBase : public ::testing::TestWithParam<ArgVector> {
   std::list<TU> FromTUs;
 
   void lazyInitToAST(Language ToLang) {
-    if (ToAST) return;
+    if (ToAST)
+      return;
     ArgVector ToArgs = getArgVectorForLanguage(ToLang);
     // Build the AST from an empty file.
     ToAST = tooling::buildASTFromCodeWithArgs(/*Code=*/"", ToArgs, "empty.cc");
