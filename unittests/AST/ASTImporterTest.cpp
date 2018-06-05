@@ -232,13 +232,11 @@ class ASTImporterTestBase : public ::testing::TestWithParam<ArgVector> {
   std::list<TU> FromTUs;
 
   void lazyInitToAST(Language ToLang) {
-    if (!ToAST) {
-      ArgVector ToArgs = getArgVectorForLanguage(ToLang);
-      // Build the AST from an empty file.
-      ToAST =
-          tooling::buildASTFromCodeWithArgs(/*Code=*/"", ToArgs, "empty.cc");
-      ToAST->beginSourceFile();
-    }
+    if (ToAST) return;
+    ArgVector ToArgs = getArgVectorForLanguage(ToLang);
+    // Build the AST from an empty file.
+    ToAST = tooling::buildASTFromCodeWithArgs(/*Code=*/"", ToArgs, "empty.cc");
+    ToAST->beginSourceFile();
   }
 
   TU *findFromTU(Decl *From) {
@@ -249,6 +247,7 @@ class ASTImporterTestBase : public ::testing::TestWithParam<ArgVector> {
       return E.TUDecl == From->getTranslationUnitDecl();
     });
     assert(It != FromTUs.end());
+    assert(ToAST);
     createVirtualFileIfNeeded(ToAST.get(), It->FileName, It->Code);
     return &*It;
   }
