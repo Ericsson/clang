@@ -330,9 +330,9 @@ public:
     return FromTU->import(ToAST.get(), From);
   }
 
-  QualType ImportType(QualType FromType, Decl *FromDecl, Language ToLang) {
+  QualType ImportType(QualType FromType, Decl *TUDecl, Language ToLang) {
     lazyInitToAST(ToLang);
-    TU *FromTU = findFromTU(FromDecl);
+    TU *FromTU = findFromTU(TUDecl);
     return FromTU->import(ToAST.get(), FromType);
   }
 
