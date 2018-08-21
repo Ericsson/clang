@@ -16,9 +16,13 @@
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/Version.h"
 #include "clang/Lex/Preprocessor.h"
+#include "clang/Lex/TokenConcatenation.h"
+#include "clang/Rewrite/Core/HTMLRewrite.h"
+#include "clang/StaticAnalyzer/Core/AnalyzerOptions.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/PathDiagnostic.h"
 #include "clang/StaticAnalyzer/Core/IssueHash.h"
 #include "clang/StaticAnalyzer/Core/PathDiagnosticConsumers.h"
+#include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Casting.h"
 using namespace clang;
@@ -29,11 +33,12 @@ namespace {
   class PlistDiagnostics : public PathDiagnosticConsumer {
     const std::string OutputFile;
     const LangOptions &LangOpts;
+    const Preprocessor &Preproc;
     const bool SupportsCrossFileDiagnostics;
   public:
     PlistDiagnostics(AnalyzerOptions &AnalyzerOpts,
                      const std::string& prefix,
-                     const LangOptions &LangOpts,
+                     const Preprocessor &PP,
                      bool supportsMultipleFiles);
 
     ~PlistDiagnostics() override {}
@@ -57,26 +62,61 @@ namespace {
 
 PlistDiagnostics::PlistDiagnostics(AnalyzerOptions &AnalyzerOpts,
                                    const std::string& output,
-                                   const LangOptions &LO,
+                                   const Preprocessor &PP,
                                    bool supportsMultipleFiles)
   : OutputFile(output),
-    LangOpts(LO),
+    LangOpts(PP.getLangOpts()),
+    Preproc(PP),
     SupportsCrossFileDiagnostics(supportsMultipleFiles) {}
 
 void ento::createPlistDiagnosticConsumer(AnalyzerOptions &AnalyzerOpts,
                                          PathDiagnosticConsumers &C,
                                          const std::string& s,
                                          const Preprocessor &PP) {
-  C.push_back(new PlistDiagnostics(AnalyzerOpts, s,
-                                   PP.getLangOpts(), false));
+  C.push_back(new PlistDiagnostics(AnalyzerOpts, s, PP, false));
 }
 
 void ento::createPlistMultiFileDiagnosticConsumer(AnalyzerOptions &AnalyzerOpts,
                                                   PathDiagnosticConsumers &C,
                                                   const std::string &s,
                                                   const Preprocessor &PP) {
-  C.push_back(new PlistDiagnostics(AnalyzerOpts, s,
-                                   PP.getLangOpts(), true));
+  C.push_back(new PlistDiagnostics(AnalyzerOpts, s, PP, true));
+}
+
+static void EmitRanges(raw_ostream &o,
+                       const ArrayRef<SourceRange> Ranges,
+                       const FIDMap& FM,
+                       const SourceManager &SM,
+                       const LangOptions &LangOpts,
+                       unsigned indent) {
+
+  if (Ranges.empty())
+    return;
+
+  Indent(o, indent) << "<key>ranges</key>\n";
+  Indent(o, indent) << "<array>\n";
+  ++indent;
+  for (auto &R : Ranges)
+    EmitRange(o, SM,
+              Lexer::getAsCharRange(SM.getExpansionRange(R), SM, LangOpts),
+              FM, indent + 1);
+
+  --indent;
+  Indent(o, indent) << "</array>\n";
+}
+
+static void EmitMessage(raw_ostream &o, StringRef Message, unsigned indent) {
+  // Output the text.
+  assert(!Message.empty());
+  Indent(o, indent) << "<key>extended_message</key>\n";
+  Indent(o, indent);
+  EmitString(o, Message) << '\n';
+
+  // Output the short text.
+  // FIXME: Really use a short string.
+  Indent(o, indent) << "<key>message</key>\n";
+  Indent(o, indent);
+  EmitString(o, Message) << '\n';
 }
 
 static void ReportControlFlow(raw_ostream &o,
@@ -133,7 +173,7 @@ static void ReportControlFlow(raw_ostream &o,
   Indent(o, indent) << "</dict>\n";
 }
 
-static void ReportEvent(raw_ostream &o, const PathDiagnosticPiece& P,
+static void ReportEvent(raw_ostream &o, const PathDiagnosticEventPiece& P,
                         const FIDMap& FM,
                         const SourceManager &SM,
                         const LangOptions &LangOpts,
@@ -158,34 +198,14 @@ static void ReportEvent(raw_ostream &o, const PathDiagnosticPiece& P,
 
   // Output the ranges (if any).
   ArrayRef<SourceRange> Ranges = P.getRanges();
-
-  if (!Ranges.empty()) {
-    Indent(o, indent) << "<key>ranges</key>\n";
-    Indent(o, indent) << "<array>\n";
-    ++indent;
-    for (auto &R : Ranges)
-      EmitRange(o, SM,
-                Lexer::getAsCharRange(SM.getExpansionRange(R), SM, LangOpts),
-                FM, indent + 1);
-    --indent;
-    Indent(o, indent) << "</array>\n";
-  }
+  EmitRanges(o, Ranges, FM, SM, LangOpts, indent);
 
   // Output the call depth.
   Indent(o, indent) << "<key>depth</key>";
   EmitInteger(o, depth) << '\n';
 
   // Output the text.
-  assert(!P.getString().empty());
-  Indent(o, indent) << "<key>extended_message</key>\n";
-  Indent(o, indent);
-  EmitString(o, P.getString()) << '\n';
-
-  // Output the short text.
-  // FIXME: Really use a short string.
-  Indent(o, indent) << "<key>message</key>\n";
-  Indent(o, indent);
-  EmitString(o, P.getString()) << '\n';
+  EmitMessage(o, P.getString(), indent);
 
   // Finish up.
   --indent;
@@ -195,7 +215,7 @@ static void ReportEvent(raw_ostream &o, const PathDiagnosticPiece& P,
 static void ReportPiece(raw_ostream &o,
                         const PathDiagnosticPiece &P,
                         const FIDMap& FM, const SourceManager &SM,
-                        const LangOptions &LangOpts,
+                        const Preprocessor &PP, const LangOptions &LangOpts,
                         unsigned indent,
                         unsigned depth,
                         bool includeControlFlow,
@@ -204,53 +224,275 @@ static void ReportPiece(raw_ostream &o,
 static void ReportCall(raw_ostream &o,
                        const PathDiagnosticCallPiece &P,
                        const FIDMap& FM, const SourceManager &SM,
-                       const LangOptions &LangOpts,
+                       const Preprocessor &PP, const LangOptions &LangOpts,
                        unsigned indent,
                        unsigned depth) {
 
   if (auto callEnter = P.getCallEnterEvent())
-    ReportPiece(o, *callEnter, FM, SM, LangOpts, indent, depth, true,
+    ReportPiece(o, *callEnter, FM, SM, PP, LangOpts, indent, depth, true,
                 P.isLastInMainSourceFile());
 
 
   ++depth;
 
   if (auto callEnterWithinCaller = P.getCallEnterWithinCallerEvent())
-    ReportPiece(o, *callEnterWithinCaller, FM, SM, LangOpts,
+    ReportPiece(o, *callEnterWithinCaller, FM, SM, PP, LangOpts,
                 indent, depth, true);
 
   for (PathPieces::const_iterator I = P.path.begin(), E = P.path.end();I!=E;++I)
-    ReportPiece(o, **I, FM, SM, LangOpts, indent, depth, true);
+    ReportPiece(o, **I, FM, SM, PP, LangOpts, indent, depth, true);
 
   --depth;
 
   if (auto callExit = P.getCallExitEvent())
-    ReportPiece(o, *callExit, FM, SM, LangOpts, indent, depth, true);
+    ReportPiece(o, *callExit, FM, SM, PP, LangOpts, indent, depth, true);
+}
+
+/// Retrieves the name of the macro at \p ExpanLoc.
+static std::string getMacroName(FullSourceLoc ExpanLoc,
+                                const LangOptions &LangOpts) {
+  const SourceManager &SM = ExpanLoc.getManager();
+
+  StringRef BufferInfo = ExpanLoc.getBufferData();
+  std::pair<FileID, unsigned> LocInfo = ExpanLoc.getDecomposedLoc();
+  const char* MacroNameBuf = LocInfo.second + BufferInfo.data();
+
+  Lexer rawLexer(SM.getLocForStartOfFile(LocInfo.first), LangOpts,
+                 BufferInfo.begin(), MacroNameBuf, BufferInfo.end());
+
+  Token TheTok;
+  rawLexer.LexFromRawLexer(TheTok);
+  std::string MacroName = "";
+  for (unsigned i = 0, n = TheTok.getLength(); i < n; ++i)
+    MacroName += MacroNameBuf[i];
+
+  return MacroName;
+}
+
+static std::string getExpansion(StringRef MacroName, const SourceManager &SM,
+                                const FileID &FID, const Preprocessor &PP) {
+  // Re-lex the raw token stream into a token buffer.
+  std::vector<Token> TokenStream;
+
+  const llvm::MemoryBuffer *FromFile = SM.getBuffer(FID);
+  Lexer L(FID, FromFile, SM, PP.getLangOpts());
+
+  // Lex all the tokens in raw mode, to avoid entering #includes or expanding
+  // macros.
+  while (1) {
+    Token Tok;
+    L.LexFromRawLexer(Tok);
+
+    // If this is a # at the start of a line, discard it from the token stream.
+    // We don't want the re-preprocess step to see #defines, #includes or other
+    // preprocessor directives.
+    if (Tok.is(tok::hash) && Tok.isAtStartOfLine())
+      continue;
+
+    // If this is a ## token, change its kind to unknown so that repreprocessing
+    // it will not produce an error.
+    if (Tok.is(tok::hashhash))
+      Tok.setKind(tok::unknown);
+
+    // If this raw token is an identifier, the raw lexer won't have looked up
+    // the corresponding identifier info for it.  Do this now so that it will be
+    // macro expanded when we re-preprocess it.
+    if (Tok.is(tok::raw_identifier))
+      PP.LookUpIdentifierInfo(Tok);
+
+    TokenStream.push_back(Tok);
+
+    if (Tok.is(tok::eof)) break;
+  }
+
+  // Temporarily change the diagnostics object so that we ignore any generated
+  // diagnostics from this pass.
+  DiagnosticsEngine TmpDiags(PP.getDiagnostics().getDiagnosticIDs(),
+                             &PP.getDiagnostics().getDiagnosticOptions(),
+                      new IgnoringDiagConsumer);
+
+  // FIXME: This is a huge hack; we reuse the input preprocessor because we want
+  // its state, but we aren't actually changing it (we hope). This should really
+  // construct a copy of the preprocessor.
+  Preprocessor &TmpPP = const_cast<Preprocessor&>(PP);
+  DiagnosticsEngine *OldDiags = &TmpPP.getDiagnostics();
+  TmpPP.setDiagnostics(TmpDiags);
+
+  // Inform the preprocessor that we don't want comments.
+  TmpPP.SetCommentRetentionState(false, false);
+
+  // We don't want pragmas either. Although we filtered out #pragma, removing
+  // _Pragma and __pragma is much harder.
+  bool PragmasPreviouslyEnabled = TmpPP.getPragmasEnabled();
+  TmpPP.setPragmasEnabled(false);
+
+  // Enter the tokens we just lexed.  This will cause them to be macro expanded
+  // but won't enter sub-files (because we removed #'s).
+  TmpPP.EnterTokenStream(TokenStream, false);
+
+  TokenConcatenation ConcatInfo(TmpPP);
+
+  std::string Expansion = "";
+  // Lex all the tokens.
+  Token Tok;
+  TmpPP.Lex(Tok);
+  while (Tok.isNot(tok::eof)) {
+    // Ignore non-macro tokens.
+    if (!Tok.getLocation().isMacroID()) {
+      TmpPP.Lex(Tok);
+      continue;
+    }
+
+    std::string MacroNameAtLoc =
+          getMacroName(FullSourceLoc(SM.getExpansionLoc(Tok.getLocation()), SM),
+                       TmpPP.getLangOpts());
+
+    // We're only interested in the macro with the name `MacroName`.
+    if (MacroNameAtLoc != MacroName) {
+      TmpPP.Lex(Tok);
+      continue;
+    }
+
+    // Okay, we have the first token of a macro expansion: highlight the
+    // expansion by inserting a start tag before the macro expansion and
+    // end tag after it.
+    auto Pair = SM.getExpansionRange(Tok.getLocation());
+    CharSourceRange LLoc = { { Pair.first, Pair.second }, false };
+    // Ignore tokens whose instantiation location was not the main file.
+    if (SM.getFileID(LLoc.getBegin()) != FID) {
+      TmpPP.Lex(Tok);
+      continue;
+    }
+
+    assert(SM.getFileID(LLoc.getEnd()) == FID &&
+           "Start and end of expansion must be in the same ultimate file!");
+
+    Expansion = TmpPP.getSpelling(Tok);
+
+    Token PrevPrevTok;
+    Token PrevTok = Tok;
+    // Okay, eat this token, getting the next one.
+    TmpPP.Lex(Tok);
+
+    // Skip all the rest of the tokens that are part of this macro
+    // instantiation.  It would be really nice to pop up a window with all the
+    // spelling of the tokens or something.
+    while (!Tok.is(tok::eof) &&
+           SM.getExpansionLoc(Tok.getLocation()) == LLoc.getBegin()) {
+
+      // If the tokens were already space separated, or if they must be to avoid
+      // them being implicitly pasted, add a space between them.
+      if (Tok.hasLeadingSpace() ||
+          ConcatInfo.AvoidConcat(PrevPrevTok, PrevTok, Tok))
+        Expansion += ' ';
+
+      // Escape any special characters in the token text.
+      Expansion += TmpPP.getSpelling(Tok);
+
+      PrevPrevTok = PrevTok;
+      PrevTok = Tok;
+      TmpPP.Lex(Tok);
+    }
+    break;
+  }
+
+  // Restore the preprocessor's old state.
+  TmpPP.setDiagnostics(*OldDiags);
+  TmpPP.setPragmasEnabled(PragmasPreviouslyEnabled);
+  return Expansion;
 }
 
 static void ReportMacro(raw_ostream &o,
                         const PathDiagnosticMacroPiece& P,
                         const FIDMap& FM, const SourceManager &SM,
+                        const Preprocessor &PP, const LangOptions &LangOpts,
+                        unsigned indent,
+                        unsigned depth) {
+  llvm::SmallString<50> MacroMessage;
+  llvm::raw_svector_ostream MacroOS(MacroMessage);
+
+  {  
+    MacroOS << "Expanding macro '";
+    std::string MacroName =
+         getMacroName(P.getLocation().asLocation().getExpansionLoc(), LangOpts);
+    MacroOS << MacroName << "\' to \'";
+
+    FileID FID = SM.getFileID(P.getLocation().asLocation().getSpellingLoc());
+    MacroOS << getExpansion(MacroName, SM, FID, PP) << '\'';
+    llvm::outs() << MacroOS.str() << '\n';
+  }
+
+  Indent(o, indent) << "<dict>\n";
+  ++indent;
+
+  Indent(o, indent) << "<key>kind</key><string>event</string>\n";
+
+  // Output the location.
+  FullSourceLoc L = P.getLocation().asLocation();
+
+  Indent(o, indent) << "<key>location</key>\n";
+  EmitLocation(o, SM, L, FM, indent);
+
+  // Output the ranges (if any).
+  ArrayRef<SourceRange> Ranges = P.getRanges();
+  EmitRanges(o, Ranges, FM, SM, LangOpts, indent);
+
+  // Output the call depth.
+  Indent(o, indent) << "<key>depth</key>";
+  EmitInteger(o, depth) << '\n';
+
+  // Output the text.
+  EmitMessage(o, MacroOS.str(), indent);
+
+  // Finish up.
+  --indent;
+  Indent(o, indent); o << "</dict>\n";
+
+
+  for (PathPieces::const_iterator I = P.subPieces.begin(), E=P.subPieces.end();
+       I!=E; ++I) {
+    ReportPiece(o, **I, FM, SM, PP, LangOpts, indent, depth, false);
+  }
+}
+
+static void ReportNote(raw_ostream &o, const PathDiagnosticNotePiece& P,
+                        const FIDMap& FM,
+                        const SourceManager &SM,
                         const LangOptions &LangOpts,
                         unsigned indent,
                         unsigned depth) {
 
-  for (PathPieces::const_iterator I = P.subPieces.begin(), E=P.subPieces.end();
-       I!=E; ++I) {
-    ReportPiece(o, **I, FM, SM, LangOpts, indent, depth, false);
-  }
+  Indent(o, indent) << "<dict>\n";
+  ++indent;
+
+  // Output the location.
+  FullSourceLoc L = P.getLocation().asLocation();
+
+  Indent(o, indent) << "<key>location</key>\n";
+  EmitLocation(o, SM, L, FM, indent);
+
+  // Output the ranges (if any).
+  ArrayRef<SourceRange> Ranges = P.getRanges();
+  EmitRanges(o, Ranges, FM, SM, LangOpts, indent);
+
+  // Output the text.
+  EmitMessage(o, P.getString(), indent);
+
+  // Finish up.
+  --indent;
+  Indent(o, indent); o << "</dict>\n";
 }
 
 static void ReportDiag(raw_ostream &o, const PathDiagnosticPiece& P,
                        const FIDMap& FM, const SourceManager &SM,
-                       const LangOptions &LangOpts) {
-  ReportPiece(o, P, FM, SM, LangOpts, 4, 0, true);
+                       const Preprocessor &PP, const LangOptions &LangOpts) {
+  ReportPiece(o, P, FM, SM, PP, LangOpts, 4, 0, true);
 }
 
 static void ReportPiece(raw_ostream &o,
                         const PathDiagnosticPiece &P,
                         const FIDMap& FM, const SourceManager &SM,
-                        const LangOptions &LangOpts,
+                        const Preprocessor &PP, const LangOptions &LangOpts,
                         unsigned indent,
                         unsigned depth,
                         bool includeControlFlow,
@@ -262,19 +504,20 @@ static void ReportPiece(raw_ostream &o,
                           LangOpts, indent);
       break;
     case PathDiagnosticPiece::Call:
-      ReportCall(o, cast<PathDiagnosticCallPiece>(P), FM, SM, LangOpts,
+      ReportCall(o, cast<PathDiagnosticCallPiece>(P), FM, SM, PP, LangOpts,
                  indent, depth);
       break;
     case PathDiagnosticPiece::Event:
-      ReportEvent(o, cast<PathDiagnosticSpotPiece>(P), FM, SM, LangOpts,
+      ReportEvent(o, cast<PathDiagnosticEventPiece>(P), FM, SM, LangOpts,
                   indent, depth, isKeyEvent);
       break;
     case PathDiagnosticPiece::Macro:
-      ReportMacro(o, cast<PathDiagnosticMacroPiece>(P), FM, SM, LangOpts,
+      ReportMacro(o, cast<PathDiagnosticMacroPiece>(P), FM, SM, PP, LangOpts,
                   indent, depth);
       break;
     case PathDiagnosticPiece::Note:
-      // FIXME: Extend the plist format to support those.
+      ReportNote(o, cast<PathDiagnosticNotePiece>(P), FM, SM, LangOpts,
+                  indent, depth);
       break;
   }
 }
@@ -359,16 +602,39 @@ void PlistDiagnostics::FlushDiagnosticsImpl(
   for (std::vector<const PathDiagnostic*>::iterator DI=Diags.begin(),
        DE = Diags.end(); DI!=DE; ++DI) {
 
-    o << "  <dict>\n"
-         "   <key>path</key>\n";
+    o << "  <dict>\n";
 
     const PathDiagnostic *D = *DI;
+    const PathPieces &PP = D->path;
+
+    auto IsNotePiece = [](const std::shared_ptr<PathDiagnosticPiece> &E)
+               { return E->getKind() == PathDiagnosticPiece::Note; };
+
+    assert(std::is_partitioned(
+             PP.begin(), PP.end(), IsNotePiece) &&
+           "PathDiagnostic is not partitioned so that notes precede the rest");
+
+    PathPieces::const_iterator FirstNonNote = std::partition_point(
+        PP.begin(), PP.end(), IsNotePiece);
+
+    PathPieces::const_iterator I = PP.begin();
+
+    if (FirstNonNote != PP.begin()) {
+      o << "   <key>notes</key>\n"
+           "   <array>\n";
+
+      for (; I != FirstNonNote; ++I)
+        ReportDiag(o, **I, FM, *SM, Preproc, LangOpts);
+
+      o << "   </array>\n";
+    }
+
+    o << "   <key>path</key>\n";
 
     o << "   <array>\n";
 
-    for (PathPieces::const_iterator I = D->path.begin(), E = D->path.end();
-         I != E; ++I)
-      ReportDiag(o, **I, FM, *SM, LangOpts);
+    for (PathPieces::const_iterator E = PP.end(); I != E; ++I)
+      ReportDiag(o, **I, FM, *SM, Preproc, LangOpts);
 
     o << "   </array>\n";
 

@@ -1907,6 +1907,8 @@ static bool GenerateAlternateExtensivePathDiagnostic(
                 PathDiagnosticLocation::createBegin(D, SM),
                 CalleeLC);
 
+  CompactPathDiagnostic(PD.getMutablePieces(), PDB.getSourceManager());
+
   return report->isValid();
 }
 
