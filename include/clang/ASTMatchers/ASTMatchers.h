@@ -1081,17 +1081,6 @@ extern const internal::VariadicDynCastAllOfMatcher<Decl, VarDecl> varDecl;
 ///   matches 'm'.
 extern const internal::VariadicDynCastAllOfMatcher<Decl, FieldDecl> fieldDecl;
 
-/// \brief Matches field declarations.
-///
-/// Given
-/// \code
-///   struct X { struct { int a; }; };
-/// \endcode
-/// fieldDecl()
-///   matches 'a'.
-extern const internal::VariadicDynCastAllOfMatcher<Decl, IndirectFieldDecl>
-    indirectFieldDecl;
-
 /// \brief Matches function declarations.
 ///
 /// Example matches f

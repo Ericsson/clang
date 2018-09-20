@@ -122,13 +122,6 @@ public:
              == Vec.end() && "list still contains decl");
   }
 
-  bool containsInVector(NamedDecl *D) {
-    assert(getAsVector());
-    DeclsTy &Vec = *getAsVector();
-    DeclsTy::iterator I = std::find(Vec.begin(), Vec.end(), D);
-    return I != Vec.end();
-  }
-
   /// \brief Remove any declarations which were imported from an external
   /// AST source.
   void removeExternalDecls() {
