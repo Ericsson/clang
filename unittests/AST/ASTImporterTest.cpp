@@ -3692,6 +3692,158 @@ TEST_P(ImportClasses, ImportPrototypeThenDefinition) {
   EXPECT_EQ(ToDef->getPreviousDecl(), ToProto);
 }
 
+TEST_P(ImportClasses, ImportDefinitionWhenProtoIsInToContext) {
+  Decl *ToTU = getToTuDecl("struct X;", Lang_C);
+  Decl *FromTU1 = getTuDecl("struct X {};", Lang_C, "input1.cc");
+  auto Pattern = recordDecl(hasName("X"), unless(isImplicit()));
+  auto ToProto = FirstDeclMatcher<RecordDecl>().match(ToTU, Pattern);
+  auto FromDef = FirstDeclMatcher<RecordDecl>().match(FromTU1, Pattern);
+
+  Decl *ImportedDef = Import(FromDef, Lang_C);
+
+  EXPECT_NE(ImportedDef, ToProto);
+  EXPECT_EQ(DeclCounter<RecordDecl>().match(ToTU, Pattern), 2u);
+  auto ToDef = LastDeclMatcher<RecordDecl>().match(ToTU, Pattern);
+  EXPECT_TRUE(ImportedDef == ToDef);
+  EXPECT_TRUE(ToDef->isThisDeclarationADefinition());
+  EXPECT_FALSE(ToProto->isThisDeclarationADefinition());
+  EXPECT_EQ(ToDef->getPreviousDecl(), ToProto);
+}
+
+TEST_P(ImportClasses, ImportDefinitionWhenProtoIsInNestedToContext) {
+  Decl *ToTU = getToTuDecl("struct A { struct X *Xp; };", Lang_C);
+  Decl *FromTU1 = getTuDecl("struct X {};", Lang_C, "input1.cc");
+  auto Pattern = recordDecl(hasName("X"), unless(isImplicit()));
+  auto ToProto = FirstDeclMatcher<RecordDecl>().match(ToTU, Pattern);
+  auto FromDef = FirstDeclMatcher<RecordDecl>().match(FromTU1, Pattern);
+
+  Decl *ImportedDef = Import(FromDef, Lang_C);
+
+  EXPECT_NE(ImportedDef, ToProto);
+  EXPECT_EQ(DeclCounter<RecordDecl>().match(ToTU, Pattern), 2u);
+  auto ToDef = LastDeclMatcher<RecordDecl>().match(ToTU, Pattern);
+  EXPECT_TRUE(ImportedDef == ToDef);
+  EXPECT_TRUE(ToDef->isThisDeclarationADefinition());
+  EXPECT_FALSE(ToProto->isThisDeclarationADefinition());
+  EXPECT_EQ(ToDef->getPreviousDecl(), ToProto);
+}
+
+TEST_P(ImportClasses, ImportDefinitionWhenProtoIsInNestedToContextCXX) {
+  Decl *ToTU = getToTuDecl("struct A { struct X *Xp; };", Lang_CXX);
+  Decl *FromTU1 = getTuDecl("struct X {};", Lang_CXX, "input1.cc");
+  auto Pattern = recordDecl(hasName("X"), unless(isImplicit()));
+  auto ToProto = FirstDeclMatcher<RecordDecl>().match(ToTU, Pattern);
+  auto FromDef = FirstDeclMatcher<RecordDecl>().match(FromTU1, Pattern);
+
+  Decl *ImportedDef = Import(FromDef, Lang_CXX);
+
+  EXPECT_NE(ImportedDef, ToProto);
+  EXPECT_EQ(DeclCounter<RecordDecl>().match(ToTU, Pattern), 2u);
+  auto ToDef = LastDeclMatcher<RecordDecl>().match(ToTU, Pattern);
+  EXPECT_TRUE(ImportedDef == ToDef);
+  EXPECT_TRUE(ToDef->isThisDeclarationADefinition());
+  EXPECT_FALSE(ToProto->isThisDeclarationADefinition());
+  EXPECT_EQ(ToDef->getPreviousDecl(), ToProto);
+}
+
+TEST_P(ImportClasses, ImportNestedPrototypeThenDefinition) {
+  Decl *FromTU0 = getTuDecl("struct A { struct X *Xp; };", Lang_C, "input0.cc");
+  Decl *FromTU1 = getTuDecl("struct X {};", Lang_C, "input1.cc");
+  auto Pattern = recordDecl(hasName("X"), unless(isImplicit()));
+  auto FromProto = FirstDeclMatcher<RecordDecl>().match(FromTU0, Pattern);
+  auto FromDef = FirstDeclMatcher<RecordDecl>().match(FromTU1, Pattern);
+
+  Decl *ImportedProto = Import(FromProto, Lang_C);
+  Decl *ImportedDef = Import(FromDef, Lang_C);
+  Decl *ToTU = ImportedDef->getTranslationUnitDecl();
+
+  EXPECT_NE(ImportedDef, ImportedProto);
+  EXPECT_EQ(DeclCounter<RecordDecl>().match(ToTU, Pattern), 2u);
+  auto ToProto = FirstDeclMatcher<RecordDecl>().match(ToTU, Pattern);
+  auto ToDef = LastDeclMatcher<RecordDecl>().match(ToTU, Pattern);
+  EXPECT_TRUE(ImportedDef == ToDef);
+  EXPECT_TRUE(ImportedProto == ToProto);
+  EXPECT_TRUE(ToDef->isThisDeclarationADefinition());
+  EXPECT_FALSE(ToProto->isThisDeclarationADefinition());
+  EXPECT_EQ(ToDef->getPreviousDecl(), ToProto);
+}
+
+struct IdBasedLookupTest : ASTImporterOptionSpecificTestBase {};
+
+TEST_P(IdBasedLookupTest, LookupDecl) {
+  using namespace IdBasedLookup;
+  Decl *ToTU = getToTuDecl("int A;", Lang_C);
+  auto *D = FirstDeclMatcher<VarDecl>().match(ToTU, varDecl(hasName("A")));
+  auto Res = lookup(D->getDeclName());
+  ASSERT_GE(Res.size(), 1u);
+  EXPECT_EQ(Res.front(), D);
+}
+
+TEST_P(IdBasedLookupTest, LookupFwdDecl) {
+  using namespace IdBasedLookup;
+  Decl *ToTU = getToTuDecl(
+      R"(
+      struct A;
+      struct A;
+      struct A;
+      )", Lang_CXX);
+  auto *D = FirstDeclMatcher<CXXRecordDecl>().match(ToTU, cxxRecordDecl(hasName("A")));
+  auto *D1 = LastDeclMatcher<CXXRecordDecl>().match(ToTU, cxxRecordDecl(hasName("A")));
+  ASSERT_NE(D, D1);
+  auto Res = lookup(D1->getDeclName());
+  // Ptr
+  dump(Res);
+  ASSERT_EQ(Res.size(), 1u);
+  EXPECT_EQ(Res.front(), D1);
+}
+
+TEST_P(IdBasedLookupTest, LookupOverload) {
+  using namespace IdBasedLookup;
+  Decl *ToTU = getToTuDecl(
+      R"(
+      int A();
+      int A(int);
+      int A(int, int);
+      )", Lang_CXX);
+  auto *D = FirstDeclMatcher<FunctionDecl>().match(ToTU, functionDecl(hasName("A")));
+  auto *D1 = LastDeclMatcher<FunctionDecl>().match(ToTU, functionDecl(hasName("A")));
+  ASSERT_NE(D, D1);
+  // Vector
+  auto Res = lookup(D1->getDeclName());
+  EXPECT_EQ(Res.size(), 3u);
+  dump(Res);
+}
+
+TEST_P(IdBasedLookupTest, LookupMethodOverload) {
+  using namespace IdBasedLookup;
+  Decl *ToTU = getToTuDecl(
+      R"(
+      struct X {
+        int A();
+        int A(int);
+        int A(int, int);
+      };
+      )", Lang_CXX);
+  auto *D = FirstDeclMatcher<CXXMethodDecl>().match(ToTU, cxxMethodDecl(hasName("A")));
+  auto *D1 = LastDeclMatcher<CXXMethodDecl>().match(ToTU, cxxMethodDecl(hasName("A")));
+  ASSERT_NE(D, D1);
+  // Vector
+  auto Res = lookup(D1->getDeclName());
+  // This does not do qualified lookup, that is based on the DeclContext.
+  EXPECT_EQ(Res.size(), 0u);
+}
+
+TEST_P(IdBasedLookupTest, LookupInvisibleDecl) {
+  using namespace IdBasedLookup;
+  Decl *ToTU = getToTuDecl(
+      "struct A { struct X *Xp; }; struct B { struct X *Xp; };", Lang_C);
+  auto *D =
+      FirstDeclMatcher<RecordDecl>().match(ToTU, recordDecl(hasName("X")));
+  auto Res = lookup(D->getDeclName());
+  ASSERT_GE(Res.size(), 1u);
+  EXPECT_EQ(Res.front(), D->getMostRecentDecl());
+}
+
 struct ImportClassTemplates : ASTImporterOptionSpecificTestBase {};
 
 TEST_P(ImportClassTemplates,
@@ -4589,6 +4741,9 @@ INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportImplicitMethods,
                         DefaultTestValuesForRunOptions, );
 
 INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportVariables,
+                        DefaultTestValuesForRunOptions, );
+
+INSTANTIATE_TEST_CASE_P(ParameterizedTests, IdBasedLookupTest,
                         DefaultTestValuesForRunOptions, );
 
 } // end namespace ast_matchers

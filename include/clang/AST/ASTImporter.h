@@ -44,6 +44,17 @@ class TagDecl;
 class TranslationUnitDecl;
 class TypeSourceInfo;
 
+  namespace IdBasedLookup {
+
+  using Result = SmallVector<NamedDecl *, 2>;
+  // Performs unqualified lookup based on the identifer name.
+  // This does not do qualified lookup (that is based on the DeclContext).
+  Result lookup(DeclarationName Name);
+
+  void dump(const Result &LR);
+
+  } // namespace IdBasedLookup
+
   // \brief Returns with a list of declarations started from the canonical decl
   // then followed by subsequent decls in the translation unit.
   // This gives a canonical list for each entry in the redecl chain.

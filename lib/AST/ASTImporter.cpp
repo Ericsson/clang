@@ -71,6 +71,53 @@
 
 namespace clang {
 
+  namespace IdBasedLookup {
+
+  // These are copied from Sema/IdentifierResolver.cpp
+  // FIXME Use classes from Sema directly, for that, however, ASTImporter
+  // should be a separate lib which depends both on AST lib and on the Sema lib.
+
+  // FETokenInfo contains a Decl pointer if lower bit == 0.
+  static bool isDeclPtr(void *Ptr) {
+    return (reinterpret_cast<uintptr_t>(Ptr) & 0x1) == 0;
+  }
+  using DeclsTy = SmallVector<NamedDecl *, 2>;
+  using IdDeclInfo = DeclsTy;
+  // FETokenInfo contains a IdDeclInfo pointer if lower bit == 1.
+  static IdDeclInfo *toIdDeclInfo(void *Ptr) {
+    assert((reinterpret_cast<uintptr_t>(Ptr) & 0x1) == 1 &&
+           "Ptr not a IdDeclInfo* !");
+    return reinterpret_cast<IdDeclInfo *>(reinterpret_cast<uintptr_t>(Ptr) &
+                                          ~0x1);
+  }
+
+  // Goes through the front end specific token info which had been built by the
+  // parser/sema.
+  Result lookup(DeclarationName Name) {
+    if (!Name.getAsIdentifierInfo())
+      return Result();
+    void *Ptr = Name.getFETokenInfo<void>();
+    if (!Ptr)
+      return Result();
+    if (isDeclPtr(Ptr))
+      return Result{static_cast<NamedDecl *>(Ptr)};
+    IdDeclInfo *IDI = toIdDeclInfo(Ptr);
+    Result Res;
+    for (NamedDecl *ND : *IDI) {
+      if (ND)
+        Res.push_back(ND);
+    }
+    return Res;
+  }
+
+  void dump(const Result &LR) {
+    for (const auto &L : LR) {
+      L->dump();
+    }
+  }
+
+  } // namespace IdBasedLookup
+
   unsigned ASTImporter::getFieldIndex(Decl *F) {
     assert(F && (isa<FieldDecl>(*F) || isa<IndirectFieldDecl>(*F)) &&
         "Try to get field index for non-field.");
@@ -2286,6 +2333,16 @@ Decl *ASTNodeImporter::VisitRecordDecl(RecordDecl *D) {
       // We're going to have to compare D against potentially conflicting Decls, so complete it.
       if (D->hasExternalLexicalStorage() && !D->isCompleteDefinition())
         D->getASTContext().getExternalSource()->CompleteType(D);
+    } else {
+      // DeclContext based lookup may not find forward declared structs in C.
+      // For instance, consider that this code had been already parsed into the
+      // "To" context:
+      //   struct A { struct X *Xp; };
+      // In this case localUncachedLookup will not find the forward decl of X.
+      // Thus, we do an identifier based search through the front end specific
+      // void pointers whic are injected into the DeclarationName objects.
+      if (!Importer.getToContext().getLangOpts().CPlusPlus)
+        FoundDecls = IdBasedLookup::lookup(SearchName);
     }
 
     for (auto *FoundDecl : FoundDecls) {
