@@ -2609,6 +2609,16 @@ Decl *ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
   const FunctionDecl *FoundByLookup = nullptr;
   FunctionTemplateDecl *FromFT = D->getDescribedFunctionTemplate();
 
+  // Check if we have found an existing definition.  Returns with that
+  // definition if yes, otherwise returns null.
+  auto FindAndMapDefinition = [this](
+      FunctionDecl *D, FunctionDecl *FoundFunction) -> Decl * {
+    const FunctionDecl *Definition = nullptr;
+    if (D->doesThisDeclarationHaveABody() && FoundFunction->hasBody(Definition))
+      return Importer.MapImported(D, const_cast<FunctionDecl *>(Definition));
+    return nullptr;
+  };
+
   // If this is a function template specialization, then try to find the same
   // existing specialization in the "to" context. The lookup below will not
   // find any specialization, but would find the primary template; thus, we
@@ -2617,9 +2627,8 @@ Decl *ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
   if (D->getTemplatedKind() ==
       FunctionDecl::TK_FunctionTemplateSpecialization) {
     if (FunctionDecl *FoundFunction = FindFunctionTemplateSpecialization(D)) {
-      if (D->doesThisDeclarationHaveABody() &&
-          FoundFunction->hasBody())
-        return Importer.Imported(D, FoundFunction);
+      if (Decl *Def = FindAndMapDefinition(D, FoundFunction))
+        return Def;
       FoundByLookup = FoundFunction;
     }
   }
@@ -2638,11 +2647,8 @@ Decl *ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
           continue;
 
         if (IsStructuralMatch(D, FoundFunction)) {
-          const FunctionDecl *Definition = nullptr;
-          if (D->doesThisDeclarationHaveABody() &&
-              FoundFunction->hasBody(Definition))
-            return Importer.MapImported(D,
-                                        const_cast<FunctionDecl *>(Definition));
+          if (Decl *Def = FindAndMapDefinition(D, FoundFunction))
+            return Def;
           FoundByLookup = FoundFunction;
           break;
         }
