@@ -4529,18 +4529,6 @@ Decl *ASTNodeImporter::VisitClassTemplateDecl(ClassTemplateDecl *D) {
 
 Decl *ASTNodeImporter::VisitClassTemplateSpecializationDecl(
                                           ClassTemplateSpecializationDecl *D) {
-  // If this record has a definition in the translation unit we're coming from,
-  // but this particular declaration is not that definition, import the
-  // definition and map to that.
-  TagDecl *Definition = D->getDefinition();
-  if (Definition && Definition != D) {
-    Decl *ImportedDef = Importer.Import(Definition);
-    if (!ImportedDef)
-      return nullptr;
-
-    return Importer.MapImported(D, ImportedDef);
-  }
-
   auto *ClassTemplate =
       cast_or_null<ClassTemplateDecl>(Importer.Import(
                                                  D->getSpecializedTemplate()));
@@ -4572,124 +4560,120 @@ Decl *ASTNodeImporter::VisitClassTemplateSpecializationDecl(
 
   // Try to find an existing specialization with these template arguments.
   void *InsertPos = nullptr;
-  ClassTemplateSpecializationDecl *D2 = nullptr;
+  ClassTemplateSpecializationDecl *PrevDecl = nullptr;
   ClassTemplatePartialSpecializationDecl *PartialSpec =
             dyn_cast<ClassTemplatePartialSpecializationDecl>(D);
   if (PartialSpec)
-    D2 = ClassTemplate->findPartialSpecialization(TemplateArgs, InsertPos);
+    PrevDecl = ClassTemplate->findPartialSpecialization(TemplateArgs, InsertPos);
   else
-    D2 = ClassTemplate->findSpecialization(TemplateArgs, InsertPos);
-  ClassTemplateSpecializationDecl * const PrevDecl = D2;
-  RecordDecl *FoundDef = D2 ? D2->getDefinition() : nullptr;
-  if (FoundDef) {
-    if (!D->isCompleteDefinition()) {
-      // The "From" translation unit only had a forward declaration; call it
-      // the same declaration.
-      // TODO Handle the redecl chain properly!
-      return Importer.MapImported(D, FoundDef);
-    }
+    PrevDecl = ClassTemplate->findSpecialization(TemplateArgs, InsertPos);
 
-    if (IsStructuralMatch(D, FoundDef)) {
+  if (PrevDecl) {
+    if (IsStructuralMatch(D, PrevDecl)) {
+      if (D->isThisDeclarationADefinition() && PrevDecl->getDefinition()) {
+        Importer.MapImported(D, PrevDecl->getDefinition());
+        // Import those those default field initializers which have been
+        // instantiated in the "From" context, but not in the "To" context.
+        for (auto *FromField : D->fields())
+          Importer.Import(FromField);
 
-      Importer.MapImported(D, FoundDef);
+        // Import those methods which have been instantiated in the
+        // "From" context, but not in the "To" context.
+        for (CXXMethodDecl *FromM : D->methods())
+          Importer.Import(FromM);
 
-      // Import those those default field initializers which have been
-      // instantiated in the "From" context, but not in the "To" context.
-      for (auto *FromField : D->fields())
-        Importer.Import(FromField);
-
-      // Import those methods which have been instantiated in the
-      // "From" context, but not in the "To" context.
-      for (CXXMethodDecl *FromM : D->methods())
-        Importer.Import(FromM);
-
-      // TODO Import instantiated default arguments.
-      // TODO Import instantiated exception specifications.
-      //
-      // Generally, ASTCommon.h/DeclUpdateKind enum gives a very good hint what
-      // else could be fused during an AST merge.
-
-      return FoundDef;
-    }
-  } else { // We either couldn't find any previous specialization in the "To"
-           // context,  or we found one but without definition.  Let's create a
-           // new specialization and register that at the class template.
-    if (PartialSpec) {
-      // Import TemplateArgumentListInfo.
-      TemplateArgumentListInfo ToTAInfo;
-      const auto &ASTTemplateArgs = *PartialSpec->getTemplateArgsAsWritten();
-      if (ImportTemplateArgumentListInfo(ASTTemplateArgs, ToTAInfo))
-        return nullptr;
-
-      QualType CanonInjType = Importer.Import(
-            PartialSpec->getInjectedSpecializationType());
-      if (CanonInjType.isNull())
-        return nullptr;
-      CanonInjType = CanonInjType.getCanonicalType();
-
-      TemplateParameterList *ToTPList = ImportTemplateParameterList(
-            PartialSpec->getTemplateParameters());
-      if (!ToTPList && PartialSpec->getTemplateParameters())
-        return nullptr;
-
-      if (GetImportedOrCreateDecl<ClassTemplatePartialSpecializationDecl>(
-              D2, D, Importer.getToContext(), D->getTagKind(), DC, StartLoc,
-              IdLoc, ToTPList, ClassTemplate,
-              llvm::makeArrayRef(TemplateArgs.data(), TemplateArgs.size()),
-              ToTAInfo, CanonInjType,
-              cast_or_null<ClassTemplatePartialSpecializationDecl>(PrevDecl)))
-        return D2;
-
-      // Update InsertPos, because preceding import calls may have invalidated
-      // it by adding new specializations.
-      if (!ClassTemplate->findPartialSpecialization(TemplateArgs, InsertPos))
-        // Add this partial specialization to the class template.
-        ClassTemplate->AddPartialSpecialization(
-            cast<ClassTemplatePartialSpecializationDecl>(D2), InsertPos);
-
-    } else { // Not a partial specialization.
-      if (GetImportedOrCreateDecl(
-              D2, D, Importer.getToContext(), D->getTagKind(), DC, StartLoc,
-              IdLoc, ClassTemplate, TemplateArgs, PrevDecl))
-        return D2;
-
-      // Update InsertPos, because preceding import calls may have invalidated
-      // it by adding new specializations.
-      if (!ClassTemplate->findSpecialization(TemplateArgs, InsertPos))
-        // Add this specialization to the class template.
-        ClassTemplate->AddSpecialization(D2, InsertPos);
-    }
-
-    D2->setSpecializationKind(D->getSpecializationKind());
-
-    // Import the qualifier, if any.
-    D2->setQualifierInfo(Importer.Import(D->getQualifierLoc()));
-
-    if (auto *TSI = D->getTypeAsWritten()) {
-      TypeSourceInfo *TInfo = Importer.Import(TSI);
-      if (!TInfo)
-        return nullptr;
-      D2->setTypeAsWritten(TInfo);
-      D2->setTemplateKeywordLoc(Importer.Import(D->getTemplateKeywordLoc()));
-      D2->setExternLoc(Importer.Import(D->getExternLoc()));
-    }
-
-    SourceLocation POI = Importer.Import(D->getPointOfInstantiation());
-    if (POI.isValid())
-      D2->setPointOfInstantiation(POI);
-    else if (D->getPointOfInstantiation().isValid())
+        // TODO Import instantiated default arguments.
+        // TODO Import instantiated exception specifications.
+        //
+        // Generally, ASTCommon.h/DeclUpdateKind enum gives a very good hint
+        // what
+        // else could be fused during an AST merge.
+        return PrevDecl;
+      }
+    } else { // ODR violation.
+      // FIXME HandleNameConflict
       return nullptr;
-
-    D2->setTemplateSpecializationKind(D->getTemplateSpecializationKind());
-
-    // Set the context of this specialization/instantiation.
-    D2->setLexicalDeclContext(LexicalDC);
-
-    // Add to the DC only if it was an explicit specialization/instantiation.
-    if (D2->isExplicitInstantiationOrSpecialization()) {
-      LexicalDC->addDeclInternal(D2);
     }
   }
+
+  // Create the specialization.
+  ClassTemplateSpecializationDecl *D2 = nullptr;
+  if (PartialSpec) {
+    // Import TemplateArgumentListInfo.
+    TemplateArgumentListInfo ToTAInfo;
+    const auto &ASTTemplateArgs = *PartialSpec->getTemplateArgsAsWritten();
+    if (ImportTemplateArgumentListInfo(ASTTemplateArgs, ToTAInfo))
+      return nullptr;
+
+    QualType CanonInjType =
+        Importer.Import(PartialSpec->getInjectedSpecializationType());
+    if (CanonInjType.isNull())
+      return nullptr;
+    CanonInjType = CanonInjType.getCanonicalType();
+
+    TemplateParameterList *ToTPList =
+        ImportTemplateParameterList(PartialSpec->getTemplateParameters());
+    if (!ToTPList && PartialSpec->getTemplateParameters())
+      return nullptr;
+
+    if (GetImportedOrCreateDecl<ClassTemplatePartialSpecializationDecl>(
+            D2, D, Importer.getToContext(), D->getTagKind(), DC, StartLoc,
+            IdLoc, ToTPList, ClassTemplate,
+            llvm::makeArrayRef(TemplateArgs.data(), TemplateArgs.size()),
+            ToTAInfo, CanonInjType,
+            cast_or_null<ClassTemplatePartialSpecializationDecl>(PrevDecl)))
+      return D2;
+
+    // Update InsertPos, because preceding import calls may have invalidated
+    // it by adding new specializations.
+    if (!ClassTemplate->findPartialSpecialization(TemplateArgs, InsertPos))
+      // Add this partial specialization to the class template.
+      ClassTemplate->AddPartialSpecialization(
+          cast<ClassTemplatePartialSpecializationDecl>(D2), InsertPos);
+
+  } else { // Not a partial specialization.
+    if (GetImportedOrCreateDecl(D2, D, Importer.getToContext(), D->getTagKind(),
+                                DC, StartLoc, IdLoc, ClassTemplate,
+                                TemplateArgs, PrevDecl))
+      return D2;
+
+    // Update InsertPos, because preceding import calls may have invalidated
+    // it by adding new specializations.
+    if (!ClassTemplate->findSpecialization(TemplateArgs, InsertPos))
+      // Add this specialization to the class template.
+      ClassTemplate->AddSpecialization(D2, InsertPos);
+  }
+
+  D2->setSpecializationKind(D->getSpecializationKind());
+
+  // Import the qualifier, if any.
+  D2->setQualifierInfo(Importer.Import(D->getQualifierLoc()));
+
+  // Set the context of this specialization/instantiation.
+  D2->setLexicalDeclContext(LexicalDC);
+
+  // Add to the DC only if it was an explicit specialization/instantiation.
+  if (D2->isExplicitInstantiationOrSpecialization()) {
+    LexicalDC->addDeclInternal(D2);
+  }
+
+  if (auto *TSI = D->getTypeAsWritten()) {
+    TypeSourceInfo *TInfo = Importer.Import(TSI);
+    if (!TInfo)
+      return nullptr;
+    D2->setTypeAsWritten(TInfo);
+    D2->setTemplateKeywordLoc(Importer.Import(D->getTemplateKeywordLoc()));
+    D2->setExternLoc(Importer.Import(D->getExternLoc()));
+  }
+
+  SourceLocation POI = Importer.Import(D->getPointOfInstantiation());
+  if (POI.isValid())
+    D2->setPointOfInstantiation(POI);
+  else if (D->getPointOfInstantiation().isValid())
+    return nullptr;
+
+  D2->setTemplateSpecializationKind(D->getTemplateSpecializationKind());
+
   if (D->isCompleteDefinition() && ImportDefinition(D, D2))
     return nullptr;
 
