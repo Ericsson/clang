@@ -195,7 +195,7 @@ class TypeSourceInfo;
     /// Return the copy of the given declaration in the "to" context if
     /// it has already been imported from the "from" context.  Otherwise return
     /// nullptr.
-    Decl *GetAlreadyImportedOrNull(Decl *FromD);
+    Decl *GetAlreadyImportedOrNull(const Decl *FromD) const;
 
     /// Return the translation unit from where the declaration was
     /// imported. If it does not exist nullptr is returned.

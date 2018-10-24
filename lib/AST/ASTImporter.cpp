@@ -1197,6 +1197,8 @@ bool ASTNodeImporter::ImportDeclParts(NamedDecl *D, DeclContext *&DC,
   // Import the location of this declaration.
   Loc = Importer.Import(D->getLocation());
   ToD = cast_or_null<NamedDecl>(Importer.GetAlreadyImportedOrNull(D));
+  if (ToD)
+    ImportDefinitionIfNeeded(D, ToD);
   return false;
 }
 
@@ -1212,7 +1214,8 @@ void ASTNodeImporter::ImportDefinitionIfNeeded(Decl *FromD, Decl *ToD) {
 
   if (auto *FromRecord = dyn_cast<RecordDecl>(FromD)) {
     if (auto *ToRecord = cast_or_null<RecordDecl>(ToD)) {
-      if (FromRecord->getDefinition() && FromRecord->isCompleteDefinition() && !ToRecord->getDefinition()) {
+      if (FromRecord->getDefinition() && FromRecord->isCompleteDefinition() &&
+          !ToRecord->getDefinition()) {
         ImportDefinition(FromRecord, ToRecord);
       }
     }
@@ -7174,12 +7177,10 @@ Attr *ASTImporter::Import(const Attr *FromAttr) {
   return ToAttr;
 }
 
-Decl *ASTImporter::GetAlreadyImportedOrNull(Decl *FromD) {
-  llvm::DenseMap<Decl *, Decl *>::iterator Pos = ImportedDecls.find(FromD);
+Decl *ASTImporter::GetAlreadyImportedOrNull(const Decl *FromD) const {
+  auto Pos = ImportedDecls.find(FromD);
   if (Pos != ImportedDecls.end()) {
     Decl *ToD = Pos->second;
-    // FIXME: move this call to ImportDeclParts().
-    ASTNodeImporter(*this).ImportDefinitionIfNeeded(FromD, ToD);
     return ToD;
   } else {
     return nullptr;
