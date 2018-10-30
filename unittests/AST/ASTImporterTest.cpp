@@ -4095,6 +4095,45 @@ TEST_P(ImportFriendFunctionTemplates, LookupShouldFindPreviousFriend) {
   EXPECT_EQ(Imported->getPreviousDecl(), Friend);
 }
 
+TEST_P(ASTImporterOptionSpecificTestBase,
+       RedeclChainShouldBeCorrectAmongstNamespaces) {
+  Decl *FromTU = getTuDecl(
+      R"(
+      namespace NS {
+        struct X;
+        struct Y {
+          static const int I = 3;
+        };
+      }
+      namespace NS {
+        struct X {  // <--- To be imported
+          void method(int i = Y::I) {}
+          int f;
+        };
+      }
+      )",
+      Lang_CXX);
+  auto *FromFwd = FirstDeclMatcher<CXXRecordDecl>().match(
+      FromTU, cxxRecordDecl(hasName("X"), unless(isImplicit())));
+  auto *FromDef = LastDeclMatcher<CXXRecordDecl>().match(
+      FromTU,
+      cxxRecordDecl(hasName("X"), isDefinition(), unless(isImplicit())));
+  ASSERT_NE(FromFwd, FromDef);
+  ASSERT_FALSE(FromFwd->isThisDeclarationADefinition());
+  ASSERT_TRUE(FromDef->isThisDeclarationADefinition());
+  ASSERT_EQ(FromFwd->getCanonicalDecl(), FromDef->getCanonicalDecl());
+
+  auto *ToDef = Import(FromDef, Lang_CXX);
+  auto *ToFwd = Import(FromFwd, Lang_CXX);
+  EXPECT_NE(ToFwd, ToDef);
+  EXPECT_FALSE(ToFwd->isThisDeclarationADefinition());
+  EXPECT_TRUE(ToDef->isThisDeclarationADefinition());
+  EXPECT_EQ(ToFwd->getCanonicalDecl(), ToDef->getCanonicalDecl());
+  auto *ToTU = ToAST->getASTContext().getTranslationUnitDecl();
+  // We expect no (ODR) warning during the import.
+  EXPECT_EQ(0u, ToTU->getASTContext().getDiagnostics().getNumWarnings());
+}
+
 INSTANTIATE_TEST_CASE_P(ParameterizedTests, ASTImporterLookupTableTest,
                         DefaultTestValuesForRunOptions, );
 
