@@ -3638,11 +3638,11 @@ ExpectedDecl ASTNodeImporter::VisitVarDecl(VarDecl *D) {
           if (isa<IncompleteArrayType>(FoundArray) &&
               isa<ConstantArrayType>(TArray)) {
             // Import the type.
-            QualType T = Importer.Import(D->getType());
-            if (T.isNull())
-              return nullptr;
+            if (auto TyOrErr = import(D->getType()))
+              FoundVar->setType(*TyOrErr);
+            else
+              return TyOrErr.takeError();
 
-            FoundVar->setType(T);
             FoundByLookup = FoundVar;
             break;
           } else if (isa<IncompleteArrayType>(TArray) &&
@@ -4492,6 +4492,7 @@ Error ASTNodeImporter::ImportDefinition(
 Expected<ObjCTypeParamList *>
 ASTNodeImporter::ImportObjCTypeParamList(ObjCTypeParamList *list) {
   if (!list)
+    // FIXME Should we return an Error here instead?
     return nullptr;
 
   SmallVector<ObjCTypeParamDecl *, 4> toTypeParams;
@@ -7811,7 +7812,8 @@ Expected<DeclContext *> ASTImporter::ImportContext(DeclContext *FromDC) {
 
   auto *ToDC = cast_or_null<DeclContext>(Import(cast<Decl>(FromDC)));
   if (!ToDC)
-    return nullptr;
+    // FIXME return ToDC.takeError();
+    return make_error<ImportError>();
 
   // When we're using a record/enum/Objective-C class/protocol as a context, we
   // need it to have a definition.
