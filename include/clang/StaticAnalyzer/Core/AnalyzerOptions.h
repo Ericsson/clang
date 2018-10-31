@@ -319,6 +319,9 @@ private:
   /// \sa shouldDisplayNotesAsEvents
   Optional<bool> DisplayNotesAsEvents;
 
+  /// \sa shouldDisplayMacroExpansions
+  Optional<bool> DisplayMacroExpansions;
+
   /// \sa shouldAggressivelySimplifyBinaryOperation
   Optional<bool> AggressiveBinaryOperationSimplification;
 
@@ -690,6 +693,13 @@ public:
   /// This is controlled by the 'extra-notes-as-events' option, which defaults
   /// to false when unset.
   bool shouldDisplayNotesAsEvents();
+
+  /// Returns true if macros related to the bugpath should be expanded and
+  /// included in the plist output.
+  ///
+  /// This is controlled by the 'expand-macros' option, which defaults to false
+  /// when unset.
+  bool shouldDisplayMacroExpansions();
 
   /// Returns true if SValBuilder should rearrange comparisons and additive
   /// operations of symbolic expressions which consist of a sum of a symbol and
