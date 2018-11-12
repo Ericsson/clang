@@ -2621,7 +2621,7 @@ ExpectedDecl ASTNodeImporter::VisitRecordDecl(RecordDecl *D) {
                   return std::move(Err);
             }
           }
-          PrevDecl = FoundRecord;
+          PrevDecl = FoundRecord->getMostRecentDecl();
           break;
         }
       }
