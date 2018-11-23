@@ -18,7 +18,7 @@
 #include "clang/AST/DeclBase.h" // lookup_result
 #include "clang/AST/DeclarationName.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/SetVector.h"
 
 namespace clang {
 
@@ -51,7 +51,7 @@ class ASTImporterLookupTable {
   // And we collect these lists for each DeclContext.
   // We could have a flat map with (DeclContext, Name) tuple as key, but a two
   // level map seems easier to handle.
-  using DeclList = llvm::SmallPtrSet<NamedDecl *, 2>;
+  using DeclList = llvm::SmallSetVector<NamedDecl *, 2>;
   using NameMap = llvm::SmallDenseMap<DeclarationName, DeclList, 4>;
   using DCMap = llvm::DenseMap<DeclContext *, NameMap>;
 
