@@ -30,13 +30,13 @@ struct Builder : RecursiveASTVisitor<Builder> {
   bool VisitFriendDecl(FriendDecl *D) {
     if (D->getFriendType()) {
       QualType Ty = D->getFriendType()->getType();
-      // FIXME Can this be other than elaborated?
-      QualType NamedTy = cast<ElaboratedType>(Ty)->getNamedType();
-      if (!NamedTy->isDependentType()) {
-        if (const auto *RTy = dyn_cast<RecordType>(NamedTy))
+      if (isa<ElaboratedType>(Ty))
+        Ty = cast<ElaboratedType>(Ty)->getNamedType();
+      if (!Ty->isDependentType()) {
+        if (const auto *RTy = dyn_cast<RecordType>(Ty))
           LT.add(RTy->getAsCXXRecordDecl());
         else if (const auto *SpecTy =
-                     dyn_cast<TemplateSpecializationType>(NamedTy)) {
+                     dyn_cast<TemplateSpecializationType>(Ty)) {
           LT.add(SpecTy->getAsCXXRecordDecl());
         }
       }
