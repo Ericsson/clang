@@ -36,9 +36,10 @@ struct Builder : RecursiveASTVisitor<Builder> {
         if (const auto *RTy = dyn_cast<RecordType>(Ty))
           LT.add(RTy->getAsCXXRecordDecl());
         else if (const auto *SpecTy =
-                     dyn_cast<TemplateSpecializationType>(Ty)) {
+                     dyn_cast<TemplateSpecializationType>(Ty))
           LT.add(SpecTy->getAsCXXRecordDecl());
-        }
+        else
+          llvm_unreachable("Unhandled type of friend class");
       }
     }
     return true;
