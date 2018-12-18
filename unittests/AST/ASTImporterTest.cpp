@@ -2498,12 +2498,7 @@ TEST_P(ImportFriendFunctions,
   EXPECT_EQ(ToFD->getPreviousDecl(), ImportedD);
 }
 
-// Disabled temporarily, because the new structural equivalence check
-// (https://reviews.llvm.org/D48628) breaks it.
-// PreviousDecl is not set because there is no structural match.
-// FIXME Enable!
-TEST_P(ImportFriendFunctions,
-    DISABLED_ImportFriendFunctionRedeclChainDefWithClass) {
+TEST_P(ImportFriendFunctions, ImportFriendFunctionRedeclChainDefWithClass) {
   auto Pattern = functionDecl(hasName("f"));
 
   Decl *FromTU = getTuDecl(
@@ -2531,12 +2526,8 @@ TEST_P(ImportFriendFunctions,
             (*ImportedD->param_begin())->getOriginalType());
 }
 
-// Disabled temporarily, because the new structural equivalence check
-// (https://reviews.llvm.org/D48628) breaks it.
-// PreviousDecl is not set because there is no structural match.
-// FIXME Enable!
 TEST_P(ImportFriendFunctions,
-    DISABLED_ImportFriendFunctionRedeclChainDefWithClass_ImportTheProto) {
+       ImportFriendFunctionRedeclChainDefWithClass_ImportTheProto) {
   auto Pattern = functionDecl(hasName("f"));
 
   Decl *FromTU = getTuDecl(
