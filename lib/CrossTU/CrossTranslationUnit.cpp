@@ -240,8 +240,30 @@ CrossTranslationUnitContext::getCrossTUDefinition(const FunctionDecl *FD,
   }
   const auto& LangTo = Context.getLangOpts();
   const auto& LangFrom = Unit->getASTContext().getLangOpts();
-  // FIXME: Currenty we do not support the across languages.
+
+  // We do not support CTU across languages (C vs C++).
   if (LangTo.CPlusPlus != LangFrom.CPlusPlus) {
+    ++NumLangMismatch;
+    return llvm::make_error<IndexError>(index_error_code::lang_mismatch);
+  }
+
+  // If CPP dialects are different then return with error.
+  //
+  // Consider this STL code:
+  //   template<typename _Alloc>
+  //     struct __alloc_traits
+  //   #if __cplusplus >= 201103L
+  //     : std::allocator_traits<_Alloc>
+  //   #endif
+  //     { // ...
+  //     };
+  // This class template would create ODR errors during merging the two units,
+  // since in one translation unit the class template has a base class, however
+  // in the other unit it has none.
+  if (LangTo.CPlusPlus11 != LangFrom.CPlusPlus11 ||
+      LangTo.CPlusPlus14 != LangFrom.CPlusPlus14 ||
+      LangTo.CPlusPlus17 != LangFrom.CPlusPlus17 ||
+      LangTo.CPlusPlus2a != LangFrom.CPlusPlus2a) {
     ++NumLangMismatch;
     return llvm::make_error<IndexError>(index_error_code::lang_mismatch);
   }

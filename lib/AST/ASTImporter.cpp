@@ -2684,11 +2684,6 @@ ExpectedDecl ASTNodeImporter::VisitRecordDecl(RecordDecl *D) {
     if (!DCXX->getDescribedClassTemplate() || DCXX->isImplicit())
       LexicalDC->addDeclInternal(D2);
 
-    const bool IsFriend = D->isInIdentifierNamespace(Decl::IDNS_TagFriend);
-    if (LexicalDC != DC && IsFriend) {
-      DC->makeDeclVisibleInContext(D2);
-    }
-
     if (ClassTemplateDecl *FromDescribed =
         DCXX->getDescribedClassTemplate()) {
       ClassTemplateDecl *ToDescribed;
@@ -3202,23 +3197,11 @@ ExpectedDecl ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
   if (Error Err = ImportTemplateInformation(D, ToFunction))
     return std::move(Err);
 
-  bool IsFriend = D->isInIdentifierNamespace(Decl::IDNS_OrdinaryFriend);
-
   // TODO Can we generalize this approach to other AST nodes as well?
   if (D->getDeclContext()->containsDeclAndLoad(D))
     DC->addDeclInternal(ToFunction);
   if (DC != LexicalDC && D->getLexicalDeclContext()->containsDeclAndLoad(D))
     LexicalDC->addDeclInternal(ToFunction);
-
-  // Friend declaration's lexical context is the befriending class, but the
-  // semantic context is the enclosing scope of the befriending class.
-  // We want the friend functions to be found in the semantic context by lookup.
-  // FIXME should we handle this generically in VisitFriendDecl?
-  // In Other cases when LexicalDC != DC we don't want it to be added,
-  // e.g out-of-class definitions like void B::f() {} .
-  if (LexicalDC != DC && IsFriend) {
-    DC->makeDeclVisibleInContext(ToFunction);
-  }
 
   if (auto *FromCXXMethod = dyn_cast<CXXMethodDecl>(D))
     ImportOverrides(cast<CXXMethodDecl>(ToFunction), FromCXXMethod);
@@ -4916,7 +4899,6 @@ template <typename T> static auto getDefinition(T *D) -> T * {
 }
 
 ExpectedDecl ASTNodeImporter::VisitClassTemplateDecl(ClassTemplateDecl *D) {
-  bool IsFriend = D->getFriendObjectKind() != Decl::FOK_None;
 
   // Import the major distinguishing characteristics of this class template.
   DeclContext *DC, *LexicalDC;
@@ -5013,10 +4995,6 @@ ExpectedDecl ASTNodeImporter::VisitClassTemplateDecl(ClassTemplateDecl *D) {
     }
 
     D2->setPreviousDecl(Recent);
-  }
-
-  if (LexicalDC != DC && IsFriend) {
-    DC->makeDeclVisibleInContext(D2);
   }
 
   if (FromTemplated->isCompleteDefinition() &&
@@ -7033,15 +7011,19 @@ ExpectedStmt ASTNodeImporter::VisitMemberExpr(MemberExpr *E) {
 
   DeclarationNameInfo ToMemberNameInfo(ToName, ToLoc);
 
+  TemplateArgumentListInfo ToTAInfo, *ResInfo = nullptr;
   if (E->hasExplicitTemplateArgs()) {
-    // FIXME: handle template arguments
-    return make_error<ImportError>(ImportError::UnsupportedConstruct);
+    if (Error Err =
+            ImportTemplateArgumentListInfo(E->getLAngleLoc(), E->getRAngleLoc(),
+                                           E->template_arguments(), ToTAInfo))
+      return std::move(Err);
+    ResInfo = &ToTAInfo;
   }
 
   return MemberExpr::Create(
       Importer.getToContext(), ToBase, E->isArrow(), ToOperatorLoc,
       ToQualifierLoc, ToTemplateKeywordLoc, ToMemberDecl, ToFoundDecl,
-      ToMemberNameInfo, nullptr, ToType, E->getValueKind(), E->getObjectKind());
+      ToMemberNameInfo, ResInfo, ToType, E->getValueKind(), E->getObjectKind());
 }
 
 ExpectedStmt
@@ -8307,7 +8289,7 @@ ASTImporter::Import(const CXXBaseSpecifier *BaseSpec) {
 Error ASTImporter::ImportDefinition_New(Decl *From) {
   Decl *To;
   if (Error Err = importInto(To, From))
-    return std::move(Err);
+    return Err;
 
   if (auto *FromDC = cast<DeclContext>(From)) {
     ASTNodeImporter Importer(*this);
