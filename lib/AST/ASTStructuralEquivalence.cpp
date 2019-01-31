@@ -1589,6 +1589,7 @@ bool StructuralEquivalenceContext::IsEquivalent(Decl *D1, Decl *D2) {
   // as a side effect of one inequivalent element in the DeclsToCheck list.
   assert(DeclsToCheck.empty());
   assert(TentativeEquivalences.empty());
+  assert(NonEquivalentDecls.empty());
 
   if (!::IsStructurallyEquivalent(*this, D1, D2))
     return false;

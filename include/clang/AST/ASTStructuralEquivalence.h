@@ -54,7 +54,7 @@ struct StructuralEquivalenceContext {
 
   /// Declaration (from, to) pairs that are known not to be equivalent
   /// (which we have already complained about).
-  llvm::DenseSet<std::pair<Decl *, Decl *>> &NonEquivalentDecls;
+  llvm::DenseSet<std::pair<Decl *, Decl *>> NonEquivalentDecls;
 
   StructuralEquivalenceKind EqKind;
 
@@ -71,14 +71,13 @@ struct StructuralEquivalenceContext {
   /// \c true if the last diagnostic came from ToCtx.
   bool LastDiagFromC2 = false;
 
-  StructuralEquivalenceContext(
-      ASTContext &FromCtx, ASTContext &ToCtx,
-      llvm::DenseSet<std::pair<Decl *, Decl *>> &NonEquivalentDecls,
-      StructuralEquivalenceKind EqKind,
-      bool StrictTypeSpelling = false, bool Complain = true,
-      bool ErrorOnTagTypeMismatch = false)
-      : FromCtx(FromCtx), ToCtx(ToCtx), NonEquivalentDecls(NonEquivalentDecls),
-        EqKind(EqKind), StrictTypeSpelling(StrictTypeSpelling),
+  StructuralEquivalenceContext(ASTContext &FromCtx, ASTContext &ToCtx,
+                               StructuralEquivalenceKind EqKind,
+                               bool StrictTypeSpelling = false,
+                               bool Complain = true,
+                               bool ErrorOnTagTypeMismatch = false)
+      : FromCtx(FromCtx), ToCtx(ToCtx), EqKind(EqKind),
+        StrictTypeSpelling(StrictTypeSpelling),
         ErrorOnTagTypeMismatch(ErrorOnTagTypeMismatch), Complain(Complain) {}
 
   DiagnosticBuilder Diag1(SourceLocation Loc, unsigned DiagID);

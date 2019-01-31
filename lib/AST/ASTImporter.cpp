@@ -1972,8 +1972,7 @@ getStructuralEquivalenceKind(const ASTImporter &Importer) {
 bool ASTNodeImporter::IsStructuralMatch(Decl *From, Decl *To, bool Complain) {
   StructuralEquivalenceContext Ctx(
       Importer.getFromContext(), Importer.getToContext(),
-      Importer.getNonEquivalentDecls(), getStructuralEquivalenceKind(Importer),
-      false, Complain);
+      getStructuralEquivalenceKind(Importer), false, Complain);
   return Ctx.IsEquivalent(From, To);
 }
 
@@ -1990,7 +1989,6 @@ bool ASTNodeImporter::IsStructuralMatch(RecordDecl *FromRecord,
 
   StructuralEquivalenceContext Ctx(Importer.getFromContext(),
                                    ToRecord->getASTContext(),
-                                   Importer.getNonEquivalentDecls(),
                                    getStructuralEquivalenceKind(Importer),
                                    false, Complain);
   return Ctx.IsEquivalent(FromRecord, ToRecord);
@@ -2000,8 +1998,7 @@ bool ASTNodeImporter::IsStructuralMatch(VarDecl *FromVar, VarDecl *ToVar,
                                         bool Complain) {
   StructuralEquivalenceContext Ctx(
       Importer.getFromContext(), Importer.getToContext(),
-      Importer.getNonEquivalentDecls(), getStructuralEquivalenceKind(Importer),
-      false, Complain);
+      getStructuralEquivalenceKind(Importer), false, Complain);
   return Ctx.IsEquivalent(FromVar, ToVar);
 }
 
@@ -2012,9 +2009,9 @@ bool ASTNodeImporter::IsStructuralMatch(EnumDecl *FromEnum, EnumDecl *ToEnum) {
     if (auto *ToOriginEnum = dyn_cast<EnumDecl>(ToOrigin))
         ToEnum = ToOriginEnum;
 
-  StructuralEquivalenceContext Ctx(
-      Importer.getFromContext(), Importer.getToContext(),
-      Importer.getNonEquivalentDecls(), getStructuralEquivalenceKind(Importer));
+  StructuralEquivalenceContext Ctx(Importer.getFromContext(),
+                                   Importer.getToContext(),
+                                   getStructuralEquivalenceKind(Importer));
   return Ctx.IsEquivalent(FromEnum, ToEnum);
 }
 
@@ -2022,16 +2019,14 @@ bool ASTNodeImporter::IsStructuralMatch(FunctionTemplateDecl *From,
                                         FunctionTemplateDecl *To) {
   StructuralEquivalenceContext Ctx(
       Importer.getFromContext(), Importer.getToContext(),
-      Importer.getNonEquivalentDecls(), getStructuralEquivalenceKind(Importer),
-      false, false);
+      getStructuralEquivalenceKind(Importer), false, false);
   return Ctx.IsEquivalent(From, To);
 }
 
 bool ASTNodeImporter::IsStructuralMatch(FunctionDecl *From, FunctionDecl *To) {
   StructuralEquivalenceContext Ctx(
       Importer.getFromContext(), Importer.getToContext(),
-      Importer.getNonEquivalentDecls(), getStructuralEquivalenceKind(Importer),
-      false, false);
+      getStructuralEquivalenceKind(Importer), false, false);
   return Ctx.IsEquivalent(From, To);
 }
 
@@ -2049,7 +2044,6 @@ bool ASTNodeImporter::IsStructuralMatch(ClassTemplateDecl *From,
                                         ClassTemplateDecl *To) {
   StructuralEquivalenceContext Ctx(Importer.getFromContext(),
                                    Importer.getToContext(),
-                                   Importer.getNonEquivalentDecls(),
                                    getStructuralEquivalenceKind(Importer));
   return Ctx.IsEquivalent(From, To);
 }
@@ -2058,7 +2052,6 @@ bool ASTNodeImporter::IsStructuralMatch(VarTemplateDecl *From,
                                         VarTemplateDecl *To) {
   StructuralEquivalenceContext Ctx(Importer.getFromContext(),
                                    Importer.getToContext(),
-                                   Importer.getNonEquivalentDecls(),
                                    getStructuralEquivalenceKind(Importer));
   return Ctx.IsEquivalent(From, To);
 }
@@ -8535,7 +8528,7 @@ bool ASTImporter::IsStructurallyEquivalent(QualType From, QualType To,
     }
   }
 
-  StructuralEquivalenceContext Ctx(FromContext, ToContext, NonEquivalentDecls,
+  StructuralEquivalenceContext Ctx(FromContext, ToContext,
                                    getStructuralEquivalenceKind(*this), false,
                                    Complain);
   return Ctx.IsEquivalent(From, To);

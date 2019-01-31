@@ -78,14 +78,12 @@ struct StructuralEquivalenceTest : ::testing::Test {
   }
 
   bool testStructuralMatch(Decl *D0, Decl *D1) {
-    llvm::DenseSet<std::pair<Decl *, Decl *>> NonEquivalentDecls01;
-    llvm::DenseSet<std::pair<Decl *, Decl *>> NonEquivalentDecls10;
-    StructuralEquivalenceContext Ctx01(
-        D0->getASTContext(), D1->getASTContext(),
-        NonEquivalentDecls01, StructuralEquivalenceKind::Default, false, false);
-    StructuralEquivalenceContext Ctx10(
-        D1->getASTContext(), D0->getASTContext(),
-        NonEquivalentDecls10, StructuralEquivalenceKind::Default, false, false);
+    StructuralEquivalenceContext Ctx01(D0->getASTContext(), D1->getASTContext(),
+                                       StructuralEquivalenceKind::Default,
+                                       false, false);
+    StructuralEquivalenceContext Ctx10(D1->getASTContext(), D0->getASTContext(),
+                                       StructuralEquivalenceKind::Default,
+                                       false, false);
     bool Eq01 = Ctx01.IsEquivalent(D0, D1);
     bool Eq10 = Ctx10.IsEquivalent(D1, D0);
     EXPECT_EQ(Eq01, Eq10);
