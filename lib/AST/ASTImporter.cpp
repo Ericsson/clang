@@ -7795,9 +7795,35 @@ Expected<Decl *> ASTImporter::Import(Decl *FromD) {
   ExpectedDecl ToDOrErr = ImportImpl(FromD);
   if (!ToDOrErr) {
     // Failed to import.
-    // Take out the existing (probably invalid) object from the mapping.
-    // FIXME: There may be remaining references to the failed object.
-    ImportedDecls.erase(FromD);
+
+    auto Pos = ImportedDecls.find(FromD);
+    if (Pos != ImportedDecls.end()) {
+      // Import failed after the object was created.
+      // Remove all references to it.
+      auto *ToD = Pos->second;
+      ImportedDecls.erase(Pos);
+
+      // ImportedDecls and ImportedFromDecls are not symmetric.  It may happen
+      // (e.g. with namespaces) that several decls from the 'from' context are
+      // mapped to the same decl in the 'to' context.  If we removed entries
+      // from the LookupTable here then we may end up removing them multiple
+      // times.
+
+      // The Lookuptable contains decls only which are in the 'to' context.
+      // Remove from the Lookuptable only if it is *imported* into the 'to'
+      // context (and do not remove it if it was added during the initial
+      // traverse of the 'to' context).
+      auto PosF = ImportedFromDecls.find(ToD);
+      if (PosF != ImportedFromDecls.end()) {
+        if (LookupTable)
+          if (auto *ToND = dyn_cast<NamedDecl>(ToD))
+            LookupTable->remove(ToND);
+        ImportedFromDecls.erase(PosF);
+      }
+
+      // FIXME: AST may contain remaining references to the failed object.
+    }
+
     if (!getImportDeclErrorIfAny(FromD)) {
       // Error encountered for the first time.
       // After takeError the error is not usable any more in ToDOrErr.
@@ -7806,6 +7832,7 @@ Expected<Decl *> ASTImporter::Import(Decl *FromD) {
       handleAllErrors(ToDOrErr.takeError(),
                       [&ErrOut](const ImportError &E) { ErrOut = E; });
       setImportDeclError(FromD, ErrOut);
+      // Do not return ToDOrErr, error was taken out of it.
       return make_error<ImportError>(ErrOut);
     }
     return ToDOrErr;
@@ -7823,20 +7850,8 @@ Expected<Decl *> ASTImporter::Import(Decl *FromD) {
     return make_error<ImportError>(*Err);
   }
 
-  // FIXME Use getImportDeclErrorIfAny() here (and return with the error) once
-  // the error handling is finished in GetImportedOrCreateSpecialDecl().
-  if (!ToD) {
-    return nullptr;
-  }
-
   // Make sure that ImportImpl registered the imported decl.
   assert(ImportedDecls.count(FromD) != 0 && "Missing call to MapImported?");
-
-  // Once the decl is connected to the existing declarations, i.e. when the
-  // redecl chain is properly set then we populate the lookup again.
-  // This way the primary context will be able to find all decls.
-  AddToLookupTable(ToD);
-
   // Notify subclasses.
   Imported(FromD, ToD);
 
@@ -8542,6 +8557,7 @@ Decl *ASTImporter::MapImported(Decl *From, Decl *To) {
   // This mapping should be maintained only in this function. Therefore do not
   // check for additional consistency.
   ImportedFromDecls[To] = From;
+  AddToLookupTable(To);
   return To;
 }
 

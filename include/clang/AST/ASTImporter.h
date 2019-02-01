@@ -394,6 +394,8 @@ class TypeSourceInfo;
     void RegisterImportedDecl(Decl *FromD, Decl *ToD);
 
     /// Store and assign the imported declaration to its counterpart.
+    /// It may happen that several decls from the 'from' context are mapped to
+    /// the same decl in the 'to' context.
     Decl *MapImported(Decl *From, Decl *To);
 
     /// Called by StructuralEquivalenceContext.  If a RecordDecl is
