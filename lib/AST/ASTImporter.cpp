@@ -677,22 +677,6 @@ ASTNodeImporter::ImportFunctionTemplateWithTemplateArgsFromSpecialization(
   return Result;
 }
 
-Error ASTNodeImporter::ImportTemplateParameterLists(const DeclaratorDecl *FromD,
-                                                    DeclaratorDecl *ToD) {
-  unsigned int Num = FromD->getNumTemplateParameterLists();
-  if (Num == 0)
-    return Error::success();
-  SmallVector<TemplateParameterList *, 2> ToTPLists(Num);
-  for (unsigned int I = 0; I < Num; ++I)
-    if (Expected<TemplateParameterList *> ToTPListOrErr =
-            import(FromD->getTemplateParameterList(I)))
-      ToTPLists[I] = *ToTPListOrErr;
-    else
-      return ToTPListOrErr.takeError();
-  ToD->setTemplateParameterListsInfo(Importer.ToContext, ToTPLists);
-  return Error::success();
-}
-
 template <>
 Expected<TemplateParameterList *>
 ASTNodeImporter::import(TemplateParameterList *From) {
@@ -922,6 +906,22 @@ Expected<LambdaCapture> ASTNodeImporter::import(const LambdaCapture &From) {
   return LambdaCapture(
       *LocationOrErr, From.isImplicit(), From.getCaptureKind(), Var,
       EllipsisLoc);
+}
+
+Error ASTNodeImporter::ImportTemplateParameterLists(const DeclaratorDecl *FromD,
+                                                    DeclaratorDecl *ToD) {
+  unsigned int Num = FromD->getNumTemplateParameterLists();
+  if (Num == 0)
+    return Error::success();
+  SmallVector<TemplateParameterList *, 2> ToTPLists(Num);
+  for (unsigned int I = 0; I < Num; ++I)
+    if (Expected<TemplateParameterList *> ToTPListOrErr =
+            import(FromD->getTemplateParameterList(I)))
+      ToTPLists[I] = *ToTPListOrErr;
+    else
+      return ToTPListOrErr.takeError();
+  ToD->setTemplateParameterListsInfo(Importer.ToContext, ToTPLists);
+  return Error::success();
 }
 
 } // namespace clang
