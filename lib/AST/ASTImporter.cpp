@@ -383,8 +383,6 @@ namespace clang {
     Error ImportDefinition(
         ObjCProtocolDecl *From, ObjCProtocolDecl *To,
         ImportDefinitionKind Kind = IDK_Default);
-    Expected<TemplateParameterList *> ImportTemplateParameterList(
-        TemplateParameterList *Params);
     Error ImportTemplateArguments(
         const TemplateArgument *FromArgs, unsigned NumFromArgs,
         SmallVectorImpl<TemplateArgument> &ToArgs);
@@ -1901,40 +1899,6 @@ Error ASTNodeImporter::ImportDefinition(
   return Error::success();
 }
 
-// FIXME: Remove this, use `import` instead.
-Expected<TemplateParameterList *> ASTNodeImporter::ImportTemplateParameterList(
-    TemplateParameterList *Params) {
-  SmallVector<NamedDecl *, 4> ToParams(Params->size());
-  if (Error Err = ImportContainerChecked(*Params, ToParams))
-    return std::move(Err);
-
-  Expr *ToRequiresClause;
-  if (Expr *const R = Params->getRequiresClause()) {
-    if (Error Err = importInto(ToRequiresClause, R))
-      return std::move(Err);
-  } else {
-    ToRequiresClause = nullptr;
-  }
-
-  auto ToTemplateLocOrErr = import(Params->getTemplateLoc());
-  if (!ToTemplateLocOrErr)
-    return ToTemplateLocOrErr.takeError();
-  auto ToLAngleLocOrErr = import(Params->getLAngleLoc());
-  if (!ToLAngleLocOrErr)
-    return ToLAngleLocOrErr.takeError();
-  auto ToRAngleLocOrErr = import(Params->getRAngleLoc());
-  if (!ToRAngleLocOrErr)
-    return ToRAngleLocOrErr.takeError();
-
-  return TemplateParameterList::Create(
-      Importer.getToContext(),
-      *ToTemplateLocOrErr,
-      *ToLAngleLocOrErr,
-      ToParams,
-      *ToRAngleLocOrErr,
-      ToRequiresClause);
-}
-
 Error ASTNodeImporter::ImportTemplateArguments(
     const TemplateArgument *FromArgs, unsigned NumFromArgs,
     SmallVectorImpl<TemplateArgument> &ToArgs) {
@@ -3420,7 +3384,7 @@ ExpectedDecl ASTNodeImporter::VisitFriendDecl(FriendDecl *D) {
   SmallVector<TemplateParameterList *, 1> ToTPLists(D->NumTPLists);
   auto **FromTPLists = D->getTrailingObjects<TemplateParameterList *>();
   for (unsigned I = 0; I < D->NumTPLists; I++) {
-    if (auto ListOrErr = ImportTemplateParameterList(FromTPLists[I]))
+    if (auto ListOrErr = import(FromTPLists[I]))
       ToTPLists[I] = *ListOrErr;
     else
       return ListOrErr.takeError();
@@ -4855,8 +4819,7 @@ ASTNodeImporter::VisitTemplateTemplateParmDecl(TemplateTemplateParmDecl *D) {
     return LocationOrErr.takeError();
 
   // Import template parameters.
-  auto TemplateParamsOrErr = ImportTemplateParameterList(
-      D->getTemplateParameters());
+  auto TemplateParamsOrErr = import(D->getTemplateParameters());
   if (!TemplateParamsOrErr)
     return TemplateParamsOrErr.takeError();
 
@@ -4938,8 +4901,7 @@ ExpectedDecl ASTNodeImporter::VisitClassTemplateDecl(ClassTemplateDecl *D) {
     return std::move(Err);
 
   // Create the class template declaration itself.
-  auto TemplateParamsOrErr = ImportTemplateParameterList(
-      D->getTemplateParameters());
+  auto TemplateParamsOrErr = import(D->getTemplateParameters());
   if (!TemplateParamsOrErr)
     return TemplateParamsOrErr.takeError();
 
@@ -5073,8 +5035,7 @@ ExpectedDecl ASTNodeImporter::VisitClassTemplateSpecializationDecl(
       return std::move(Err);
     CanonInjType = CanonInjType.getCanonicalType();
 
-    auto ToTPListOrErr = ImportTemplateParameterList(
-        PartialSpec->getTemplateParameters());
+    auto ToTPListOrErr = import(PartialSpec->getTemplateParameters());
     if (!ToTPListOrErr)
       return ToTPListOrErr.takeError();
 
@@ -5224,8 +5185,7 @@ ExpectedDecl ASTNodeImporter::VisitVarTemplateDecl(VarTemplateDecl *D) {
     return std::move(Err);
 
   // Create the variable template declaration itself.
-  auto TemplateParamsOrErr = ImportTemplateParameterList(
-      D->getTemplateParameters());
+  auto TemplateParamsOrErr = import(D->getTemplateParameters());
   if (!TemplateParamsOrErr)
     return TemplateParamsOrErr.takeError();
 
@@ -5330,8 +5290,7 @@ ExpectedDecl ASTNodeImporter::VisitVarTemplateSpecializationDecl(
           *FromTAArgsAsWritten, ArgInfos))
         return std::move(Err);
 
-      auto ToTPListOrErr = ImportTemplateParameterList(
-          FromPartial->getTemplateParameters());
+      auto ToTPListOrErr = import(FromPartial->getTemplateParameters());
       if (!ToTPListOrErr)
         return ToTPListOrErr.takeError();
 
@@ -5438,8 +5397,7 @@ ASTNodeImporter::VisitFunctionTemplateDecl(FunctionTemplateDecl *D) {
     } // for
   }
 
-  auto ParamsOrErr = ImportTemplateParameterList(
-      D->getTemplateParameters());
+  auto ParamsOrErr = import(D->getTemplateParameters());
   if (!ParamsOrErr)
     return ParamsOrErr.takeError();
 
