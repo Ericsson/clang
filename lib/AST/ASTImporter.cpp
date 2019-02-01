@@ -7983,9 +7983,11 @@ ASTImporter::Import(NestedNameSpecifierLoc FromNNS) {
       TypeSourceInfo *TSI = getToContext().getTrivialTypeSourceInfo(
             QualType(Spec->getAsType(), 0), ToTLoc);
       if (Kind == NestedNameSpecifier::TypeSpecWithTemplate)
+        // ToLocalBeginLoc is here the location of the 'template' keyword.
         Builder.Extend(getToContext(), ToLocalBeginLoc, TSI->getTypeLoc(),
                        ToLocalEndLoc);
       else
+        // No location for 'template' keyword here.
         Builder.Extend(getToContext(), SourceLocation{}, TSI->getTypeLoc(),
                        ToLocalEndLoc);
       break;
