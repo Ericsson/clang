@@ -27,19 +27,30 @@ struct Builder : RecursiveASTVisitor<Builder> {
     LT.add(D);
     return true;
   }
+  // In most cases the FriendDecl inside the referencing class contains the
+  // declaration of the "befriended class" as a child node, so it is discovered
+  // during the recursive visitation. Dependent types behave this way. In some
+  // other cases the non-child "befriended class" must be fetched explicitly
+  // from the FriendDecl, and only then can we add it to the lookup table.
   bool VisitFriendDecl(FriendDecl *D) {
     if (D->getFriendType()) {
       QualType Ty = D->getFriendType()->getType();
       if (isa<ElaboratedType>(Ty))
         Ty = cast<ElaboratedType>(Ty)->getNamedType();
       if (!Ty->isDependentType()) {
+        // We are concerning ourselves with the case where the type of the
+        // declared type is not dependent, as friend declaration with a
+        // dependent type produces the correct AST structure.
         if (const auto *RTy = dyn_cast<RecordType>(Ty))
           LT.add(RTy->getAsCXXRecordDecl());
-        else if (const auto *SpecTy =
-                     dyn_cast<TemplateSpecializationType>(Ty))
+        else if (const auto *SpecTy = dyn_cast<TemplateSpecializationType>(Ty))
           LT.add(SpecTy->getAsCXXRecordDecl());
-        else
+        else if (isa<TypedefType>(Ty)) {
+          // If we have a forward declaration of an aliased type, nothing
+          // should be done.
+        } else {
           llvm_unreachable("Unhandled type of friend class");
+        }
       }
     }
     return true;

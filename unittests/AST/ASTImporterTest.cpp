@@ -4372,8 +4372,20 @@ TEST_P(ASTImporterLookupTableTest, LookupDeclNamesFromDifferentTUs) {
   ASSERT_EQ(Res.size(), 0u);
 }
 
+static QualType getUnderlyingType(const TypedefType *TDT) {
+  QualType T = TDT->getDecl()->getUnderlyingType();
+
+  if (const auto *Inner = dyn_cast<TypedefType>(T.getTypePtr()))
+    return getUnderlyingType(Inner);
+
+  return T;
+}
+
 static const RecordDecl * getRecordDeclOfFriend(FriendDecl *FD) {
   QualType Ty = FD->getFriendType()->getType();
+  if (auto *Inner = dyn_cast<TypedefType>(Ty.getTypePtr())) {
+    Ty = getUnderlyingType(Inner);
+  }
   if (isa<ElaboratedType>(Ty))
     Ty = cast<ElaboratedType>(Ty)->getNamedType();
   return cast<RecordType>(Ty)->getDecl();
@@ -4427,6 +4439,20 @@ TEST_P(ASTImporterLookupTableTest,
 
   Res = LT.lookup(Y, Name);
   EXPECT_EQ(Res.size(), 0u);
+}
+
+TEST_P(ASTImporterLookupTableTest,
+       LookupFindsFriendClassDeclWithTypeAliasDoesNotAssert) {
+  TranslationUnitDecl *ToTU = getToTuDecl(
+      R"(
+      class F;
+      using alias_of_f = F;
+      class Y { friend alias_of_f; };
+      )",
+      Lang_CXX11);
+
+  // ASTImporterLookupTable constructor handles using declarations correctly.
+  ASTImporterLookupTable LT(*ToTU);
 }
 
 TEST_P(ASTImporterLookupTableTest, LookupFindsFwdFriendClassTemplateDecl) {
