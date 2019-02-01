@@ -163,12 +163,22 @@ static bool IsStructurallyEquivalent(StructuralEquivalenceContext &Context,
 static bool IsStructurallyEquivalent(StructuralEquivalenceContext &Context,
                                      const TemplateName &N1,
                                      const TemplateName &N2) {
+  auto SingleOrQualified = [](const TemplateName &N) {
+    return N.getKind() == TemplateName::Template ||
+           N.getKind() == TemplateName::QualifiedTemplate;
+  };
+  if (SingleOrQualified(N1)) {
+    return SingleOrQualified(N2) &&
+           IsStructurallyEquivalent(Context, N1.getAsTemplateDecl(),
+                                    N2.getAsTemplateDecl());
+  }
+
   if (N1.getKind() != N2.getKind())
     return false;
   switch (N1.getKind()) {
   case TemplateName::Template:
-    return IsStructurallyEquivalent(Context, N1.getAsTemplateDecl(),
-                                    N2.getAsTemplateDecl());
+  case TemplateName::QualifiedTemplate:
+    llvm_unreachable("Single or unqualified templates are handled above");
 
   case TemplateName::OverloadedTemplate: {
     OverloadedTemplateStorage *OS1 = N1.getAsOverloadedTemplate(),
@@ -179,14 +189,6 @@ static bool IsStructurallyEquivalent(StructuralEquivalenceContext &Context,
       if (!IsStructurallyEquivalent(Context, *I1, *I2))
         return false;
     return I1 == E1 && I2 == E2;
-  }
-
-  case TemplateName::QualifiedTemplate: {
-    QualifiedTemplateName *QN1 = N1.getAsQualifiedTemplateName(),
-                          *QN2 = N2.getAsQualifiedTemplateName();
-    return IsStructurallyEquivalent(Context, QN1->getDecl(), QN2->getDecl()) &&
-           IsStructurallyEquivalent(Context, QN1->getQualifier(),
-                                    QN2->getQualifier());
   }
 
   case TemplateName::DependentTemplate: {
