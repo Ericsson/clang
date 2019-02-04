@@ -7649,6 +7649,12 @@ Expected<QualType> ASTImporter::Import(QualType FromT) {
 
 namespace clang {
 
+#define IMPORT(NAME) \
+if (auto ImpOrErr = Importer.Import(From.get##NAME())) \
+  To.set##NAME(*ImpOrErr); \
+else \
+  return ImpOrErr.takeError();
+
 // Import TypeLoc information.
 // TypeLocReader in ASTReader.cpp gives hints about what to import.
 // (At some ObjC types not every existing location is copied.)
@@ -7662,10 +7668,7 @@ public:
 
   Error VisitTypeSpecTypeLoc(TypeSpecTypeLoc From) {
     auto To = ToL.castAs<TypeSpecTypeLoc>();
-    if (ExpectedSLoc L = Importer.Import(From.getNameLoc()))
-      To.setNameLoc(*L);
-    else
-      return L.takeError();
+    IMPORT(NameLoc);
     return Error::success();
   }
 
@@ -7737,128 +7740,78 @@ public:
 
   Error VisitBuiltinTypeLoc(BuiltinTypeLoc From) {
     auto To = ToL.castAs<BuiltinTypeLoc>();
-    if (ExpectedSLoc L = Importer.Import(From.getBuiltinLoc()))
-      To.setBuiltinLoc(*L);
-    else
-      return L.takeError();
+    IMPORT(BuiltinLoc);
     // FIXME: Import other attributes?
     return Error::success();
   }
 
   Error VisitParenTypeLoc(ParenTypeLoc From) {
     auto To = ToL.castAs<ParenTypeLoc>();
-    if (ExpectedSLoc L = Importer.Import(From.getLParenLoc()))
-      To.setLParenLoc(*L);
-    else
-      return L.takeError();
-    if (ExpectedSLoc L = Importer.Import(From.getRParenLoc()))
-      To.setRParenLoc(*L);
-    else
-      return L.takeError();
+
+    IMPORT(LParenLoc);
+    IMPORT(RParenLoc);
+
     return Error::success();
   }
 
   Error VisitBlockPointerTypeLoc(BlockPointerTypeLoc From) {
     auto To = ToL.castAs<BlockPointerTypeLoc>();
-    if (ExpectedSLoc L = Importer.Import(From.getCaretLoc()))
-      To.setCaretLoc(*L);
-    else
-      return L.takeError();
+    IMPORT(CaretLoc);
     return Error::success();
   }
 
   Error VisitMemberPointerTypeLoc(MemberPointerTypeLoc From) {
     auto To = ToL.castAs<MemberPointerTypeLoc>();
-    if (ExpectedSLoc L = Importer.Import(From.getStarLoc()))
-      To.setStarLoc(*L);
-    else
-      return L.takeError();
+    IMPORT(StarLoc);
     return Error::success();
   }
 
   Error VisitLValueReferenceTypeLoc(LValueReferenceTypeLoc From) {
     auto To = ToL.castAs<LValueReferenceTypeLoc>();
-    if (ExpectedSLoc L = Importer.Import(From.getAmpLoc()))
-      To.setAmpLoc(*L);
-    else
-      return L.takeError();
+    IMPORT(AmpLoc);
     return Error::success();
   }
 
   Error VisitRValueReferenceTypeLoc(RValueReferenceTypeLoc From) {
     auto To = ToL.castAs<RValueReferenceTypeLoc>();
-    if (ExpectedSLoc L = Importer.Import(From.getAmpAmpLoc()))
-      To.setAmpAmpLoc(*L);
-    else
-      return L.takeError();
+    IMPORT(AmpAmpLoc);
     return Error::success();
   }
 
   Error VisitFunctionTypeLoc(FunctionTypeLoc From) {
     auto To = ToL.castAs<FunctionTypeLoc>();
-    if (ExpectedSLoc L = Importer.Import(From.getLocalRangeBegin()))
-      To.setLocalRangeBegin(*L);
-    else
-      return L.takeError();
-    if (ExpectedSLoc L = Importer.Import(From.getLocalRangeEnd()))
-      To.setLocalRangeEnd(*L);
-    else
-      return L.takeError();
-    if (ExpectedSLoc L = Importer.Import(From.getLParenLoc()))
-      To.setLParenLoc(*L);
-    else
-      return L.takeError();
-    if (ExpectedSLoc L = Importer.Import(From.getRParenLoc()))
-      To.setRParenLoc(*L);
-    else
-      return L.takeError();
-    if (Expected<SourceRange> R = Importer.Import(From.getExceptionSpecRange()))
-      To.setExceptionSpecRange(*R);
-    else
-      return R.takeError();
+
+    IMPORT(LocalRangeBegin);
+    IMPORT(LocalRangeEnd);
+    IMPORT(LParenLoc);
+    IMPORT(RParenLoc);
+    IMPORT(ExceptionSpecRange);
+
     for (unsigned I = 0; I < From.getNumParams(); ++I) {
       // FIXME: Import params?
       // (avoided because import of a Decl may cause complication)
       To.setParam(I, nullptr);
     }
+
     return Error::success();
   }
 
   Error VisitArrayTypeLoc(ArrayTypeLoc From) {
     auto To = ToL.castAs<ArrayTypeLoc>();
-    if (ExpectedSLoc L = Importer.Import(From.getLBracketLoc()))
-      To.setLBracketLoc(*L);
-    else
-      return L.takeError();
-    if (ExpectedSLoc L = Importer.Import(From.getRBracketLoc()))
-      To.setRBracketLoc(*L);
-    else
-      return L.takeError();
-    if (ExpectedExpr E = Importer.Import(From.getSizeExpr()))
-      To.setSizeExpr(*E);
-    else
-      return E.takeError();
+    IMPORT(LBracketLoc);
+    IMPORT(RBracketLoc);
+    IMPORT(SizeExpr);
     return Error::success();
   }
 
   Error VisitTemplateSpecializationTypeLoc(TemplateSpecializationTypeLoc From) {
     auto To = ToL.castAs<TemplateSpecializationTypeLoc>();
-    if (ExpectedSLoc L = Importer.Import(From.getTemplateKeywordLoc()))
-      To.setTemplateKeywordLoc(*L);
-    else
-      return L.takeError();
-    if (ExpectedSLoc L = Importer.Import(From.getLAngleLoc()))
-      To.setLAngleLoc(*L);
-    else
-      return L.takeError();
-    if (ExpectedSLoc L = Importer.Import(From.getRAngleLoc()))
-      To.setRAngleLoc(*L);
-    else
-      return L.takeError();
-    if (ExpectedSLoc L = Importer.Import(From.getTemplateNameLoc()))
-      To.setTemplateNameLoc(*L);
-    else
-      return L.takeError();
+
+    IMPORT(TemplateKeywordLoc);
+    IMPORT(LAngleLoc);
+    IMPORT(RAngleLoc);
+    IMPORT(TemplateNameLoc);
+
     ASTNodeImporter NodeImporter(Importer);
     for (unsigned I = 0; I < From.getNumArgs(); ++I) {
       if (Expected<TemplateArgumentLoc> TAL =
@@ -7873,121 +7826,60 @@ public:
 
   Error VisitDependentAddressSpaceTypeLoc(DependentAddressSpaceTypeLoc From) {
     auto To = ToL.castAs<DependentAddressSpaceTypeLoc>();
-    if (ExpectedSLoc L = Importer.Import(From.getAttrNameLoc()))
-      To.setAttrNameLoc(*L);
-    else
-      return L.takeError();
-    if (Expected<SourceRange> R =
-            Importer.Import(From.getAttrOperandParensRange()))
-      To.setAttrOperandParensRange(*R);
-    else
-      return R.takeError();
+    IMPORT(AttrNameLoc);
+    IMPORT(AttrOperandParensRange);
     // FIXME: Import other things?
     return Error::success();
   }
 
   Error VisitTypeOfTypeLoc(TypeOfTypeLoc From) {
     auto To = ToL.castAs<TypeOfTypeLoc>();
-    if (Expected<TypeSourceInfo *> TSI =
-            Importer.Import(From.getUnderlyingTInfo()))
-      To.setUnderlyingTInfo(*TSI);
-    else
-      return TSI.takeError();
+    IMPORT(UnderlyingTInfo);
     return Error::success();
   }
 
   Error VisitUnaryTransformTypeLoc(UnaryTransformTypeLoc From) {
     auto To = ToL.castAs<UnaryTransformTypeLoc>();
-    if (ExpectedSLoc L = Importer.Import(From.getKWLoc()))
-      To.setKWLoc(*L);
-    else
-      return L.takeError();
-    if (ExpectedSLoc L = Importer.Import(From.getLParenLoc()))
-      To.setLParenLoc(*L);
-    else
-      return L.takeError();
-    if (ExpectedSLoc L = Importer.Import(From.getRParenLoc()))
-      To.setRParenLoc(*L);
-    else
-      return L.takeError();
-    if (Expected<TypeSourceInfo *> TSI =
-            Importer.Import(From.getUnderlyingTInfo()))
-      To.setUnderlyingTInfo(*TSI);
-    else
-      return TSI.takeError();
+    IMPORT(KWLoc);
+    IMPORT(LParenLoc);
+    IMPORT(RParenLoc);
+    IMPORT(UnderlyingTInfo);
     return Error::success();
   }
 
   Error VisitDeducedTemplateSpecializationTypeLoc(
       DeducedTemplateSpecializationTypeLoc From) {
     auto To = ToL.castAs<DeducedTemplateSpecializationTypeLoc>();
-    if (ExpectedSLoc L = Importer.Import(From.getTemplateNameLoc()))
-      To.setTemplateNameLoc(*L);
-    else
-      return L.takeError();
+    IMPORT(TemplateNameLoc);
     return Error::success();
   }
 
   Error VisitElaboratedTypeLoc(ElaboratedTypeLoc From) {
     auto To = ToL.castAs<ElaboratedTypeLoc>();
-    if (ExpectedSLoc L = Importer.Import(From.getElaboratedKeywordLoc()))
-      To.setElaboratedKeywordLoc(*L);
-    else
-      return L.takeError();
-    if (Expected<NestedNameSpecifierLoc> L =
-            Importer.Import(From.getQualifierLoc()))
-      To.setQualifierLoc(*L);
-    else
-      return L.takeError();
+    IMPORT(ElaboratedKeywordLoc);
+    IMPORT(QualifierLoc);
     return Error::success();
   }
 
   Error VisitDependentNameTypeLoc(DependentNameTypeLoc From) {
     auto To = ToL.castAs<DependentNameTypeLoc>();
-    if (ExpectedSLoc L = Importer.Import(From.getElaboratedKeywordLoc()))
-      To.setElaboratedKeywordLoc(*L);
-    else
-      return L.takeError();
-    if (Expected<NestedNameSpecifierLoc> L =
-            Importer.Import(From.getQualifierLoc()))
-      To.setQualifierLoc(*L);
-    else
-      return L.takeError();
-    if (ExpectedSLoc L = Importer.Import(From.getNameLoc()))
-      To.setNameLoc(*L);
-    else
-      return L.takeError();
+    IMPORT(ElaboratedKeywordLoc);
+    IMPORT(QualifierLoc);
+    IMPORT(NameLoc);
     return Error::success();
   }
 
   Error VisitDependentTemplateSpecializationTypeLoc(
       DependentTemplateSpecializationTypeLoc From) {
     auto To = ToL.castAs<DependentTemplateSpecializationTypeLoc>();
-    if (ExpectedSLoc L = Importer.Import(From.getElaboratedKeywordLoc()))
-      To.setElaboratedKeywordLoc(*L);
-    else
-      return L.takeError();
-    if (Expected<NestedNameSpecifierLoc> L =
-            Importer.Import(From.getQualifierLoc()))
-      To.setQualifierLoc(*L);
-    else
-      return L.takeError();
-    if (ExpectedSLoc L = Importer.Import(From.getTemplateKeywordLoc()))
-      To.setTemplateKeywordLoc(*L);
-    else
-      return L.takeError();
-    if (ExpectedSLoc L = Importer.Import(From.getTemplateNameLoc()))
-      To.setTemplateNameLoc(*L);
-    else
-      return L.takeError();
-    if (ExpectedSLoc L = Importer.Import(From.getLAngleLoc()))
-      To.setLAngleLoc(*L);
-    else
-      return L.takeError();
-    if (ExpectedSLoc L = Importer.Import(From.getRAngleLoc()))
-      To.setRAngleLoc(*L);
-    else
-      return L.takeError();
+
+    IMPORT(ElaboratedKeywordLoc);
+    IMPORT(QualifierLoc);
+    IMPORT(TemplateKeywordLoc);
+    IMPORT(TemplateNameLoc);
+    IMPORT(LAngleLoc);
+    IMPORT(RAngleLoc);
+
     ASTNodeImporter NodeImporter(Importer);
     for (unsigned I = 0; I < From.getNumArgs(); ++I) {
       if (Expected<TemplateArgumentLoc> TAL =
@@ -7996,55 +7888,35 @@ public:
       else
         return TAL.takeError();
     }
+
     return Error::success();
   }
 
   Error VisitPackExpansionTypeLoc(PackExpansionTypeLoc From) {
     auto To = ToL.castAs<PackExpansionTypeLoc>();
-    if (ExpectedSLoc L = Importer.Import(From.getEllipsisLoc()))
-      To.setEllipsisLoc(*L);
-    else
-      return L.takeError();
+    IMPORT(EllipsisLoc);
     return Error::success();
   }
 
   Error VisitAtomicTypeLoc(AtomicTypeLoc From) {
     auto To = ToL.castAs<AtomicTypeLoc>();
-    if (ExpectedSLoc L = Importer.Import(From.getKWLoc()))
-      To.setKWLoc(*L);
-    else
-      return L.takeError();
-    if (ExpectedSLoc L = Importer.Import(From.getLParenLoc()))
-      To.setLParenLoc(*L);
-    else
-      return L.takeError();
-    if (ExpectedSLoc L = Importer.Import(From.getRParenLoc()))
-      To.setRParenLoc(*L);
-    else
-      return L.takeError();
+    IMPORT(KWLoc);
+    IMPORT(LParenLoc);
+    IMPORT(RParenLoc);
     return Error::success();
   }
 
   Error VisitPipeTypeLoc(PipeTypeLoc From) {
     auto To = ToL.castAs<PipeTypeLoc>();
-    if (ExpectedSLoc L = Importer.Import(From.getKWLoc()))
-      To.setKWLoc(*L);
-    else
-      return L.takeError();
+    IMPORT(KWLoc);
     return Error::success();
   }
 
   Error VisitObjCTypeParamTypeLoc(ObjCTypeParamTypeLoc From) {
     auto To = ToL.castAs<ObjCTypeParamTypeLoc>();
     if (From.getNumProtocols()) {
-      if (ExpectedSLoc L = Importer.Import(From.getProtocolLAngleLoc()))
-        To.setProtocolLAngleLoc(*L);
-      else
-        return L.takeError();
-      if (ExpectedSLoc L = Importer.Import(From.getProtocolRAngleLoc()))
-        To.setProtocolRAngleLoc(*L);
-      else
-        return L.takeError();
+      IMPORT(ProtocolLAngleLoc);
+      IMPORT(ProtocolRAngleLoc);
       for (unsigned I = 0; I < From.getNumProtocols(); ++I) {
         if (ExpectedSLoc L = Importer.Import(From.getProtocolLoc(I)))
           To.setProtocolLoc(I, *L);
@@ -8058,14 +7930,8 @@ public:
   Error VisitObjCObjectTypeLoc(ObjCObjectTypeLoc From) {
     auto To = ToL.castAs<ObjCObjectTypeLoc>();
 
-    if (ExpectedSLoc L = Importer.Import(From.getTypeArgsLAngleLoc()))
-      To.setTypeArgsLAngleLoc(*L);
-    else
-      return L.takeError();
-    if (ExpectedSLoc L = Importer.Import(From.getTypeArgsRAngleLoc()))
-      To.setTypeArgsRAngleLoc(*L);
-    else
-      return L.takeError();
+    IMPORT(TypeArgsLAngleLoc);
+    IMPORT(TypeArgsRAngleLoc);
 
     for (unsigned I = 0; I < From.getNumTypeArgs(); ++I) {
       if (Expected<TypeSourceInfo *> TSI =
@@ -8075,14 +7941,8 @@ public:
         return TSI.takeError();
     }
 
-    if (ExpectedSLoc L = Importer.Import(From.getProtocolLAngleLoc()))
-      To.setProtocolLAngleLoc(*L);
-    else
-      return L.takeError();
-    if (ExpectedSLoc L = Importer.Import(From.getProtocolRAngleLoc()))
-      To.setProtocolRAngleLoc(*L);
-    else
-      return L.takeError();
+    IMPORT(ProtocolLAngleLoc);
+    IMPORT(ProtocolRAngleLoc);
 
     for (unsigned I = 0; I < From.getNumProtocols(); ++I) {
       if (ExpectedSLoc L = Importer.Import(From.getProtocolLoc(I)))
@@ -8098,21 +7958,13 @@ public:
 
   Error VisitObjCInterfaceTypeLoc(ObjCInterfaceTypeLoc From) {
     auto To = ToL.castAs<ObjCInterfaceTypeLoc>();
-
-    if (ExpectedSLoc L = Importer.Import(From.getNameLoc()))
-      To.setNameLoc(*L);
-    else
-      return L.takeError();
-
+    IMPORT(NameLoc);
     return Error::success();
   }
 
   Error VisitObjCObjectPointerTypeLoc(ObjCObjectPointerTypeLoc From) {
     auto To = ToL.castAs<ObjCObjectPointerTypeLoc>();
-    if (ExpectedSLoc L = Importer.Import(From.getStarLoc()))
-      To.setStarLoc(*L);
-    else
-      return L.takeError();
+    IMPORT(StarLoc);
     return Error::success();
   }
 
