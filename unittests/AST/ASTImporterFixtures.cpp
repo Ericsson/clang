@@ -97,10 +97,11 @@ void checkImportedSourceLocations(const Decl *FromD, const Decl *ToD) {
   if (Print)
     llvm::errs() << "----\n";
 
-  //if (ToLoc == std::sregex_iterator() && FromLoc != std::sregex_iterator())
-    // From AST is bigger but may have a matching prefix.
+  // If the from AST is bigger it may have a matching prefix, ignore this case:
+  // ToLoc == std::sregex_iterator() && FromLoc != std::sregex_iterator()
+
+  // If the To AST is bigger (or has more source locations), indicate error.
   if (FromLoc == std::sregex_iterator() && ToLoc != std::sregex_iterator())
-    // To AST is bigger (or more source locations), should not occur.
     Fail = true;
 
   assert(!Fail && "SourceLocation import error was found.");
