@@ -42,6 +42,7 @@
 #include "clang/AST/TemplateName.h"
 #include "clang/AST/Type.h"
 #include "clang/AST/TypeLoc.h"
+#include "clang/AST/TypeLocVisitor.h"
 #include "clang/AST/TypeVisitor.h"
 #include "clang/AST/UnresolvedSet.h"
 #include "clang/Basic/ExceptionSpecificationType.h"
@@ -644,6 +645,8 @@ namespace clang {
 
     Expected<FunctionDecl *> FindFunctionTemplateSpecialization(
         FunctionDecl *FromFD);
+
+    friend class TypeLocImporter;
   };
 
 template <typename InContainerTy>
@@ -7952,20 +7955,354 @@ Expected<QualType> ASTImporter::Import(QualType FromT) {
   return ToContext.getQualifiedType(*ToTOrErr, FromT.getLocalQualifiers());
 }
 
+namespace clang {
+
+#define IMPORT(NAME)                                                           \
+  if (auto ImpOrErr = Importer.Import(From.get##NAME()))                       \
+    To.set##NAME(*ImpOrErr);                                                   \
+  else                                                                         \
+    return ImpOrErr.takeError();
+
+// Import TypeLoc information.
+// TypeLocReader in ASTReader.cpp gives hints about what to import.
+// (At some ObjC types not every existing location is copied.)
+class TypeLocImporter : public TypeLocVisitor<TypeLocImporter, Error> {
+  ASTImporter &Importer;
+  TypeLoc ToL;
+
+public:
+  TypeLocImporter(ASTImporter &Importer, TypeLoc ToL)
+      : Importer(Importer), ToL(ToL) {}
+
+  Error VisitTypeSpecTypeLoc(TypeSpecTypeLoc From) {
+    auto To = ToL.castAs<TypeSpecTypeLoc>();
+    IMPORT(NameLoc);
+    return Error::success();
+  }
+
+  Error VisitTypedefTypeLoc(TypedefTypeLoc From) {
+    return VisitTypeSpecTypeLoc(From);
+  }
+
+  Error VisitInjectedClassNameTypeLoc(InjectedClassNameTypeLoc From) {
+    return VisitTypeSpecTypeLoc(From);
+  }
+
+  Error VisitUnresolvedUsingTypeLoc(UnresolvedUsingTypeLoc From) {
+    return VisitTypeSpecTypeLoc(From);
+  }
+
+  Error VisitRecordTypeLoc(RecordTypeLoc From) {
+    return VisitTypeSpecTypeLoc(From);
+  }
+
+  Error VisitEnumTypeLoc(EnumTypeLoc From) {
+    return VisitTypeSpecTypeLoc(From);
+  }
+
+  Error VisitTemplateTypeParmTypeLoc(TemplateTypeParmTypeLoc From) {
+    return VisitTypeSpecTypeLoc(From);
+  }
+
+  Error VisitSubstTemplateTypeParmTypeLoc(SubstTemplateTypeParmTypeLoc From) {
+    return VisitTypeSpecTypeLoc(From);
+  }
+
+  Error
+  VisitSubstTemplateTypeParmPackTypeLoc(SubstTemplateTypeParmPackTypeLoc From) {
+    return VisitTypeSpecTypeLoc(From);
+  }
+
+  Error VisitVectorTypeLoc(VectorTypeLoc From) {
+    return VisitTypeSpecTypeLoc(From);
+  }
+
+  Error VisitDependentVectorTypeLoc(DependentVectorTypeLoc From) {
+    return VisitTypeSpecTypeLoc(From);
+  }
+
+  Error VisitExtVectorTypeLoc(ExtVectorTypeLoc From) {
+    return VisitTypeSpecTypeLoc(From);
+  }
+
+  Error
+  VisitDependentSizedExtVectorTypeLoc(DependentSizedExtVectorTypeLoc From) {
+    return VisitTypeSpecTypeLoc(From);
+  }
+
+  Error VisitComplexTypeLoc(ComplexTypeLoc From) {
+    return VisitTypeSpecTypeLoc(From);
+  }
+
+  Error VisitDecltypeTypeLoc(DecltypeTypeLoc From) {
+    return VisitTypeSpecTypeLoc(From);
+  }
+
+  Error VisitDeducedTypeLoc(DeducedTypeLoc From) {
+    return VisitTypeSpecTypeLoc(From);
+  }
+
+  Error VisitAutoTypeLoc(AutoTypeLoc From) {
+    return VisitTypeSpecTypeLoc(From);
+  }
+
+  Error VisitBuiltinTypeLoc(BuiltinTypeLoc From) {
+    auto To = ToL.castAs<BuiltinTypeLoc>();
+    IMPORT(BuiltinLoc);
+    // FIXME: Import other attributes?
+    return Error::success();
+  }
+
+  Error VisitParenTypeLoc(ParenTypeLoc From) {
+    auto To = ToL.castAs<ParenTypeLoc>();
+
+    IMPORT(LParenLoc);
+    IMPORT(RParenLoc);
+
+    return Error::success();
+  }
+
+  Error VisitBlockPointerTypeLoc(BlockPointerTypeLoc From) {
+    auto To = ToL.castAs<BlockPointerTypeLoc>();
+    IMPORT(CaretLoc);
+    return Error::success();
+  }
+
+  Error VisitMemberPointerTypeLoc(MemberPointerTypeLoc From) {
+    auto To = ToL.castAs<MemberPointerTypeLoc>();
+    IMPORT(StarLoc);
+    return Error::success();
+  }
+
+  Error VisitLValueReferenceTypeLoc(LValueReferenceTypeLoc From) {
+    auto To = ToL.castAs<LValueReferenceTypeLoc>();
+    IMPORT(AmpLoc);
+    return Error::success();
+  }
+
+  Error VisitRValueReferenceTypeLoc(RValueReferenceTypeLoc From) {
+    auto To = ToL.castAs<RValueReferenceTypeLoc>();
+    IMPORT(AmpAmpLoc);
+    return Error::success();
+  }
+
+  Error VisitFunctionTypeLoc(FunctionTypeLoc From) {
+    auto To = ToL.castAs<FunctionTypeLoc>();
+
+    IMPORT(LocalRangeBegin);
+    IMPORT(LocalRangeEnd);
+    IMPORT(LParenLoc);
+    IMPORT(RParenLoc);
+    IMPORT(ExceptionSpecRange);
+
+    for (unsigned I = 0; I < From.getNumParams(); ++I) {
+      // FIXME: Import params?
+      // (avoided because import of a Decl may cause complication)
+      To.setParam(I, nullptr);
+    }
+
+    return Error::success();
+  }
+
+  Error VisitArrayTypeLoc(ArrayTypeLoc From) {
+    auto To = ToL.castAs<ArrayTypeLoc>();
+    IMPORT(LBracketLoc);
+    IMPORT(RBracketLoc);
+    IMPORT(SizeExpr);
+    return Error::success();
+  }
+
+  Error VisitTemplateSpecializationTypeLoc(TemplateSpecializationTypeLoc From) {
+    auto To = ToL.castAs<TemplateSpecializationTypeLoc>();
+
+    IMPORT(TemplateKeywordLoc);
+    IMPORT(LAngleLoc);
+    IMPORT(RAngleLoc);
+    IMPORT(TemplateNameLoc);
+
+    ASTNodeImporter NodeImporter(Importer);
+    for (unsigned I = 0; I < From.getNumArgs(); ++I) {
+      if (Expected<TemplateArgumentLoc> TAL =
+              NodeImporter.import(From.getArgLoc(I)))
+        To.setArgLocInfo(I, TAL->getLocInfo());
+      else
+        return TAL.takeError();
+    }
+
+    return Error::success();
+  }
+
+  Error VisitDependentAddressSpaceTypeLoc(DependentAddressSpaceTypeLoc From) {
+    auto To = ToL.castAs<DependentAddressSpaceTypeLoc>();
+    IMPORT(AttrNameLoc);
+    IMPORT(AttrOperandParensRange);
+    // FIXME: Import other things?
+    return Error::success();
+  }
+
+  Error VisitTypeOfTypeLoc(TypeOfTypeLoc From) {
+    auto To = ToL.castAs<TypeOfTypeLoc>();
+    IMPORT(UnderlyingTInfo);
+    return Error::success();
+  }
+
+  Error VisitUnaryTransformTypeLoc(UnaryTransformTypeLoc From) {
+    auto To = ToL.castAs<UnaryTransformTypeLoc>();
+    IMPORT(KWLoc);
+    IMPORT(LParenLoc);
+    IMPORT(RParenLoc);
+    IMPORT(UnderlyingTInfo);
+    return Error::success();
+  }
+
+  Error VisitDeducedTemplateSpecializationTypeLoc(
+      DeducedTemplateSpecializationTypeLoc From) {
+    auto To = ToL.castAs<DeducedTemplateSpecializationTypeLoc>();
+    IMPORT(TemplateNameLoc);
+    return Error::success();
+  }
+
+  Error VisitElaboratedTypeLoc(ElaboratedTypeLoc From) {
+    auto To = ToL.castAs<ElaboratedTypeLoc>();
+    IMPORT(ElaboratedKeywordLoc);
+    IMPORT(QualifierLoc);
+    return Error::success();
+  }
+
+  Error VisitDependentNameTypeLoc(DependentNameTypeLoc From) {
+    auto To = ToL.castAs<DependentNameTypeLoc>();
+    IMPORT(ElaboratedKeywordLoc);
+    IMPORT(QualifierLoc);
+    IMPORT(NameLoc);
+    return Error::success();
+  }
+
+  Error VisitDependentTemplateSpecializationTypeLoc(
+      DependentTemplateSpecializationTypeLoc From) {
+    auto To = ToL.castAs<DependentTemplateSpecializationTypeLoc>();
+
+    IMPORT(ElaboratedKeywordLoc);
+    IMPORT(QualifierLoc);
+    IMPORT(TemplateKeywordLoc);
+    IMPORT(TemplateNameLoc);
+    IMPORT(LAngleLoc);
+    IMPORT(RAngleLoc);
+
+    ASTNodeImporter NodeImporter(Importer);
+    for (unsigned I = 0; I < From.getNumArgs(); ++I) {
+      if (Expected<TemplateArgumentLoc> TAL =
+              NodeImporter.import(From.getArgLoc(I)))
+        To.setArgLocInfo(I, TAL->getLocInfo());
+      else
+        return TAL.takeError();
+    }
+
+    return Error::success();
+  }
+
+  Error VisitPackExpansionTypeLoc(PackExpansionTypeLoc From) {
+    auto To = ToL.castAs<PackExpansionTypeLoc>();
+    IMPORT(EllipsisLoc);
+    return Error::success();
+  }
+
+  Error VisitAtomicTypeLoc(AtomicTypeLoc From) {
+    auto To = ToL.castAs<AtomicTypeLoc>();
+    IMPORT(KWLoc);
+    IMPORT(LParenLoc);
+    IMPORT(RParenLoc);
+    return Error::success();
+  }
+
+  Error VisitPipeTypeLoc(PipeTypeLoc From) {
+    auto To = ToL.castAs<PipeTypeLoc>();
+    IMPORT(KWLoc);
+    return Error::success();
+  }
+
+  Error VisitObjCTypeParamTypeLoc(ObjCTypeParamTypeLoc From) {
+    auto To = ToL.castAs<ObjCTypeParamTypeLoc>();
+    if (From.getNumProtocols()) {
+      IMPORT(ProtocolLAngleLoc);
+      IMPORT(ProtocolRAngleLoc);
+      for (unsigned I = 0; I < From.getNumProtocols(); ++I) {
+        if (ExpectedSLoc L = Importer.Import(From.getProtocolLoc(I)))
+          To.setProtocolLoc(I, *L);
+        else
+          return L.takeError();
+      }
+    }
+    return Error::success();
+  }
+
+  Error VisitObjCObjectTypeLoc(ObjCObjectTypeLoc From) {
+    auto To = ToL.castAs<ObjCObjectTypeLoc>();
+
+    IMPORT(TypeArgsLAngleLoc);
+    IMPORT(TypeArgsRAngleLoc);
+
+    for (unsigned I = 0; I < From.getNumTypeArgs(); ++I) {
+      if (Expected<TypeSourceInfo *> TSI =
+              Importer.Import(From.getTypeArgTInfo(I)))
+        To.setTypeArgTInfo(I, *TSI);
+      else
+        return TSI.takeError();
+    }
+
+    IMPORT(ProtocolLAngleLoc);
+    IMPORT(ProtocolRAngleLoc);
+
+    for (unsigned I = 0; I < From.getNumProtocols(); ++I) {
+      if (ExpectedSLoc L = Importer.Import(From.getProtocolLoc(I)))
+        To.setProtocolLoc(I, *L);
+      else
+        return L.takeError();
+    }
+
+    To.setHasBaseTypeAsWritten(From.hasBaseTypeAsWritten());
+
+    return Error::success();
+  }
+
+  Error VisitObjCInterfaceTypeLoc(ObjCInterfaceTypeLoc From) {
+    auto To = ToL.castAs<ObjCInterfaceTypeLoc>();
+    IMPORT(NameLoc);
+    return Error::success();
+  }
+
+  Error VisitObjCObjectPointerTypeLoc(ObjCObjectPointerTypeLoc From) {
+    auto To = ToL.castAs<ObjCObjectPointerTypeLoc>();
+    IMPORT(StarLoc);
+    return Error::success();
+  }
+
+  Error VisitTypeLoc(TypeLoc TyLoc) { return Error::success(); }
+};
+
+} // namespace clang
+
 Expected<TypeSourceInfo *> ASTImporter::Import(TypeSourceInfo *FromTSI) {
   if (!FromTSI)
     return FromTSI;
 
-  // FIXME: For now we just create a "trivial" type source info based
-  // on the type and a single location. Implement a real version of this.
   ExpectedType TOrErr = Import(FromTSI->getType());
   if (!TOrErr)
     return TOrErr.takeError();
-  ExpectedSLoc BeginLocOrErr = Import(FromTSI->getTypeLoc().getBeginLoc());
-  if (!BeginLocOrErr)
-    return BeginLocOrErr.takeError();
 
-  return ToContext.getTrivialTypeSourceInfo(*TOrErr, *BeginLocOrErr);
+  TypeSourceInfo *ToTSI = ToContext.CreateTypeSourceInfo(*TOrErr);
+
+  TypeLoc FromL = FromTSI->getTypeLoc();
+  TypeLoc ToL = ToTSI->getTypeLoc();
+  while (FromL) {
+    assert(ToL && "Not consistent TypeSourceInfo");
+    TypeLocImporter Importer(*this, ToL);
+    if (Error Err = Importer.Visit(FromL))
+      return std::move(Err);
+    FromL = FromL.getNextTypeLoc();
+    ToL = ToL.getNextTypeLoc();
+  }
+
+  return ToTSI;
 }
 
 Expected<Attr *> ASTImporter::Import(const Attr *FromAttr) {
