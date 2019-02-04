@@ -8129,18 +8129,6 @@ Expected<TypeSourceInfo *> ASTImporter::Import(TypeSourceInfo *FromTSI) {
   if (!TOrErr)
     return TOrErr.takeError();
 
-  /*if (Minimal) {
-    // For minimal import we do not want to visit other Decl nodes that may be
-    // encountered during the import of a non-trivial TypeSourceInfo.
-    // FIXME: This strategy can be improved by moving such checks into
-    // TypeLocImporter.
-    ExpectedSLoc BeginLocOrErr = Import(FromTSI->getTypeLoc().getBeginLoc());
-    if (!BeginLocOrErr)
-      return BeginLocOrErr.takeError();
-
-    return ToContext.getTrivialTypeSourceInfo(*TOrErr, *BeginLocOrErr);
-  }*/
-
   TypeSourceInfo *ToTSI = ToContext.CreateTypeSourceInfo(*TOrErr);
 
   TypeLoc FromL = FromTSI->getTypeLoc();
