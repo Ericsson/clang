@@ -7649,11 +7649,11 @@ Expected<QualType> ASTImporter::Import(QualType FromT) {
 
 namespace clang {
 
-#define IMPORT(NAME) \
-if (auto ImpOrErr = Importer.Import(From.get##NAME())) \
-  To.set##NAME(*ImpOrErr); \
-else \
-  return ImpOrErr.takeError();
+#define IMPORT(NAME)                                                           \
+  if (auto ImpOrErr = Importer.Import(From.get##NAME()))                       \
+    To.set##NAME(*ImpOrErr);                                                   \
+  else                                                                         \
+    return ImpOrErr.takeError();
 
 // Import TypeLoc information.
 // TypeLocReader in ASTReader.cpp gives hints about what to import.
