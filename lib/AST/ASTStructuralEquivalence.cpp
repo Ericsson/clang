@@ -1713,6 +1713,17 @@ bool StructuralEquivalenceContext::CheckKindSpecificEquivalence(
       // Enum/non-enum mismatch
       return false;
     }
+  } else if (auto *EC1 = dyn_cast<EnumConstantDecl>(D1)) {
+    if (auto *EC2 = dyn_cast<EnumConstantDecl>(D2)) {
+      const llvm::APSInt &Val1 = EC1->getInitVal();
+      const llvm::APSInt &Val2 = EC2->getInitVal();
+      if (Val1.isSigned() != Val2.isSigned() ||
+          Val1.getBitWidth() != Val2.getBitWidth() || Val1 != Val2)
+        return false;
+    } else {
+      // Kind mismatch
+      return false;
+    }
   } else if (const auto *Typedef1 = dyn_cast<TypedefNameDecl>(D1)) {
     if (const auto *Typedef2 = dyn_cast<TypedefNameDecl>(D2)) {
       if (!::IsStructurallyEquivalent(Typedef1->getIdentifier(),

@@ -422,18 +422,8 @@ namespace clang {
     template <typename T>
     bool hasSameVisibilityContext(T *Found, T *From);
 
-    bool IsStructuralMatch(Decl *From, Decl *To, bool Complain);
-    bool IsStructuralMatch(RecordDecl *FromRecord, RecordDecl *ToRecord,
-                           bool Complain = true);
-    bool IsStructuralMatch(VarDecl *FromVar, VarDecl *ToVar,
-                           bool Complain = true);
-    bool IsStructuralMatch(EnumDecl *FromEnum, EnumDecl *ToRecord);
-    bool IsStructuralMatch(EnumConstantDecl *FromEC, EnumConstantDecl *ToEC);
-    bool IsStructuralMatch(FunctionTemplateDecl *From,
-                           FunctionTemplateDecl *To);
-    bool IsStructuralMatch(FunctionDecl *From, FunctionDecl *To);
-    bool IsStructuralMatch(ClassTemplateDecl *From, ClassTemplateDecl *To);
-    bool IsStructuralMatch(VarTemplateDecl *From, VarTemplateDecl *To);
+    bool isStructuralMatch(Decl *FromD, Decl *ToD, bool Complain = true);
+
     ExpectedDecl VisitDecl(Decl *D);
     ExpectedDecl VisitImportDecl(ImportDecl *D);
     ExpectedDecl VisitEmptyDecl(EmptyDecl *D);
@@ -1968,91 +1958,19 @@ getStructuralEquivalenceKind(const ASTImporter &Importer) {
                                     : StructuralEquivalenceKind::Default;
 }
 
-bool ASTNodeImporter::IsStructuralMatch(Decl *From, Decl *To, bool Complain) {
+bool ASTNodeImporter::isStructuralMatch(Decl *FromD, Decl *ToD, bool Complain) {
   StructuralEquivalenceContext Ctx(
       Importer.getFromContext(), Importer.getToContext(),
       getStructuralEquivalenceKind(Importer), false, Complain);
-  return Ctx.IsEquivalent(From, To);
-}
-
-bool ASTNodeImporter::IsStructuralMatch(RecordDecl *FromRecord,
-                                        RecordDecl *ToRecord, bool Complain) {
   // Eliminate a potential failure point where we attempt to re-import
   // something we're trying to import while completing ToRecord.
-  Decl *ToOrigin = Importer.GetOriginalDecl(ToRecord);
-  if (ToOrigin) {
-    auto *ToOriginRecord = dyn_cast<RecordDecl>(ToOrigin);
-    if (ToOriginRecord)
-      ToRecord = ToOriginRecord;
-  }
-
-  StructuralEquivalenceContext Ctx(Importer.getFromContext(),
-                                   ToRecord->getASTContext(),
-                                   getStructuralEquivalenceKind(Importer),
-                                   false, Complain);
-  return Ctx.IsEquivalent(FromRecord, ToRecord);
-}
-
-bool ASTNodeImporter::IsStructuralMatch(VarDecl *FromVar, VarDecl *ToVar,
-                                        bool Complain) {
-  StructuralEquivalenceContext Ctx(
-      Importer.getFromContext(), Importer.getToContext(),
-      getStructuralEquivalenceKind(Importer), false, Complain);
-  return Ctx.IsEquivalent(FromVar, ToVar);
-}
-
-bool ASTNodeImporter::IsStructuralMatch(EnumDecl *FromEnum, EnumDecl *ToEnum) {
-  // Eliminate a potential failure point where we attempt to re-import
-  // something we're trying to import while completin ToEnum
-  if (Decl *ToOrigin = Importer.GetOriginalDecl(ToEnum))
+  if (Decl *ToOrigin = Importer.GetOriginalDecl(ToD)) {
     if (auto *ToOriginEnum = dyn_cast<EnumDecl>(ToOrigin))
-        ToEnum = ToOriginEnum;
-
-  StructuralEquivalenceContext Ctx(Importer.getFromContext(),
-                                   Importer.getToContext(),
-                                   getStructuralEquivalenceKind(Importer));
-  return Ctx.IsEquivalent(FromEnum, ToEnum);
-}
-
-bool ASTNodeImporter::IsStructuralMatch(FunctionTemplateDecl *From,
-                                        FunctionTemplateDecl *To) {
-  StructuralEquivalenceContext Ctx(
-      Importer.getFromContext(), Importer.getToContext(),
-      getStructuralEquivalenceKind(Importer), false, false);
-  return Ctx.IsEquivalent(From, To);
-}
-
-bool ASTNodeImporter::IsStructuralMatch(FunctionDecl *From, FunctionDecl *To) {
-  StructuralEquivalenceContext Ctx(
-      Importer.getFromContext(), Importer.getToContext(),
-      getStructuralEquivalenceKind(Importer), false, false);
-  return Ctx.IsEquivalent(From, To);
-}
-
-bool ASTNodeImporter::IsStructuralMatch(EnumConstantDecl *FromEC,
-                                        EnumConstantDecl *ToEC) {
-  const llvm::APSInt &FromVal = FromEC->getInitVal();
-  const llvm::APSInt &ToVal = ToEC->getInitVal();
-
-  return FromVal.isSigned() == ToVal.isSigned() &&
-         FromVal.getBitWidth() == ToVal.getBitWidth() &&
-         FromVal == ToVal;
-}
-
-bool ASTNodeImporter::IsStructuralMatch(ClassTemplateDecl *From,
-                                        ClassTemplateDecl *To) {
-  StructuralEquivalenceContext Ctx(Importer.getFromContext(),
-                                   Importer.getToContext(),
-                                   getStructuralEquivalenceKind(Importer));
-  return Ctx.IsEquivalent(From, To);
-}
-
-bool ASTNodeImporter::IsStructuralMatch(VarTemplateDecl *From,
-                                        VarTemplateDecl *To) {
-  StructuralEquivalenceContext Ctx(Importer.getFromContext(),
-                                   Importer.getToContext(),
-                                   getStructuralEquivalenceKind(Importer));
-  return Ctx.IsEquivalent(From, To);
+        ToD = ToOriginEnum;
+    if (auto *ToOriginRecord = dyn_cast<RecordDecl>(ToOrigin))
+        ToD = ToOriginRecord;
+  }
+  return Ctx.IsEquivalent(FromD, ToD);
 }
 
 ExpectedDecl ASTNodeImporter::VisitDecl(Decl *D) {
@@ -2481,7 +2399,7 @@ ExpectedDecl ASTNodeImporter::VisitEnumDecl(EnumDecl *D) {
       }
 
       if (auto *FoundEnum = dyn_cast<EnumDecl>(FoundDecl)) {
-        if (IsStructuralMatch(D, FoundEnum))
+        if (isStructuralMatch(D, FoundEnum, true))
           return Importer.MapImported(D, FoundEnum);
         ConflictingDecls.push_back(FoundDecl);
       }
@@ -2591,10 +2509,10 @@ ExpectedDecl ASTNodeImporter::VisitRecordDecl(RecordDecl *D) {
         //  };
         //  struct X { struct { int a; }; struct { int b; }; }; // anon structs
         if (!SearchName)
-          if (!IsStructuralMatch(D, FoundRecord, false))
+          if (!isStructuralMatch(D, FoundRecord, false))
             continue;
 
-        if (IsStructuralMatch(D, FoundRecord)) {
+        if (isStructuralMatch(D, FoundRecord)) {
           RecordDecl *FoundDef = FoundRecord->getDefinition();
           if (D->isThisDeclarationADefinition() && FoundDef) {
             // FIXME: Structural equivalence check should check for same
@@ -2776,7 +2694,7 @@ ExpectedDecl ASTNodeImporter::VisitEnumConstantDecl(EnumConstantDecl *D) {
         continue;
 
       if (auto *FoundEnumConstant = dyn_cast<EnumConstantDecl>(FoundDecl)) {
-        if (IsStructuralMatch(D, FoundEnumConstant))
+        if (isStructuralMatch(D, FoundEnumConstant))
           return Importer.MapImported(D, FoundEnumConstant);
         ConflictingDecls.push_back(FoundDecl);
       }
@@ -3006,7 +2924,7 @@ ExpectedDecl ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
         if (!hasSameVisibilityContext(FoundFunction, D))
           continue;
 
-        if (IsStructuralMatch(D, FoundFunction)) {
+        if (isStructuralMatch(D, FoundFunction, false)) {
           if (Decl *Def = FindAndMapDefinition(D, FoundFunction))
             return Def;
           FoundByLookup = FoundFunction;
@@ -3436,7 +3354,7 @@ ExpectedDecl ASTNodeImporter::VisitFriendDecl(FriendDecl *D) {
 
   while (ImportedFriend) {
     if (D->getFriendDecl() && ImportedFriend->getFriendDecl()) {
-      if (IsStructuralMatch(D->getFriendDecl(), ImportedFriend->getFriendDecl(),
+      if (isStructuralMatch(D->getFriendDecl(), ImportedFriend->getFriendDecl(),
                             /*Complain=*/false))
         return Importer.MapImported(D, ImportedFriend);
 
@@ -4958,7 +4876,7 @@ ExpectedDecl ASTNodeImporter::VisitClassTemplateDecl(ClassTemplateDecl *D) {
       auto *FoundTemplate = dyn_cast<ClassTemplateDecl>(Found);
       if (FoundTemplate) {
 
-        if (IsStructuralMatch(D, FoundTemplate)) {
+        if (isStructuralMatch(D, FoundTemplate)) {
           ClassTemplateDecl *TemplateWithDef =
               getTemplateDefinition(FoundTemplate);
           if (D->isThisDeclarationADefinition() && TemplateWithDef) {
@@ -5068,7 +4986,7 @@ ExpectedDecl ASTNodeImporter::VisitClassTemplateSpecializationDecl(
     PrevDecl = ClassTemplate->findSpecialization(TemplateArgs, InsertPos);
 
   if (PrevDecl) {
-    if (IsStructuralMatch(D, PrevDecl)) {
+    if (isStructuralMatch(D, PrevDecl)) {
       if (D->isThisDeclarationADefinition() && PrevDecl->getDefinition()) {
         Importer.MapImported(D, PrevDecl->getDefinition());
         // Import those default field initializers which have been
@@ -5241,7 +5159,7 @@ ExpectedDecl ASTNodeImporter::VisitVarTemplateDecl(VarTemplateDecl *D) {
 
     Decl *Found = FoundDecl;
     if (VarTemplateDecl *FoundTemplate = dyn_cast<VarTemplateDecl>(Found)) {
-      if (IsStructuralMatch(D, FoundTemplate)) {
+      if (isStructuralMatch(D, FoundTemplate)) {
         // The variable templates structurally match; call it the same template.
         Importer.MapImported(D->getTemplatedDecl(),
                              FoundTemplate->getTemplatedDecl());
@@ -5345,7 +5263,7 @@ ExpectedDecl ASTNodeImporter::VisitVarTemplateSpecializationDecl(
 
     if (VarDecl *FoundDef = D2->getDefinition()) {
       if (!D->isThisDeclarationADefinition() ||
-          IsStructuralMatch(D, FoundDef)) {
+          isStructuralMatch(D, FoundDef, false)) {
         // The record types structurally match, or the "from" translation
         // unit only had a forward declaration anyway; call it the same
         // variable.
@@ -5471,7 +5389,7 @@ ASTNodeImporter::VisitFunctionTemplateDecl(FunctionTemplateDecl *D) {
       if (auto *FoundTemplate = dyn_cast<FunctionTemplateDecl>(FoundDecl)) {
         if (FoundTemplate->hasExternalFormalLinkage() &&
             D->hasExternalFormalLinkage()) {
-          if (IsStructuralMatch(D, FoundTemplate)) {
+          if (isStructuralMatch(D, FoundTemplate, false)) {
             FunctionTemplateDecl *TemplateWithDef =
                 getTemplateDefinition(FoundTemplate);
             if (D->isThisDeclarationADefinition() && TemplateWithDef) {
