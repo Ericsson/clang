@@ -851,7 +851,8 @@ static std::string getMacroNameAndPrintExpansion(
       // If this is a function-like macro, skip its arguments, as
       // getExpandedMacro() already printed them. If this is the case, let's
       // first jumo to the '(' token.
-      if (MI->getNumParams() != 0)
+      auto N = std::next(It);
+      if (N != E && N->is(tok::l_paren))
         It = getMatchingRParen(++It, E);
       continue;
     }
@@ -887,10 +888,9 @@ static std::string getMacroNameAndPrintExpansion(
         // #define func(x) ...
         // apply(func)
         // apply(func(42))
-        if ((++ArgIt)->is(tok::l_paren))
-          ArgIt = getMatchingRParen(ArgIt, ArgEnd);
-        else
-          --ArgIt;
+        auto N = std::next(ArgIt);
+        if (N != ArgEnd && N->is(tok::l_paren))
+          ArgIt = getMatchingRParen(++ArgIt, ArgEnd);
       }
       continue;
     }
