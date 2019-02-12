@@ -13,7 +13,7 @@
 
 #include "clang/Frontend/ASTUnit.h"
 #include "clang/AST/ASTImporter.h"
-#include "clang/AST/ASTImporterLookupTable.h"
+#include "clang/AST/ASTImporterSharedState.h"
 
 #include "DeclMatcher.h"
 #include "Language.h"
@@ -21,7 +21,7 @@
 namespace clang {
 
 class ASTImporter;
-class ASTImporterLookupTable;
+class ASTImporterSharedState;
 class ASTUnit;
 
 namespace ast_matchers {
@@ -86,10 +86,10 @@ class ASTImporterTestBase : public CompilerOptionSpecificTest {
     std::unique_ptr<ASTImporter> Importer;
 
     TU(StringRef Code, StringRef FileName, ArgVector Args);
-    void lazyInitImporter(ASTImporterLookupTable &LookupTable, ASTUnit *ToAST);
-    Decl *import(ASTImporterLookupTable &LookupTable, ASTUnit *ToAST,
+    void lazyInitImporter(ASTImporterSharedState &SharedState, ASTUnit *ToAST);
+    Decl *import(ASTImporterSharedState &SharedState, ASTUnit *ToAST,
                  Decl *FromDecl);
-    QualType import(ASTImporterLookupTable &LookupTable, ASTUnit *ToAST,
+    QualType import(ASTImporterSharedState &SharedState, ASTUnit *ToAST,
                     QualType FromType);
     ~TU();
   };
@@ -103,15 +103,15 @@ class ASTImporterTestBase : public CompilerOptionSpecificTest {
   // vector is expanding, with the list we won't have these issues.
   std::list<TU> FromTUs;
 
-  // Initialize the lookup table if not initialized already.
-  void lazyInitLookupTable(TranslationUnitDecl *ToTU);
+  // Initialize the shared state if not initialized already.
+  void lazyInitSharedState(TranslationUnitDecl *ToTU);
 
   void lazyInitToAST(Language ToLang, StringRef ToSrcCode, StringRef FileName);
 
   TU *findFromTU(Decl *From);
 
 protected:
-  std::unique_ptr<ASTImporterLookupTable> LookupTablePtr;
+  std::unique_ptr<ASTImporterSharedState> SharedStatePtr;
 
 public:
   // We may have several From context but only one To context.

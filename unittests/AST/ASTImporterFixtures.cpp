@@ -10,7 +10,7 @@
 #include "ASTImporterFixtures.h"
 
 #include "clang/AST/ASTImporter.h"
-#include "clang/AST/ASTImporterLookupTable.h"
+#include "clang/AST/ASTImporterSharedState.h"
 #include "clang/Frontend/ASTUnit.h"
 #include "clang/Tooling/Tooling.h"
 
@@ -115,20 +115,20 @@ ASTImporterTestBase::TU::TU(StringRef Code, StringRef FileName, ArgVector Args)
 }
 
 void ASTImporterTestBase::TU::lazyInitImporter(
-    ASTImporterLookupTable &LookupTable, ASTUnit *ToAST) {
+    ASTImporterSharedState &SharedState, ASTUnit *ToAST) {
   assert(ToAST);
   if (!Importer) {
     Importer.reset(new ASTImporter(
         ToAST->getASTContext(), ToAST->getFileManager(), Unit->getASTContext(),
-        Unit->getFileManager(), false, &LookupTable));
+        Unit->getFileManager(), false, &SharedState));
   }
   assert(&ToAST->getASTContext() == &Importer->getToContext());
   createVirtualFileIfNeeded(ToAST, FileName, Code);
 }
 
-Decl *ASTImporterTestBase::TU::import(ASTImporterLookupTable &LookupTable,
+Decl *ASTImporterTestBase::TU::import(ASTImporterSharedState &SharedState,
                                       ASTUnit *ToAST, Decl *FromDecl) {
-  lazyInitImporter(LookupTable, ToAST);
+  lazyInitImporter(SharedState, ToAST);
   if (auto ImportedOrErr = Importer->Import(FromDecl))
     return *ImportedOrErr;
   else {
@@ -137,9 +137,9 @@ Decl *ASTImporterTestBase::TU::import(ASTImporterLookupTable &LookupTable,
   }
 }
 
-QualType ASTImporterTestBase::TU::import(ASTImporterLookupTable &LookupTable,
+QualType ASTImporterTestBase::TU::import(ASTImporterSharedState &SharedState,
                                          ASTUnit *ToAST, QualType FromType) {
-  lazyInitImporter(LookupTable, ToAST);
+  lazyInitImporter(SharedState, ToAST);
   if (auto ImportedOrErr = Importer->Import(FromType))
     return *ImportedOrErr;
   else {
@@ -150,10 +150,10 @@ QualType ASTImporterTestBase::TU::import(ASTImporterLookupTable &LookupTable,
 
 ASTImporterTestBase::TU::~TU() {}
 
-void ASTImporterTestBase::lazyInitLookupTable(TranslationUnitDecl *ToTU) {
+void ASTImporterTestBase::lazyInitSharedState(TranslationUnitDecl *ToTU) {
   assert(ToTU);
-  if (!LookupTablePtr)
-    LookupTablePtr = llvm::make_unique<ASTImporterLookupTable>(*ToTU);
+  if (!SharedStatePtr)
+    SharedStatePtr = llvm::make_unique<ASTImporterSharedState>(*ToTU);
 }
 
 void ASTImporterTestBase::lazyInitToAST(Language ToLang, StringRef ToSrcCode,
@@ -166,7 +166,7 @@ void ASTImporterTestBase::lazyInitToAST(Language ToLang, StringRef ToSrcCode,
   // Build the AST from an empty file.
   ToAST = tooling::buildASTFromCodeWithArgs(ToCode, ToArgs, FileName);
   ToAST->enableSourceFileDiagnostics();
-  lazyInitLookupTable(ToAST->getASTContext().getTranslationUnitDecl());
+  lazyInitSharedState(ToAST->getASTContext().getTranslationUnitDecl());
 }
 
 ASTImporterTestBase::TU *ASTImporterTestBase::findFromTU(Decl *From) {
@@ -206,7 +206,7 @@ ASTImporterTestBase::getImportedDecl(StringRef FromSrcCode, Language FromLang,
   assert(FoundDecls.size() == 1);
 
   Decl *Imported =
-      FromTU.import(*LookupTablePtr, ToAST.get(), FoundDecls.front());
+      FromTU.import(*SharedStatePtr, ToAST.get(), FoundDecls.front());
 
   assert(Imported);
   return std::make_tuple(*FoundDecls.begin(), Imported);
@@ -237,8 +237,8 @@ TranslationUnitDecl *ASTImporterTestBase::getToTuDecl(StringRef ToSrcCode,
 Decl *ASTImporterTestBase::Import(Decl *From, Language ToLang) {
   lazyInitToAST(ToLang, "", OutputFileName);
   TU *FromTU = findFromTU(From);
-  assert(LookupTablePtr);
-  Decl *To = FromTU->import(*LookupTablePtr, ToAST.get(), From);
+  assert(SharedStatePtr);
+  Decl *To = FromTU->import(*SharedStatePtr, ToAST.get(), From);
   if (To)
     checkImportedSourceLocations(From, To);
   return To;
@@ -248,8 +248,8 @@ QualType ASTImporterTestBase::ImportType(QualType FromType, Decl *TUDecl,
                                          Language ToLang) {
   lazyInitToAST(ToLang, "", OutputFileName);
   TU *FromTU = findFromTU(TUDecl);
-  assert(LookupTablePtr);
-  return FromTU->import(*LookupTablePtr, ToAST.get(), FromType);
+  assert(SharedStatePtr);
+  return FromTU->import(*SharedStatePtr, ToAST.get(), FromType);
 }
 
 ASTImporterTestBase::~ASTImporterTestBase() {

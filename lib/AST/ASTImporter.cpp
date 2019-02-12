@@ -13,7 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/AST/ASTImporter.h"
-#include "clang/AST/ASTImporterLookupTable.h"
+#include "clang/AST/ASTImporterSharedState.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/ASTDiagnostic.h"
 #include "clang/AST/ASTStructuralEquivalence.h"
@@ -7509,8 +7509,8 @@ void ASTNodeImporter::ImportOverrides(CXXMethodDecl *ToMethod,
 ASTImporter::ASTImporter(ASTContext &ToContext, FileManager &ToFileManager,
                          ASTContext &FromContext, FileManager &FromFileManager,
                          bool MinimalImport,
-                         ASTImporterLookupTable *LookupTable)
-    : LookupTable(LookupTable), ToContext(ToContext), FromContext(FromContext),
+                         ASTImporterSharedState *SharedState)
+    : SharedState(SharedState), ToContext(ToContext), FromContext(FromContext),
       ToFileManager(ToFileManager), FromFileManager(FromFileManager),
       Minimal(MinimalImport) {
 
@@ -7552,9 +7552,9 @@ ASTImporter::findDeclsInToCtx(DeclContext *DC, DeclarationName Name) {
   // then the enum constant 'A' and the variable 'A' violates ODR.
   // We can diagnose this only if we search in the redecl context.
   DeclContext *ReDC = DC->getRedeclContext();
-  if (LookupTable) {
+  if (SharedState) {
     ASTImporterLookupTable::LookupResult LookupResult =
-        LookupTable->lookup(ReDC, Name);
+        SharedState->getLookupTable().lookup(ReDC, Name);
     return FoundDeclsTy(LookupResult.begin(), LookupResult.end());
   } else {
     // FIXME Can we remove this kind of lookup?
@@ -7566,9 +7566,9 @@ ASTImporter::findDeclsInToCtx(DeclContext *DC, DeclarationName Name) {
 }
 
 void ASTImporter::AddToLookupTable(Decl *ToD) {
-  if (LookupTable)
+  if (SharedState)
     if (auto *ToND = dyn_cast<NamedDecl>(ToD))
-      LookupTable->add(ToND);
+      SharedState->getLookupTable().add(ToND);
 }
 
 Expected<QualType> ASTImporter::Import(QualType FromT) {
@@ -8033,9 +8033,9 @@ Expected<Decl *> ASTImporter::Import(Decl *FromD) {
       // traverse of the 'to' context).
       auto PosF = ImportedFromDecls.find(ToD);
       if (PosF != ImportedFromDecls.end()) {
-        if (LookupTable)
+        if (SharedState)
           if (auto *ToND = dyn_cast<NamedDecl>(ToD))
-            LookupTable->remove(ToND);
+            SharedState->getLookupTable().remove(ToND);
         ImportedFromDecls.erase(PosF);
       }
 

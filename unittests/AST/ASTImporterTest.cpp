@@ -2096,7 +2096,6 @@ TEST_P(ImportFunctions, ImportImplicitFunctionsInLambda) {
       FromTU, functionDecl(hasName("foo")));
   auto *ToD = Import(FromD, Lang_CXX);
   EXPECT_TRUE(ToD);
-  Decl *ToTU = ToAST->getASTContext().getTranslationUnitDecl();
   CXXRecordDecl *LambdaRec =
       cast<LambdaExpr>(cast<CStyleCastExpr>(
                            *cast<CompoundStmt>(ToD->getBody())->body_begin())
@@ -2666,7 +2665,7 @@ private:
       CXXMethodDecl *Method =
           FirstDeclMatcher<CXXMethodDecl>().match(ToClass, MethodMatcher);
       ToClass->removeDecl(Method);
-      LookupTablePtr->remove(Method);
+      SharedStatePtr->getLookupTable().remove(Method);
     }
 
     ASSERT_EQ(DeclCounter<CXXMethodDecl>().match(ToClass, MethodMatcher), 0u);
