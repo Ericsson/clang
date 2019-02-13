@@ -8005,6 +8005,10 @@ Expected<Decl *> ASTImporter::Import(Decl *FromD) {
   // Check whether we've already imported this declaration.
   Decl *ToD = GetAlreadyImportedOrNull(FromD);
   if (ToD) {
+    // Already imported (possibly from another TU) and with an error.
+    if (auto Error = SharedState->getImportDeclErrorIfAny(ToD))
+      return make_error<ImportError>(*Error);
+
     // If FromD has some updated flags after last import, apply it
     updateFlags(FromD, ToD);
     // If we encounter a cycle during an import then we save the relevant part
@@ -8054,12 +8058,20 @@ Expected<Decl *> ASTImporter::Import(Decl *FromD) {
       handleAllErrors(ToDOrErr.takeError(),
                       [&ErrOut](const ImportError &E) { ErrOut = E; });
       setImportDeclError(FromD, ErrOut);
+      // Set the error for the mapped to Decl, which is in the "to" context.
+      if (Pos != ImportedDecls.end())
+        SharedState->setImportDeclError(Pos->second, ErrOut);
 
       // Set the error for all nodes which have been created before we
       // recognized the error.
       for (const auto &Path : SavedImportPaths[FromD])
-        for (Decl *Di : Path)
-          setImportDeclError(Di, ErrOut);
+        for (Decl *FromDi : Path) {
+          setImportDeclError(FromDi, ErrOut);
+          // Set the error for the mapped to Decl, which is in the "to" context.
+          auto Ii = ImportedDecls.find(FromDi);
+          if (Ii != ImportedDecls.end())
+            SharedState->setImportDeclError(Ii->second, ErrOut);
+        }
       SavedImportPaths[FromD].clear();
 
       // Do not return ToDOrErr, error was taken out of it.
@@ -8079,6 +8091,11 @@ Expected<Decl *> ASTImporter::Import(Decl *FromD) {
     assert(Err);
     return make_error<ImportError>(*Err);
   }
+
+  // We could import from the current TU without error.  But previously we
+  // already had imported a Decl as `ToD` from another TU and with an error.
+  if (auto Error = SharedState->getImportDeclErrorIfAny(ToD))
+    return make_error<ImportError>(*Error);
 
   // Notify subclasses.
   Imported(FromD, ToD);
