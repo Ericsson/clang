@@ -1,4 +1,4 @@
-enum B {x = 42,l,s};
+enum B {x2 = 42,y2,z2};
 
 typedef struct {
   int a;
@@ -6,7 +6,7 @@ typedef struct {
 } foobar;
 
 int enumcheck(void) {
-  return x;
+  return x2;
 }
 
 foobar fb;

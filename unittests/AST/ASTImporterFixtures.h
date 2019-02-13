@@ -42,6 +42,8 @@ void createVirtualFileIfNeeded(ASTUnit *ToAST, StringRef FileName,
 void createVirtualFileIfNeeded(ASTUnit *ToAST, StringRef FileName,
                                StringRef Code);
 
+void checkImportedSourceLocations(const Decl *FromD, const Decl *ToD);
+
 // Common base for the different families of ASTImporter tests that are
 // parameterized on the compiler options which may result a different AST. E.g.
 // -fms-compatibility or -fdelayed-template-parsing.

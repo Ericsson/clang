@@ -54,12 +54,9 @@ void ASTMergeAction::ExecuteAction() {
     if (!Unit)
       continue;
 
-    ASTImporter Importer(&LookupTable,
-                         CI.getASTContext(),
-                         CI.getFileManager(),
-                         Unit->getASTContext(),
-                         Unit->getFileManager(),
-                         /*MinimalImport=*/false);
+    ASTImporter Importer(CI.getASTContext(), CI.getFileManager(),
+                         Unit->getASTContext(), Unit->getFileManager(),
+                         /*MinimalImport=*/false, &LookupTable);
 
     TranslationUnitDecl *TU = Unit->getASTContext().getTranslationUnitDecl();
     for (auto *D : TU->decls()) {

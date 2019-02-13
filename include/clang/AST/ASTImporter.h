@@ -84,7 +84,6 @@ class TypeSourceInfo;
   class ASTImporter {
     friend class ASTNodeImporter;
   public:
-    using NonEquivalentDeclSet = llvm::DenseSet<std::pair<Decl *, Decl *>>;
     using ImportedCXXBaseSpecifierMap =
         llvm::DenseMap<const CXXBaseSpecifier *, CXXBaseSpecifier *>;
 
@@ -142,16 +141,13 @@ class TypeSourceInfo;
     ///  in the "to" source manager.
     ImportedCXXBaseSpecifierMap ImportedCXXBaseSpecifiers;
 
-    /// Declaration (from, to) pairs that are known not to be equivalent
-    /// (which we have already complained about).
-    NonEquivalentDeclSet NonEquivalentDecls;
-
     using FoundDeclsTy = SmallVector<NamedDecl *, 2>;
-    FoundDeclsTy FindDeclsInToCtx(DeclContext *DC, DeclarationName Name);
+    FoundDeclsTy findDeclsInToCtx(DeclContext *DC, DeclarationName Name);
 
     void AddToLookupTable(Decl *ToD);
 
   public:
+
     /// \param ToContext The context we'll be importing into.
     ///
     /// \param ToFileManager The file manager we'll be importing into.
@@ -163,27 +159,14 @@ class TypeSourceInfo;
     /// \param MinimalImport If true, the importer will attempt to import
     /// as little as it can, e.g., by importing declarations as forward
     /// declarations that can be completed at a later point.
-    ASTImporter(ASTContext &ToContext, FileManager &ToFileManager,
-                ASTContext &FromContext, FileManager &FromFileManager,
-                bool MinimalImport);
-
+    ///
     /// \param LookupTable The importer specific lookup table which may be
     /// shared amongst several ASTImporter objects.
-    ///
-    /// \param ToContext The context we'll be importing into.
-    ///
-    /// \param ToFileManager The file manager we'll be importing into.
-    ///
-    /// \param FromContext The context we'll be importing from.
-    ///
-    /// \param FromFileManager The file manager we'll be importing into.
-    ///
-    /// \param MinimalImport If true, the importer will attempt to import
-    /// as little as it can, e.g., by importing declarations as forward
-    /// declarations that can be completed at a later point.
-    ASTImporter(ASTImporterLookupTable *LookupTable, ASTContext &ToContext,
-                FileManager &ToFileManager, ASTContext &FromContext,
-                FileManager &FromFileManager, bool MinimalImport);
+    /// If not set then the original C/C++ lookup is used.
+    ASTImporter(ASTContext &ToContext, FileManager &ToFileManager,
+                ASTContext &FromContext, FileManager &FromFileManager,
+                bool MinimalImport,
+                ASTImporterLookupTable *LookupTable = nullptr);
 
     virtual ~ASTImporter();
 
@@ -397,9 +380,6 @@ class TypeSourceInfo;
     /// Report a diagnostic in the "from" context.
     DiagnosticBuilder FromDiag(SourceLocation Loc, unsigned DiagID);
 
-    /// Return the set of declarations that we know are not equivalent.
-    NonEquivalentDeclSet &getNonEquivalentDecls() { return NonEquivalentDecls; }
-
     /// Called for ObjCInterfaceDecl, ObjCProtocolDecl, and TagDecl.
     /// Mark the Decl as complete, filling it in as much as possible.
     ///
@@ -411,8 +391,11 @@ class TypeSourceInfo;
     virtual Decl *Imported(Decl *From, Decl *To) { return To; }
 
     /// Store and assign the imported declaration to its counterpart.
+    /// It may happen that several decls from the 'from' context are mapped to
+    /// the same decl in the 'to' context.
     Decl *MapImported(Decl *From, Decl *To);
 
+    /// Deprecated. FIXME use [[deprecated]] once Clang enables C++14.
     /// Called by StructuralEquivalenceContext.  If a RecordDecl is
     /// being compared to another RecordDecl as part of import, completing the
     /// other RecordDecl may trigger importation of the first RecordDecl. This

@@ -450,7 +450,7 @@ static bool shouldSkipFunction(const Decl *D,
   // where it may not. (cplusplus.SelfAssignmentChecker)
   if (const auto *MD = dyn_cast<CXXMethodDecl>(D)) {
     if (MD->isCopyAssignmentOperator() || MD->isMoveAssignmentOperator())
-      return false;
+      return !MD->isUserProvided();
   }
 
   // Otherwise, if we visited the function before, do not reanalyze it.

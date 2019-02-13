@@ -78,14 +78,12 @@ struct StructuralEquivalenceTest : ::testing::Test {
   }
 
   bool testStructuralMatch(Decl *D0, Decl *D1) {
-    llvm::DenseSet<std::pair<Decl *, Decl *>> NonEquivalentDecls01;
-    llvm::DenseSet<std::pair<Decl *, Decl *>> NonEquivalentDecls10;
-    StructuralEquivalenceContext Ctx01(
-        D0->getASTContext(), D1->getASTContext(),
-        NonEquivalentDecls01, StructuralEquivalenceKind::Default, false, false);
-    StructuralEquivalenceContext Ctx10(
-        D1->getASTContext(), D0->getASTContext(),
-        NonEquivalentDecls10, StructuralEquivalenceKind::Default, false, false);
+    StructuralEquivalenceContext Ctx01(D0->getASTContext(), D1->getASTContext(),
+                                       StructuralEquivalenceKind::Default,
+                                       false, false);
+    StructuralEquivalenceContext Ctx10(D1->getASTContext(), D0->getASTContext(),
+                                       StructuralEquivalenceKind::Default,
+                                       false, false);
     bool Eq01 = Ctx01.IsEquivalent(D0, D1);
     bool Eq10 = Ctx10.IsEquivalent(D1, D0);
     EXPECT_EQ(Eq01, Eq10);
@@ -826,6 +824,250 @@ TEST_F(StructuralEquivalenceTemplateTest, DifferentTemplateArgName) {
 TEST_F(StructuralEquivalenceTemplateTest, DifferentTemplateArgKind) {
   auto t = makeNamedDecls("template <class T> struct foo;",
                           "template <int T> struct foo;", Lang_CXX);
+  EXPECT_FALSE(testStructuralMatch(t));
+}
+
+TEST_F(
+    StructuralEquivalenceTemplateTest,
+    ClassTemplSpecWithQualifiedAndNonQualifiedTypeArgsShouldBeEqual) {
+  auto t = makeDecls<ClassTemplateSpecializationDecl>(
+      R"(
+      template <class T> struct Primary {};
+      namespace N {
+        struct Arg;
+      }
+      // Explicit instantiation with qualified name.
+      template struct Primary<N::Arg>;
+      )",
+      R"(
+      template <class T> struct Primary {};
+      namespace N {
+        struct Arg;
+      }
+      using namespace N;
+      // Explicit instantiation with UNqualified name.
+      template struct Primary<Arg>;
+      )",
+      Lang_CXX,
+      classTemplateSpecializationDecl(hasName("Primary")));
+  EXPECT_TRUE(testStructuralMatch(t));
+}
+
+TEST_F(
+    StructuralEquivalenceTemplateTest,
+    ClassTemplSpecWithInequivalentQualifiedAndNonQualifiedTypeArgs) {
+  auto t = makeDecls<ClassTemplateSpecializationDecl>(
+      R"(
+      template <class T> struct Primary {};
+      namespace N {
+        struct Arg { int a; };
+      }
+      // Explicit instantiation with qualified name.
+      template struct Primary<N::Arg>;
+      )",
+      R"(
+      template <class T> struct Primary {};
+      namespace N {
+        // This struct is not equivalent with the other in the prev TU.
+        struct Arg { double b; }; // -- Field mismatch.
+      }
+      using namespace N;
+      // Explicit instantiation with UNqualified name.
+      template struct Primary<Arg>;
+      )",
+      Lang_CXX,
+      classTemplateSpecializationDecl(hasName("Primary")));
+  EXPECT_FALSE(testStructuralMatch(t));
+}
+
+TEST_F(
+    StructuralEquivalenceTemplateTest,
+    ClassTemplSpecWithQualifiedAndNonQualifiedTemplArgsShouldBeEqual) {
+  auto t = makeDecls<ClassTemplateSpecializationDecl>(
+      R"(
+      template <template <class> class T> struct Primary {};
+      namespace N {
+        template <class T> struct Arg;
+      }
+      // Explicit instantiation with qualified name.
+      template struct Primary<N::Arg>;
+      )",
+      R"(
+      template <template <class> class T> struct Primary {};
+      namespace N {
+        template <class T> struct Arg;
+      }
+      using namespace N;
+      // Explicit instantiation with UNqualified name.
+      template struct Primary<Arg>;
+      )",
+      Lang_CXX,
+      classTemplateSpecializationDecl(hasName("Primary")));
+  EXPECT_TRUE(testStructuralMatch(t));
+}
+
+TEST_F(
+    StructuralEquivalenceTemplateTest,
+    ClassTemplSpecWithInequivalentQualifiedAndNonQualifiedTemplArgs) {
+  auto t = makeDecls<ClassTemplateSpecializationDecl>(
+      R"(
+      template <template <class> class T> struct Primary {};
+      namespace N {
+        template <class T> struct Arg { int a; };
+      }
+      // Explicit instantiation with qualified name.
+      template struct Primary<N::Arg>;
+      )",
+      R"(
+      template <template <class> class T> struct Primary {};
+      namespace N {
+        // This template is not equivalent with the other in the prev TU.
+        template <class T> struct Arg { double b; }; // -- Field mismatch.
+      }
+      using namespace N;
+      // Explicit instantiation with UNqualified name.
+      template struct Primary<Arg>;
+      )",
+      Lang_CXX,
+      classTemplateSpecializationDecl(hasName("Primary")));
+  EXPECT_FALSE(testStructuralMatch(t));
+}
+
+struct StructuralEquivalenceDependentTemplateArgsTest
+    : StructuralEquivalenceTemplateTest {};
+
+TEST_F(StructuralEquivalenceDependentTemplateArgsTest,
+       SameStructsInDependentArgs) {
+  std::string Code =
+      R"(
+      template <typename>
+      struct S1;
+
+      template <typename>
+      struct enable_if;
+
+      struct S
+      {
+        template <typename T, typename enable_if<S1<T>>::type>
+        void f();
+      };
+      )";
+  auto t = makeDecls<FunctionTemplateDecl>(Code, Code, Lang_CXX11,
+                                           functionTemplateDecl(hasName("f")));
+  EXPECT_TRUE(testStructuralMatch(t));
+}
+
+TEST_F(StructuralEquivalenceDependentTemplateArgsTest,
+       DifferentStructsInDependentArgs) {
+  std::string Code =
+      R"(
+      template <typename>
+      struct S1;
+
+      template <typename>
+      struct S2;
+
+      template <typename>
+      struct enable_if;
+      )";
+  auto t = makeDecls<FunctionTemplateDecl>(Code + R"(
+      struct S
+      {
+        template <typename T, typename enable_if<S1<T>>::type>
+        void f();
+      };
+      )",
+                                           Code + R"(
+      struct S
+      {
+        template <typename T, typename enable_if<S2<T>>::type>
+        void f();
+      };
+      )",
+                                           Lang_CXX11,
+                                           functionTemplateDecl(hasName("f")));
+  EXPECT_FALSE(testStructuralMatch(t));
+}
+
+TEST_F(StructuralEquivalenceDependentTemplateArgsTest,
+       SameStructsInDependentScopeDeclRefExpr) {
+  std::string Code =
+      R"(
+      template <typename>
+      struct S1;
+
+      template <bool>
+      struct enable_if;
+
+      struct S
+      {
+        template <typename T, typename enable_if<S1<T>::value>::type>
+        void f();   // DependentScopeDeclRefExpr:^^^^^^^^^^^^
+      };
+      )";
+  auto t = makeDecls<FunctionTemplateDecl>(Code, Code, Lang_CXX11,
+                                           functionTemplateDecl(hasName("f")));
+  EXPECT_TRUE(testStructuralMatch(t));
+}
+
+TEST_F(StructuralEquivalenceDependentTemplateArgsTest,
+       DifferentStructsInDependentScopeDeclRefExpr) {
+  std::string Code =
+      R"(
+      template <typename>
+      struct S1;
+
+      template <typename>
+      struct S2;
+
+      template <bool>
+      struct enable_if;
+      )";
+  auto t = makeDecls<FunctionTemplateDecl>(Code + R"(
+      struct S
+      {
+        template <typename T, typename enable_if<S1<T>::value>::type>
+        void f();   // DependentScopeDeclRefExpr:^^^^^^^^^^^^
+      };
+      )",
+                                           Code + R"(
+      struct S
+      {
+        template <typename T, typename enable_if<S2<T>::value>::type>
+        void f();
+      };
+      )",
+                                           Lang_CXX,
+                                           functionTemplateDecl(hasName("f")));
+  EXPECT_FALSE(testStructuralMatch(t));
+}
+
+TEST_F(StructuralEquivalenceDependentTemplateArgsTest,
+       DifferentValueInDependentScopeDeclRefExpr) {
+  std::string Code =
+      R"(
+      template <typename>
+      struct S1;
+
+      template <bool>
+      struct enable_if;
+      )";
+  auto t = makeDecls<FunctionTemplateDecl>(Code + R"(
+      struct S
+      {
+        template <typename T, typename enable_if<S1<T>::value1>::type>
+        void f();   // DependentScopeDeclRefExpr:^^^^^^^^^^^^
+      };
+      )",
+                                           Code + R"(
+      struct S
+      {
+        template <typename T, typename enable_if<S1<T>::value2>::type>
+        void f();
+      };
+      )",
+                                           Lang_CXX,
+                                           functionTemplateDecl(hasName("f")));
   EXPECT_FALSE(testStructuralMatch(t));
 }
 

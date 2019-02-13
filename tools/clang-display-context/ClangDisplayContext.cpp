@@ -7,8 +7,8 @@
 //
 //===--------------------------------------------------------------------===//
 //
-// Clang tool which generates and outputs an issue string 
-// from the location (line, column number) of the issue. 
+// Clang tool which generates and outputs an issue string
+// from the location (line, column number) of the issue.
 // The format of the string is similar to the Static Analyzer's GetIssueString
 // function's result, defined in lib/StaticAnalyzer/Core/IssueHash.cpp.
 //
@@ -64,14 +64,14 @@ public:
   }
 
 private:
-  template <typename T> 
+  template <typename T>
   bool checkIfInteresting(const T *N);
   void handleDecl(const Decl *D);
   void handleStmt(const Stmt *S);
   bool setEnclosingDecl(const Decl *D);
   void setIssueString(const std::string &S);
   void setIssueStringToDefault();
-  
+
   ASTContext &Ctx;
   FullSourceLoc IssueLoc;
   std::string IssueString;
@@ -91,14 +91,14 @@ bool DisplayContextConsumer::checkIfInteresting(const T *Node) {
     return false;
 
   FullSourceLoc L1 = Ctx.getFullLoc(Node->getLocStart());
-  FullSourceLoc L2 = 
+  FullSourceLoc L2 =
     Ctx.getFullLoc(Lexer::getLocForEndOfToken(Node->getLocEnd(), 0,
                           Ctx.getSourceManager(), Ctx.getLangOpts()));
-  
+
   if (!L1.isValid() || !L2.isValid())
     return false;
 
-  if (Line == L1.getExpansionLineNumber() && 
+  if (Line == L1.getExpansionLineNumber() &&
       Line == L2.getExpansionLineNumber())
     return Column <= L2.getExpansionColumnNumber() &&
            L1.getExpansionColumnNumber() <= Column;
@@ -113,7 +113,7 @@ void DisplayContextConsumer::handleDecl(const Decl *D) {
 
   if (const auto *TD = dyn_cast<TemplateDecl>(D))
     D = TD->getTemplatedDecl();
-  
+
   if (const auto *DC = dyn_cast<DeclContext>(D)) {
     for (const Decl *D : DC->decls()) {
       if (!checkIfInteresting<Decl>(D))
@@ -123,14 +123,14 @@ void DisplayContextConsumer::handleDecl(const Decl *D) {
       return;
     }
   }
-  
+
   if (!setEnclosingDecl(D))
     return;
 
   IssueLoc = Ctx.getFullLoc(D->getLocation()).getExpansionLoc();
-  
+
   handleStmt(D->getBody());
-  
+
   if (!IssueLoc.isValid() || IssueLoc.getExpansionLineNumber() != Line)
     return;
 
@@ -143,7 +143,7 @@ void DisplayContextConsumer::handleStmt(const Stmt *S) {
     return;
 
   IssueLoc = Ctx.getFullLoc(S->getLocStart()).getExpansionLoc();
-  
+
   if (const LambdaExpr *LE = dyn_cast<LambdaExpr>(S))
     EnclosingDecl = LE->getCallOperator();
 
@@ -202,7 +202,7 @@ int main(int argc, const char **argv) {
 
   ClangTool Tool(OptionsParser.getCompilations(),
                  OptionsParser.getSourcePathList());
-  
+
   if (Lines.size() != Columns.size()) {
     errs() << "Number of lines and columns must be the same. \n";
     return 1;
@@ -210,4 +210,3 @@ int main(int argc, const char **argv) {
 
   return Tool.run(newFrontendActionFactory<DisplayContextAction>().get());
 }
-

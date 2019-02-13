@@ -45,14 +45,13 @@ class TestImportBase : public CompilerOptionSpecificTest,
 
     if (Imported) {
       // This should dump source locations and assert if some source locations
-      // were not imported.
+      // were not imported. Does not find all error cases.
       SmallString<1024> ImportChecker;
       llvm::raw_svector_ostream ToNothing(ImportChecker);
       ToCtx.getTranslationUnitDecl()->print(ToNothing);
 
-      // This traverses the AST to catch certain bugs like poorly or not
-      // implemented subtrees.
-      (*Imported)->dump(ToNothing);
+      // More detailed source location checks.
+      checkImportedSourceLocations(Node, *Imported);
     }
 
     return Imported;
@@ -1680,7 +1679,7 @@ TEST_P(ASTImporterOptionSpecificTestBase, AnonymousRecordsReversed) {
   auto *ToTU = ToAST->getASTContext().getTranslationUnitDecl();
   // We expect one (ODR) warning during the import.
   EXPECT_EQ(1u, ToTU->getASTContext().getDiagnostics().getNumWarnings());
-  EXPECT_EQ(2u,
+  EXPECT_EQ(1u,
             DeclCounter<RecordDecl>().match(ToTU, recordDecl(hasName("X"))));
 }
 
@@ -1984,6 +1983,85 @@ TEST_P(ImportFunctions,
   EXPECT_TRUE(MatchVerifier<TranslationUnitDecl>().match(
       ToTU, translationUnitDecl(hasDescendant(
                 functionDecl(hasName("f"), hasDescendant(declRefExpr()))))));
+}
+
+TEST_P(ImportFunctions, ImportImplicitFunctionsInLambda) {
+  Decl *FromTU = getTuDecl(
+      R"(
+      void foo() {
+        (void)[]() { ; };
+      }
+      )",
+      Lang_CXX11);
+  auto *FromD = FirstDeclMatcher<FunctionDecl>().match(
+      FromTU, functionDecl(hasName("foo")));
+  auto *ToD = Import(FromD, Lang_CXX);
+  EXPECT_TRUE(ToD);
+  Decl *ToTU = ToAST->getASTContext().getTranslationUnitDecl();
+  CXXRecordDecl *LambdaRec =
+      cast<LambdaExpr>(cast<CStyleCastExpr>(
+                           *cast<CompoundStmt>(ToD->getBody())->body_begin())
+                           ->getSubExpr())
+          ->getLambdaClass();
+  EXPECT_TRUE(LambdaRec->getDestructor());
+}
+
+struct ImportFunctionTemplates : ASTImporterOptionSpecificTestBase {};
+
+TEST_P(ImportFunctionTemplates,
+       ImportFunctionWhenThereIsAFunTemplateWithSameName) {
+  getToTuDecl(
+      R"(
+      template <typename T>
+      void foo(T) {}
+      void foo();
+      )",
+      Lang_CXX);
+  Decl *FromTU = getTuDecl("void foo();", Lang_CXX);
+  auto *FromD = FirstDeclMatcher<FunctionDecl>().match(
+      FromTU, functionDecl(hasName("foo")));
+  auto *ImportedD = Import(FromD, Lang_CXX);
+  EXPECT_TRUE(ImportedD);
+}
+
+TEST_P(ImportFunctionTemplates,
+       ImportConstructorWhenThereIsAFunTemplateWithSameName) {
+  auto Code =
+      R"(
+      struct Foo {
+        template <typename T>
+        Foo(T) {}
+        Foo();
+      };
+      )";
+  getToTuDecl(Code, Lang_CXX);
+  Decl *FromTU = getTuDecl(Code, Lang_CXX);
+  auto *FromD =
+      LastDeclMatcher<CXXConstructorDecl>().match(FromTU, cxxConstructorDecl());
+  auto *ImportedD = Import(FromD, Lang_CXX);
+  EXPECT_TRUE(ImportedD);
+}
+
+TEST_P(ImportFunctionTemplates,
+       ImportOperatorWhenThereIsAFunTemplateWithSameName) {
+  getToTuDecl(
+      R"(
+      template <typename T>
+      void operator<(T,T) {}
+      struct X{};
+      void operator<(X, X);
+      )",
+      Lang_CXX);
+  Decl *FromTU = getTuDecl(
+      R"(
+      struct X{};
+      void operator<(X, X);
+      )",
+      Lang_CXX);
+  auto *FromD = LastDeclMatcher<FunctionDecl>().match(
+      FromTU, functionDecl(hasOverloadedOperatorName("<")));
+  auto *ImportedD = Import(FromD, Lang_CXX);
+  EXPECT_TRUE(ImportedD);
 }
 
 struct ImportFriendFunctions : ImportFunctions {};
@@ -2300,7 +2378,7 @@ TEST_P(ImportFriendFunctions, ImportFriendChangesLookup) {
   LookupRes = ToTU->noload_lookup(ToName);
   EXPECT_EQ(LookupRes.size(), 1u);
   EXPECT_EQ(DeclCounter<FunctionDecl>().match(ToTU, Pattern), 1u);
-  
+
   auto *ToFriendF = cast<FunctionDecl>(Import(FromFriendF, Lang_CXX));
   LookupRes = ToTU->noload_lookup(ToName);
   EXPECT_EQ(LookupRes.size(), 1u);
@@ -3716,11 +3794,6 @@ TEST_P(ASTImporterOptionSpecificTestBase,
 
 struct ASTImporterLookupTableTest : ASTImporterOptionSpecificTestBase {};
 
-TEST_P(ASTImporterLookupTableTest, EmptyCode) {
-  auto *ToTU = getToTuDecl( "", Lang_CXX);
-  ASTImporterLookupTable LT(*ToTU);
-}
-
 TEST_P(ASTImporterLookupTableTest, OneDecl) {
   auto *ToTU = getToTuDecl("int a;", Lang_CXX);
   auto *D = FirstDeclMatcher<VarDecl>().match(ToTU, varDecl(hasName("a")));
@@ -3729,6 +3802,15 @@ TEST_P(ASTImporterLookupTableTest, OneDecl) {
   ASSERT_EQ(Res.size(), 1u);
   EXPECT_EQ(*Res.begin(), D);
 }
+
+static Decl *findInDeclListOfDC(DeclContext *DC, DeclarationName Name) {
+  for (Decl *D : DC->decls()) {
+    if (auto *ND = dyn_cast<NamedDecl>(D))
+      if (ND->getDeclName() == Name)
+        return ND;
+  }
+  return nullptr;
+};
 
 TEST_P(ASTImporterLookupTableTest,
     FriendWhichIsnotFoundByNormalLookupShouldBeFoundByImporterSpecificLookup) {
@@ -3758,21 +3840,11 @@ TEST_P(ASTImporterLookupTableTest,
   FooLexicalDC->getRedeclContext()->localUncachedLookup(FooName, FoundDecls);
   EXPECT_EQ(FoundDecls.size(), 0u);
 
-  auto FindInDeclListOfDC = [](DeclContext *DC, DeclarationName Name) {
-    Decl *Found = nullptr;
-    for (Decl *D : DC->decls()) {
-      if (auto *ND = dyn_cast<NamedDecl>(D))
-        if (ND->getDeclName() == Name)
-          Found = ND;
-    }
-    return Found;
-  };
-
   // Can't find in the list of Decls of the DC.
-  EXPECT_EQ(FindInDeclListOfDC(FooDC, FooName), nullptr);
+  EXPECT_EQ(findInDeclListOfDC(FooDC, FooName), nullptr);
 
   // Can't find in the list of Decls of the LexicalDC
-  EXPECT_EQ(FindInDeclListOfDC(FooLexicalDC, FooName), nullptr);
+  EXPECT_EQ(findInDeclListOfDC(FooLexicalDC, FooName), nullptr);
 
   // ASTImporter specific lookup finds it.
   ASTImporterLookupTable LT(*ToTU);
@@ -3804,21 +3876,11 @@ TEST_P(ASTImporterLookupTableTest,
   FooLexicalDC->getRedeclContext()->localUncachedLookup(FooName, FoundDecls);
   EXPECT_EQ(FoundDecls.size(), 0u);
 
-  auto FindInDeclListOfDC = [](DeclContext *DC, DeclarationName Name) {
-    Decl *Found = nullptr;
-    for (Decl *D : DC->decls()) {
-      if (auto *ND = dyn_cast<NamedDecl>(D))
-        if (ND->getDeclName() == Name)
-          Found = ND;
-    }
-    return Found;
-  };
-
   // Can't find in the list of Decls of the DC.
-  EXPECT_EQ(FindInDeclListOfDC(FooDC, FooName), nullptr);
+  EXPECT_EQ(findInDeclListOfDC(FooDC, FooName), nullptr);
 
   // Can find in the list of Decls of the LexicalDC.
-  EXPECT_EQ(FindInDeclListOfDC(FooLexicalDC, FooName), Foo);
+  EXPECT_EQ(findInDeclListOfDC(FooLexicalDC, FooName), Foo);
 
   // ASTImporter specific lookup finds it.
   ASTImporterLookupTable LT(*ToTU);
@@ -3935,8 +3997,20 @@ TEST_P(ASTImporterLookupTableTest, LookupDeclNamesFromDifferentTUs) {
   ASSERT_EQ(Res.size(), 0u);
 }
 
+static QualType getUnderlyingType(const TypedefType *TDT) {
+  QualType T = TDT->getDecl()->getUnderlyingType();
+
+  if (const auto *Inner = dyn_cast<TypedefType>(T.getTypePtr()))
+    return getUnderlyingType(Inner);
+
+  return T;
+}
+
 static const RecordDecl * getRecordDeclOfFriend(FriendDecl *FD) {
   QualType Ty = FD->getFriendType()->getType();
+  if (auto *Inner = dyn_cast<TypedefType>(Ty.getTypePtr())) {
+    Ty = getUnderlyingType(Inner);
+  }
   if (isa<ElaboratedType>(Ty))
     Ty = cast<ElaboratedType>(Ty)->getNamedType();
   return cast<RecordType>(Ty)->getDecl();
@@ -3955,7 +4029,8 @@ TEST_P(ASTImporterLookupTableTest,
   ASTImporterLookupTable LT(*ToTU);
   auto *FriendD = FirstDeclMatcher<FriendDecl>().match(ToTU, friendDecl());
   const RecordDecl *RD = getRecordDeclOfFriend(FriendD);
-  auto *Y = FirstDeclMatcher<CXXRecordDecl>().match(ToTU, cxxRecordDecl(hasName("Y")));
+  auto *Y = FirstDeclMatcher<CXXRecordDecl>().match(
+      ToTU, cxxRecordDecl(hasName("Y")));
 
   DeclarationName Name = RD->getDeclName();
   auto Res = LT.lookup(ToTU, Name);
@@ -3989,6 +4064,20 @@ TEST_P(ASTImporterLookupTableTest,
 
   Res = LT.lookup(Y, Name);
   EXPECT_EQ(Res.size(), 0u);
+}
+
+TEST_P(ASTImporterLookupTableTest,
+       LookupFindsFriendClassDeclWithTypeAliasDoesNotAssert) {
+  TranslationUnitDecl *ToTU = getToTuDecl(
+      R"(
+      class F;
+      using alias_of_f = F;
+      class Y { friend alias_of_f; };
+      )",
+      Lang_CXX11);
+
+  // ASTImporterLookupTable constructor handles using declarations correctly.
+  ASTImporterLookupTable LT(*ToTU);
 }
 
 TEST_P(ASTImporterLookupTableTest, LookupFindsFwdFriendClassTemplateDecl) {
@@ -4315,6 +4404,9 @@ INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportFunctions,
                         DefaultTestValuesForRunOptions, );
 
 INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportFriendFunctions,
+                        DefaultTestValuesForRunOptions, );
+
+INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportFunctionTemplates,
                         DefaultTestValuesForRunOptions, );
 
 INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportFriendFunctionTemplates,

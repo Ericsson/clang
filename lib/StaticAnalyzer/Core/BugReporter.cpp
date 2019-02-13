@@ -546,7 +546,8 @@ static void updateStackPiecesWithMessage(PathDiagnosticPiece &P,
   }
 }
 
-static void CompactPathDiagnostic(PathPieces &path, const SourceManager& SM);
+static void CompactMacroExpandedPieces(PathPieces &path,
+                                       const SourceManager& SM);
 
 
 std::shared_ptr<PathDiagnosticControlFlowPiece> generateDiagForSwitchOP(
@@ -1962,8 +1963,6 @@ static std::unique_ptr<PathDiagnostic> generatePathDiagnosticForConsumer(
                   PathDiagnosticLocation::createBegin(D, SM), CalleeLC);
   }
 
-  if (!AddPathEdges && GenerateDiagnostics)
-    CompactPathDiagnostic(PD->getMutablePieces(), SM);
 
   // Finally, prune the diagnostic path of uninteresting stuff.
   if (!PD->path.empty()) {
@@ -1997,6 +1996,10 @@ static std::unique_ptr<PathDiagnostic> generatePathDiagnosticForConsumer(
     removeRedundantMsgs(PD->getMutablePieces());
     removeEdgesToDefaultInitializers(PD->getMutablePieces());
   }
+
+  if (GenerateDiagnostics && Opts.shouldDisplayMacroExpansions())
+    CompactMacroExpandedPieces(PD->getMutablePieces(), SM);
+
   return PD;
 }
 
@@ -2437,9 +2440,10 @@ bool TrimmedGraph::popNextReportGraph(ReportGraph &GraphWrapper) {
   return true;
 }
 
-/// CompactPathDiagnostic - This function postprocesses a PathDiagnostic object
-///  and collapses PathDiagosticPieces that are expanded by macros.
-static void CompactPathDiagnostic(PathPieces &path, const SourceManager& SM) {
+/// CompactMacroExpandedPieces - This function postprocesses a PathDiagnostic
+/// object and collapses PathDiagosticPieces that are expanded by macros.
+static void CompactMacroExpandedPieces(PathPieces &path,
+                                       const SourceManager& SM) {
   using MacroStackTy =
       std::vector<
           std::pair<std::shared_ptr<PathDiagnosticMacroPiece>, SourceLocation>>;
@@ -2455,7 +2459,7 @@ static void CompactPathDiagnostic(PathPieces &path, const SourceManager& SM) {
 
     // Recursively compact calls.
     if (auto *call = dyn_cast<PathDiagnosticCallPiece>(&*piece)) {
-      CompactPathDiagnostic(call->path, SM);
+      CompactMacroExpandedPieces(call->path, SM);
     }
 
     // Get the location of the PathDiagnosticPiece.
