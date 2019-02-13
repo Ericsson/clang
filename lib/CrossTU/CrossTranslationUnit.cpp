@@ -382,10 +382,10 @@ CrossTranslationUnitContext::importDefinition(const FunctionDecl *FD) {
   return ToDecl;
 }
 
-void CrossTranslationUnitContext::lazyInitLookupTable(
+void CrossTranslationUnitContext::lazyInitASTImporterSharedState(
     TranslationUnitDecl *ToTU) {
-  if (!LookupTable)
-    LookupTable = llvm::make_unique<ASTImporterLookupTable>(*ToTU);
+  if (!ImporterSharedSt)
+    ImporterSharedSt = llvm::make_unique<ASTImporterSharedState>(*ToTU);
 }
 
 ASTImporter &
@@ -393,10 +393,10 @@ CrossTranslationUnitContext::getOrCreateASTImporter(ASTContext &From) {
   auto I = ASTUnitImporterMap.find(From.getTranslationUnitDecl());
   if (I != ASTUnitImporterMap.end())
     return *I->second;
-  lazyInitLookupTable(Context.getTranslationUnitDecl());
+  lazyInitASTImporterSharedState(Context.getTranslationUnitDecl());
   ASTImporter *NewImporter = new ASTImporter(
       Context, Context.getSourceManager().getFileManager(), From,
-      From.getSourceManager().getFileManager(), false, LookupTable.get());
+      From.getSourceManager().getFileManager(), false, ImporterSharedSt);
   ASTUnitImporterMap[From.getTranslationUnitDecl()].reset(NewImporter);
   return *NewImporter;
 }

@@ -15,7 +15,7 @@
 #ifndef LLVM_CLANG_CROSSTU_CROSSTRANSLATIONUNIT_H
 #define LLVM_CLANG_CROSSTU_CROSSTRANSLATIONUNIT_H
 
-#include "clang/AST/ASTImporterLookupTable.h"
+#include "clang/AST/ASTImporterSharedState.h"
 #include "clang/Basic/LLVM.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -144,7 +144,7 @@ public:
   void emitCrossTUDiagnostics(const IndexError &IE);
 
 private:
-  void lazyInitLookupTable(TranslationUnitDecl *ToTU);
+  void lazyInitASTImporterSharedState(TranslationUnitDecl *ToTU);
   ASTImporter &getOrCreateASTImporter(ASTContext &From);
   const FunctionDecl *findFunctionInDeclContext(const DeclContext *DC,
                                                 StringRef LookupFnName);
@@ -156,7 +156,7 @@ private:
       ASTUnitImporterMap;
   CompilerInstance &CI;
   ASTContext &Context;
-  std::unique_ptr<ASTImporterLookupTable> LookupTable;
+  std::shared_ptr<ASTImporterSharedState> ImporterSharedSt;
 };
 
 } // namespace cross_tu
