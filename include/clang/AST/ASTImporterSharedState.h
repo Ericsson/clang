@@ -28,10 +28,8 @@ class TranslationUnitDecl;
 /// objects.
 class ASTImporterSharedState {
 
-  /// Pointer to the import specific lookup table.  This is an externally
-  /// managed resource (and should exist during the lifetime of the
-  /// ASTImporter object) If not set then the original C/C++ lookup is used.
-  ASTImporterLookupTable LookupTable;
+  /// Pointer to the import specific lookup table.
+  std::unique_ptr<ASTImporterLookupTable> LookupTable;
 
   /// Mapping from the already-imported declarations in the "to"
   /// context to the error status of the import of that declaration.
@@ -45,8 +43,13 @@ class ASTImporterSharedState {
   // And from that point we can better encapsulate the lookup table.
 
 public:
-  ASTImporterSharedState(TranslationUnitDecl &ToTU) : LookupTable(ToTU) {}
-  ASTImporterLookupTable &getLookupTable() { return LookupTable; }
+  ASTImporterSharedState() {}
+
+  ASTImporterSharedState(TranslationUnitDecl &ToTU) {
+    LookupTable = llvm::make_unique<ASTImporterLookupTable>(ToTU);
+  }
+
+  ASTImporterLookupTable *getLookupTable() { return LookupTable.get(); }
 
   llvm::Optional<ImportError> getImportDeclErrorIfAny(Decl *ToD) const {
     auto Pos = ImportErrors.find(ToD);

@@ -86,11 +86,12 @@ class ASTImporterTestBase : public CompilerOptionSpecificTest {
     std::unique_ptr<ASTImporter> Importer;
 
     TU(StringRef Code, StringRef FileName, ArgVector Args);
-    void lazyInitImporter(ASTImporterSharedState &SharedState, ASTUnit *ToAST);
-    Decl *import(ASTImporterSharedState &SharedState, ASTUnit *ToAST,
-                 Decl *FromDecl);
-    QualType import(ASTImporterSharedState &SharedState, ASTUnit *ToAST,
-                    QualType FromType);
+    void lazyInitImporter(std::shared_ptr<ASTImporterSharedState> &SharedState,
+                          ASTUnit *ToAST);
+    Decl *import(std::shared_ptr<ASTImporterSharedState> &SharedState,
+                 ASTUnit *ToAST, Decl *FromDecl);
+    QualType import(std::shared_ptr<ASTImporterSharedState> &SharedState,
+                    ASTUnit *ToAST, QualType FromType);
     ~TU();
   };
 
@@ -111,7 +112,7 @@ class ASTImporterTestBase : public CompilerOptionSpecificTest {
   TU *findFromTU(Decl *From);
 
 protected:
-  std::unique_ptr<ASTImporterSharedState> SharedStatePtr;
+  std::shared_ptr<ASTImporterSharedState> SharedStatePtr;
 
 public:
   // We may have several From context but only one To context.

@@ -7509,10 +7509,15 @@ void ASTNodeImporter::ImportOverrides(CXXMethodDecl *ToMethod,
 ASTImporter::ASTImporter(ASTContext &ToContext, FileManager &ToFileManager,
                          ASTContext &FromContext, FileManager &FromFileManager,
                          bool MinimalImport,
-                         ASTImporterSharedState *SharedState)
+                         std::shared_ptr<ASTImporterSharedState> SharedState)
     : SharedState(SharedState), ToContext(ToContext), FromContext(FromContext),
       ToFileManager(ToFileManager), FromFileManager(FromFileManager),
       Minimal(MinimalImport) {
+
+  // Create a default state without the lookup table: LLDB case.
+  if (!SharedState) {
+    this->SharedState = std::make_shared<ASTImporterSharedState>();
+  }
 
   ImportedDecls[FromContext.getTranslationUnitDecl()] =
       ToContext.getTranslationUnitDecl();
@@ -7552,9 +7557,9 @@ ASTImporter::findDeclsInToCtx(DeclContext *DC, DeclarationName Name) {
   // then the enum constant 'A' and the variable 'A' violates ODR.
   // We can diagnose this only if we search in the redecl context.
   DeclContext *ReDC = DC->getRedeclContext();
-  if (SharedState) {
+  if (SharedState->getLookupTable()) {
     ASTImporterLookupTable::LookupResult LookupResult =
-        SharedState->getLookupTable().lookup(ReDC, Name);
+        SharedState->getLookupTable()->lookup(ReDC, Name);
     return FoundDeclsTy(LookupResult.begin(), LookupResult.end());
   } else {
     // FIXME Can we remove this kind of lookup?
@@ -7566,9 +7571,9 @@ ASTImporter::findDeclsInToCtx(DeclContext *DC, DeclarationName Name) {
 }
 
 void ASTImporter::AddToLookupTable(Decl *ToD) {
-  if (SharedState)
+  if (SharedState->getLookupTable())
     if (auto *ToND = dyn_cast<NamedDecl>(ToD))
-      SharedState->getLookupTable().add(ToND);
+      SharedState->getLookupTable()->add(ToND);
 }
 
 Expected<QualType> ASTImporter::Import(QualType FromT) {
@@ -8033,9 +8038,9 @@ Expected<Decl *> ASTImporter::Import(Decl *FromD) {
       // traverse of the 'to' context).
       auto PosF = ImportedFromDecls.find(ToD);
       if (PosF != ImportedFromDecls.end()) {
-        if (SharedState)
+        if (SharedState->getLookupTable())
           if (auto *ToND = dyn_cast<NamedDecl>(ToD))
-            SharedState->getLookupTable().remove(ToND);
+            SharedState->getLookupTable()->remove(ToND);
         ImportedFromDecls.erase(PosF);
       }
 

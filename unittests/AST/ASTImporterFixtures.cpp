@@ -115,19 +115,20 @@ ASTImporterTestBase::TU::TU(StringRef Code, StringRef FileName, ArgVector Args)
 }
 
 void ASTImporterTestBase::TU::lazyInitImporter(
-    ASTImporterSharedState &SharedState, ASTUnit *ToAST) {
+    std::shared_ptr<ASTImporterSharedState> &SharedState, ASTUnit *ToAST) {
   assert(ToAST);
   if (!Importer) {
     Importer.reset(new ASTImporter(
         ToAST->getASTContext(), ToAST->getFileManager(), Unit->getASTContext(),
-        Unit->getFileManager(), false, &SharedState));
+        Unit->getFileManager(), false, SharedState));
   }
   assert(&ToAST->getASTContext() == &Importer->getToContext());
   createVirtualFileIfNeeded(ToAST, FileName, Code);
 }
 
-Decl *ASTImporterTestBase::TU::import(ASTImporterSharedState &SharedState,
-                                      ASTUnit *ToAST, Decl *FromDecl) {
+Decl *ASTImporterTestBase::TU::import(
+    std::shared_ptr<ASTImporterSharedState> &SharedState, ASTUnit *ToAST,
+    Decl *FromDecl) {
   lazyInitImporter(SharedState, ToAST);
   if (auto ImportedOrErr = Importer->Import(FromDecl))
     return *ImportedOrErr;
@@ -137,8 +138,9 @@ Decl *ASTImporterTestBase::TU::import(ASTImporterSharedState &SharedState,
   }
 }
 
-QualType ASTImporterTestBase::TU::import(ASTImporterSharedState &SharedState,
-                                         ASTUnit *ToAST, QualType FromType) {
+QualType ASTImporterTestBase::TU::import(
+    std::shared_ptr<ASTImporterSharedState> &SharedState, ASTUnit *ToAST,
+    QualType FromType) {
   lazyInitImporter(SharedState, ToAST);
   if (auto ImportedOrErr = Importer->Import(FromType))
     return *ImportedOrErr;
@@ -153,7 +155,7 @@ ASTImporterTestBase::TU::~TU() {}
 void ASTImporterTestBase::lazyInitSharedState(TranslationUnitDecl *ToTU) {
   assert(ToTU);
   if (!SharedStatePtr)
-    SharedStatePtr = llvm::make_unique<ASTImporterSharedState>(*ToTU);
+    SharedStatePtr = std::make_shared<ASTImporterSharedState>(*ToTU);
 }
 
 void ASTImporterTestBase::lazyInitToAST(Language ToLang, StringRef ToSrcCode,
@@ -206,7 +208,7 @@ ASTImporterTestBase::getImportedDecl(StringRef FromSrcCode, Language FromLang,
   assert(FoundDecls.size() == 1);
 
   Decl *Imported =
-      FromTU.import(*SharedStatePtr, ToAST.get(), FoundDecls.front());
+      FromTU.import(SharedStatePtr, ToAST.get(), FoundDecls.front());
 
   assert(Imported);
   return std::make_tuple(*FoundDecls.begin(), Imported);
@@ -238,7 +240,7 @@ Decl *ASTImporterTestBase::Import(Decl *From, Language ToLang) {
   lazyInitToAST(ToLang, "", OutputFileName);
   TU *FromTU = findFromTU(From);
   assert(SharedStatePtr);
-  Decl *To = FromTU->import(*SharedStatePtr, ToAST.get(), From);
+  Decl *To = FromTU->import(SharedStatePtr, ToAST.get(), From);
   if (To)
     checkImportedSourceLocations(From, To);
   return To;
@@ -249,7 +251,7 @@ QualType ASTImporterTestBase::ImportType(QualType FromType, Decl *TUDecl,
   lazyInitToAST(ToLang, "", OutputFileName);
   TU *FromTU = findFromTU(TUDecl);
   assert(SharedStatePtr);
-  return FromTU->import(*SharedStatePtr, ToAST.get(), FromType);
+  return FromTU->import(SharedStatePtr, ToAST.get(), FromType);
 }
 
 ASTImporterTestBase::~ASTImporterTestBase() {

@@ -39,7 +39,7 @@ void ASTMergeAction::ExecuteAction() {
                                        &CI.getASTContext());
   IntrusiveRefCntPtr<DiagnosticIDs>
       DiagIDs(CI.getDiagnostics().getDiagnosticIDs());
-  ASTImporterSharedState SharedState(
+  auto SharedState = std::make_shared<ASTImporterSharedState>(
       *CI.getASTContext().getTranslationUnitDecl());
   for (unsigned I = 0, N = ASTFiles.size(); I != N; ++I) {
     IntrusiveRefCntPtr<DiagnosticsEngine>
@@ -56,7 +56,7 @@ void ASTMergeAction::ExecuteAction() {
 
     ASTImporter Importer(CI.getASTContext(), CI.getFileManager(),
                          Unit->getASTContext(), Unit->getFileManager(),
-                         /*MinimalImport=*/false, &SharedState);
+                         /*MinimalImport=*/false, SharedState);
 
     TranslationUnitDecl *TU = Unit->getASTContext().getTranslationUnitDecl();
     for (auto *D : TU->decls()) {

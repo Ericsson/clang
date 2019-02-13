@@ -113,8 +113,7 @@ class TypeSourceInfo;
     };
 
   private:
-
-    ASTImporterSharedState *SharedState = nullptr;
+    std::shared_ptr<ASTImporterSharedState> SharedState = nullptr;
 
     /// The path which we go through during the import of a given AST node.
     ImportPathTy ImportPath;
@@ -197,7 +196,7 @@ class TypeSourceInfo;
     ASTImporter(ASTContext &ToContext, FileManager &ToFileManager,
                 ASTContext &FromContext, FileManager &FromFileManager,
                 bool MinimalImport,
-                ASTImporterSharedState *SharedState = nullptr);
+                std::shared_ptr<ASTImporterSharedState> SharedState = nullptr);
 
     virtual ~ASTImporter();
 
