@@ -3592,6 +3592,38 @@ ExpectedDecl ASTNodeImporter::VisitIndirectFieldDecl(IndirectFieldDecl *D) {
   return ToIndirectField;
 }
 
+static std::tuple<unsigned int, unsigned int>
+getFriendCountAndPosition(FriendDecl *FD) {
+  unsigned int FriendCount = 0;
+  llvm::Optional<unsigned int> FriendPosition;
+  auto *RD = cast<CXXRecordDecl>(FD->getLexicalDeclContext());
+  if (FD->getFriendType()) {
+    QualType TypeOfFriend = FD->getFriendType()->getType().getCanonicalType();
+    for (FriendDecl *FoundFriend : RD->friends()) {
+      if (FoundFriend == FD) {
+        FriendPosition = FriendCount;
+        ++FriendCount;
+      } else if (FoundFriend->getFriendType() &&
+                 FoundFriend->getFriendType()->getType().getCanonicalType() ==
+                     TypeOfFriend)
+        ++FriendCount;
+    }
+  } else {
+    const Decl *CanDeclOfFriend = FD->getFriendDecl()->getCanonicalDecl();
+    for (FriendDecl *FoundFriend : RD->friends()) {
+      if (FoundFriend == FD) {
+        FriendPosition = FriendCount;
+        ++FriendCount;
+      } else if (FoundFriend->getFriendDecl() &&
+                 FoundFriend->getFriendDecl()->getCanonicalDecl() ==
+                     CanDeclOfFriend)
+        ++FriendCount;
+    }
+  }
+  assert(FriendPosition && "Friend decl not found in own parent.");
+  return std::make_tuple(FriendCount, *FriendPosition);
+}
+
 ExpectedDecl ASTNodeImporter::VisitFriendDecl(FriendDecl *D) {
   // Import the major distinguishing characteristics of a declaration.
   DeclContext *DC, *LexicalDC;
@@ -3600,25 +3632,38 @@ ExpectedDecl ASTNodeImporter::VisitFriendDecl(FriendDecl *D) {
 
   // Determine whether we've already imported this decl.
   // FriendDecl is not a NamedDecl so we cannot use lookup.
+  // We try to maintain order and count of redundant friend declarations.
   auto *RD = cast<CXXRecordDecl>(DC);
   FriendDecl *ImportedFriend = RD->getFirstFriend();
+  SmallVector<FriendDecl *, 2> ImportedEquivalentFriends;
 
   while (ImportedFriend) {
+    bool Match = false;
     if (D->getFriendDecl() && ImportedFriend->getFriendDecl()) {
-      if (IsStructuralMatch(D->getFriendDecl(), ImportedFriend->getFriendDecl(),
-                            /*Complain=*/false))
-        return Importer.MapImported(D, ImportedFriend);
-
+      Match =
+          IsStructuralMatch(D->getFriendDecl(), ImportedFriend->getFriendDecl(),
+                            /*Complain=*/false);
     } else if (D->getFriendType() && ImportedFriend->getFriendType()) {
-      if (Importer.IsStructurallyEquivalent(
-            D->getFriendType()->getType(),
-            ImportedFriend->getFriendType()->getType(), true))
-        return Importer.MapImported(D, ImportedFriend);
+      Match = Importer.IsStructurallyEquivalent(
+          D->getFriendType()->getType(),
+          ImportedFriend->getFriendType()->getType(), /*Complain=*/false);
     }
+    if (Match)
+      ImportedEquivalentFriends.push_back(ImportedFriend);
+
     ImportedFriend = ImportedFriend->getNextFriend();
   }
+  std::tuple<unsigned int, unsigned int> CountAndPosition =
+      getFriendCountAndPosition(D);
+
+  assert(ImportedEquivalentFriends.size() <= std::get<0>(CountAndPosition) &&
+         "Class with non-matching friends is imported, ODR check wrong?");
+  if (ImportedEquivalentFriends.size() == std::get<0>(CountAndPosition))
+    return Importer.MapImported(
+        D, ImportedEquivalentFriends[std::get<1>(CountAndPosition)]);
 
   // Not found. Create it.
+  // The declarations will be put into order later by ImportDeclContext.
   FriendDecl::FriendUnion ToFU;
   if (NamedDecl *FriendD = D->getFriendDecl()) {
     NamedDecl *ToFriendD;

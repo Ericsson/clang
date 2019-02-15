@@ -847,6 +847,20 @@ TEST_F(StructuralEquivalenceLambdaTest, LambdaClassesWithEqFields) {
   EXPECT_TRUE(testStructuralMatch(L0, L1));
 }
 
+TEST_F(StructuralEquivalenceRecordTest, SameFriendMultipleTimes) {
+  auto t = makeNamedDecls("struct foo{ friend class X; };",
+                          "struct foo{ friend class X; friend class X; };",
+                          Lang_CXX);
+  EXPECT_FALSE(testStructuralMatch(t));
+}
+
+TEST_F(StructuralEquivalenceRecordTest, SameFriendsDifferentOrder) {
+  auto t = makeNamedDecls("struct foo{ friend class X; friend class Y; };",
+                          "struct foo{ friend class Y; friend class X; };",
+                          Lang_CXX);
+  EXPECT_FALSE(testStructuralMatch(t));
+}
+
 TEST_F(StructuralEquivalenceTest, CompareSameDeclWithMultiple) {
   auto t = makeNamedDecls(
       "struct A{ }; struct B{ }; void foo(A a, A b);",
