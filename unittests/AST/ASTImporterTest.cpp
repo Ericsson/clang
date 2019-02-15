@@ -3673,6 +3673,56 @@ TEST_P(ImportFriendClasses, ImportOfRecursiveFriendClass) {
   EXPECT_TRUE(MatchVerifier<Decl>{}.match(ToD, Pattern));
 }
 
+TEST_P(ImportFriendClasses, ImportOfRepeatedFriendType) {
+  auto Code =
+      R"(
+      class Container {
+        friend class X;
+        friend class X;
+      };
+      )";
+  Decl *ToTu = getToTuDecl(Code, Lang_CXX);
+  Decl *FromTu = getTuDecl(Code, Lang_CXX, "from.cc");
+
+  auto *ToFriend1 = FirstDeclMatcher<FriendDecl>().match(ToTu, friendDecl());
+  auto *ToFriend2 = LastDeclMatcher<FriendDecl>().match(ToTu, friendDecl());
+  auto *FromFriend1 =
+      FirstDeclMatcher<FriendDecl>().match(FromTu, friendDecl());
+  auto *FromFriend2 = LastDeclMatcher<FriendDecl>().match(FromTu, friendDecl());
+
+  FriendDecl *ToImportedFriend1 = Import(FromFriend1, Lang_CXX);
+  FriendDecl *ToImportedFriend2 = Import(FromFriend2, Lang_CXX);
+
+  EXPECT_NE(ToImportedFriend1, ToImportedFriend2);
+  EXPECT_EQ(ToFriend1, ToImportedFriend1);
+  EXPECT_EQ(ToFriend2, ToImportedFriend2);
+}
+
+TEST_P(ImportFriendClasses, ImportOfRepeatedFriendDecl) {
+  auto Code =
+      R"(
+      class Container {
+        friend void f();
+        friend void f();
+      };
+      )";
+  Decl *ToTu = getToTuDecl(Code, Lang_CXX);
+  Decl *FromTu = getTuDecl(Code, Lang_CXX, "from.cc");
+
+  auto *ToFriend1 = FirstDeclMatcher<FriendDecl>().match(ToTu, friendDecl());
+  auto *ToFriend2 = LastDeclMatcher<FriendDecl>().match(ToTu, friendDecl());
+  auto *FromFriend1 =
+      FirstDeclMatcher<FriendDecl>().match(FromTu, friendDecl());
+  auto *FromFriend2 = LastDeclMatcher<FriendDecl>().match(FromTu, friendDecl());
+
+  FriendDecl *ToImportedFriend1 = Import(FromFriend1, Lang_CXX);
+  FriendDecl *ToImportedFriend2 = Import(FromFriend2, Lang_CXX);
+
+  EXPECT_NE(ToImportedFriend1, ToImportedFriend2);
+  EXPECT_EQ(ToFriend1, ToImportedFriend1);
+  EXPECT_EQ(ToFriend2, ToImportedFriend2);
+}
+
 TEST_P(ImportFriendClasses, ImportOfRecursiveFriendClassTemplate) {
   Decl *FromTu = getTuDecl(
       R"(
