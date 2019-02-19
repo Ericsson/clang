@@ -7736,10 +7736,23 @@ TranslationUnitDecl *ASTImporter::GetFromTU(Decl *ToD) {
   return FromDPos->second->getTranslationUnitDecl();
 }
 
+// RAII class to maintain the import path.
+class ImportPathBuilder {
+  ASTImporter::ImportPathTy &Path;
+
+public:
+  ImportPathBuilder(ASTImporter::ImportPathTy &Path, Decl *FromD) : Path(Path) {
+    Path.push(FromD);
+  };
+  ~ImportPathBuilder() { Path.pop(); }
+};
+
 Expected<Decl *> ASTImporter::Import(Decl *FromD) {
   if (!FromD)
     return nullptr;
 
+  // Push FromD to the stack, and remove that when we return.
+  ImportPathBuilder PathRAII(ImportPath, FromD);
 
   // Check whether there was a previous failed import.
   // If yes return the existing error.
@@ -7751,6 +7764,10 @@ Expected<Decl *> ASTImporter::Import(Decl *FromD) {
   if (ToD) {
     // If FromD has some updated flags after last import, apply it
     updateFlags(FromD, ToD);
+    // If we encounter a cycle during an import then we save the relevant part
+    // of the import path associated to the Decl.
+    if (ImportPath.hasCycleAtBack())
+      SavedImportPaths[FromD].push_back(ImportPath.copyCycleAtBack());
     return ToD;
   }
 
@@ -7795,6 +7812,14 @@ Expected<Decl *> ASTImporter::Import(Decl *FromD) {
       handleAllErrors(ToDOrErr.takeError(),
                       [&ErrOut](const ImportError &E) { ErrOut = E; });
       setImportDeclError(FromD, ErrOut);
+
+      // Set the error for all nodes which have been created before we
+      // recognized the error.
+      for (const auto &Path : SavedImportPaths[FromD])
+        for (Decl *Di : Path)
+          setImportDeclError(Di, ErrOut);
+      SavedImportPaths[FromD].clear();
+
       // Do not return ToDOrErr, error was taken out of it.
       return make_error<ImportError>(ErrOut);
     }
@@ -7819,6 +7844,7 @@ Expected<Decl *> ASTImporter::Import(Decl *FromD) {
   Imported(FromD, ToD);
 
   updateFlags(FromD, ToD);
+  SavedImportPaths[FromD].clear();
   return ToDOrErr;
 }
 
@@ -8534,8 +8560,6 @@ ASTImporter::getImportDeclErrorIfAny(Decl *FromD) const {
 }
 
 void ASTImporter::setImportDeclError(Decl *From, ImportError Error) {
-  assert(ImportDeclErrors.find(From) == ImportDeclErrors.end() &&
-         "Setting import error allowed only once for a Decl.");
   ImportDeclErrors[From] = Error;
 }
 
@@ -8556,4 +8580,39 @@ bool ASTImporter::IsStructurallyEquivalent(QualType From, QualType To,
                                    getStructuralEquivalenceKind(*this), false,
                                    Complain);
   return Ctx.IsEquivalent(From, To);
+}
+
+void ASTImporter::ImportPathTy::push(Decl *D) {
+  Nodes.push_back(D);
+  ++Aux[D];
+}
+
+void ASTImporter::ImportPathTy::pop() {
+  if (Nodes.empty())
+    return;
+  --Aux[Nodes.back()];
+  Nodes.pop_back();
+}
+
+Decl *ASTImporter::ImportPathTy::top() const {
+  if (!Nodes.empty())
+    return Nodes.back();
+  return nullptr;
+}
+
+bool ASTImporter::ImportPathTy::hasCycleAtBack() {
+  return Aux[Nodes.back()] > 1;
+}
+
+ASTImporter::ImportPathTy::Cycle
+ASTImporter::ImportPathTy::getCycleAtBack() const {
+  assert(Nodes.size() >= 2);
+  return Cycle(Nodes.rbegin(),
+               std::find(Nodes.rbegin() + 1, Nodes.rend(), Nodes.back()) + 1);
+}
+
+ASTImporter::ImportPathTy::VecTy
+ASTImporter::ImportPathTy::copyCycleAtBack() const {
+  auto R = getCycleAtBack();
+  return VecTy(R.begin(), R.end());
 }

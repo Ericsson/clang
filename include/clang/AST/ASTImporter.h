@@ -27,6 +27,7 @@
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Support/Error.h"
 #include <utility>
 
@@ -87,6 +88,30 @@ class TypeSourceInfo;
     using ImportedCXXBaseSpecifierMap =
         llvm::DenseMap<const CXXBaseSpecifier *, CXXBaseSpecifier *>;
 
+    class ImportPathTy {
+    public:
+      using VecTy = llvm::SmallVector<Decl *, 32>;
+
+      void push(Decl *D);
+      void pop();
+      Decl *top() const;
+
+      /// Returns true if the last element can be found earlier in the path.
+      bool hasCycleAtBack();
+      using Cycle = llvm::iterator_range<VecTy::const_reverse_iterator>;
+      Cycle getCycleAtBack() const;
+      /// Returns the copy of the cycle.
+      VecTy copyCycleAtBack() const;
+
+    private:
+      // All the nodes of the path.
+      VecTy Nodes;
+      // Auxiliary container to be able to answer "Do we have a cycle ending
+      // at last element?" as fast as possible.
+      // We count each Decl's occurrence over the path.
+      llvm::SmallDenseMap<Decl *, int, 32> Aux;
+    };
+
   private:
 
     /// Pointer to the import specific lookup table, which may be shared
@@ -95,6 +120,17 @@ class TypeSourceInfo;
     /// lifetime of the ASTImporter object)
     /// If not set then the original C/C++ lookup is used.
     ASTImporterLookupTable *LookupTable = nullptr;
+
+    /// The path which we go through during the import of a given AST node.
+    ImportPathTy ImportPath;
+    /// Sometimes we have to save some part of an import path, so later we can
+    /// set up properties to the saved nodes.
+    /// We may have several of these import paths associated to one Decl.
+    using SavedImportPathsForOneDecl =
+        llvm::SmallVector<ImportPathTy::VecTy, 32>;
+    using SavedImportPathsTy =
+        llvm::SmallDenseMap<Decl *, SavedImportPathsForOneDecl, 32>;
+    SavedImportPathsTy SavedImportPaths;
 
     /// The contexts we're importing to and from.
     ASTContext &ToContext, &FromContext;
