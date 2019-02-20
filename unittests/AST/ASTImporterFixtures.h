@@ -86,11 +86,12 @@ class ASTImporterTestBase : public CompilerOptionSpecificTest {
     std::unique_ptr<ASTImporter> Importer;
 
     TU(StringRef Code, StringRef FileName, ArgVector Args);
-    void lazyInitImporter(std::shared_ptr<ASTImporterSharedState> &SharedState,
-                          ASTUnit *ToAST);
-    Decl *import(std::shared_ptr<ASTImporterSharedState> &SharedState,
+    void
+    lazyInitImporter(const std::shared_ptr<ASTImporterSharedState> &SharedState,
+                     ASTUnit *ToAST);
+    Decl *import(const std::shared_ptr<ASTImporterSharedState> &SharedState,
                  ASTUnit *ToAST, Decl *FromDecl);
-    QualType import(std::shared_ptr<ASTImporterSharedState> &SharedState,
+    QualType import(const std::shared_ptr<ASTImporterSharedState> &SharedState,
                     ASTUnit *ToAST, QualType FromType);
     ~TU();
   };

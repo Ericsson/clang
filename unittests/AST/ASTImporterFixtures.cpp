@@ -115,7 +115,8 @@ ASTImporterTestBase::TU::TU(StringRef Code, StringRef FileName, ArgVector Args)
 }
 
 void ASTImporterTestBase::TU::lazyInitImporter(
-    std::shared_ptr<ASTImporterSharedState> &SharedState, ASTUnit *ToAST) {
+    const std::shared_ptr<ASTImporterSharedState> &SharedState,
+    ASTUnit *ToAST) {
   assert(ToAST);
   if (!Importer) {
     Importer.reset(new ASTImporter(
@@ -127,7 +128,7 @@ void ASTImporterTestBase::TU::lazyInitImporter(
 }
 
 Decl *ASTImporterTestBase::TU::import(
-    std::shared_ptr<ASTImporterSharedState> &SharedState, ASTUnit *ToAST,
+    const std::shared_ptr<ASTImporterSharedState> &SharedState, ASTUnit *ToAST,
     Decl *FromDecl) {
   lazyInitImporter(SharedState, ToAST);
   if (auto ImportedOrErr = Importer->Import(FromDecl))
@@ -139,7 +140,7 @@ Decl *ASTImporterTestBase::TU::import(
 }
 
 QualType ASTImporterTestBase::TU::import(
-    std::shared_ptr<ASTImporterSharedState> &SharedState, ASTUnit *ToAST,
+    const std::shared_ptr<ASTImporterSharedState> &SharedState, ASTUnit *ToAST,
     QualType FromType) {
   lazyInitImporter(SharedState, ToAST);
   if (auto ImportedOrErr = Importer->Import(FromType))
