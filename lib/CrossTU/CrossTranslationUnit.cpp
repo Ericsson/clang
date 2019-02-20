@@ -382,10 +382,10 @@ CrossTranslationUnitContext::importDefinition(const FunctionDecl *FD) {
   return ToDecl;
 }
 
-void CrossTranslationUnitContext::lazyInitASTImporterSharedState(
+void CrossTranslationUnitContext::lazyInitImporterSharedSt(
     TranslationUnitDecl *ToTU) {
   if (!ImporterSharedSt)
-    ImporterSharedSt = llvm::make_unique<ASTImporterSharedState>(*ToTU);
+    ImporterSharedSt = std::make_shared<ASTImporterSharedState>(*ToTU);
 }
 
 ASTImporter &
@@ -393,7 +393,7 @@ CrossTranslationUnitContext::getOrCreateASTImporter(ASTContext &From) {
   auto I = ASTUnitImporterMap.find(From.getTranslationUnitDecl());
   if (I != ASTUnitImporterMap.end())
     return *I->second;
-  lazyInitASTImporterSharedState(Context.getTranslationUnitDecl());
+  lazyInitImporterSharedSt(Context.getTranslationUnitDecl());
   ASTImporter *NewImporter = new ASTImporter(
       Context, Context.getSourceManager().getFileManager(), From,
       From.getSourceManager().getFileManager(), false, ImporterSharedSt);

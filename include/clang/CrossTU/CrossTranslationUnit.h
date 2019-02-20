@@ -144,7 +144,7 @@ public:
   void emitCrossTUDiagnostics(const IndexError &IE);
 
 private:
-  void lazyInitASTImporterSharedState(TranslationUnitDecl *ToTU);
+  void lazyInitImporterSharedSt(TranslationUnitDecl *ToTU);
   ASTImporter &getOrCreateASTImporter(ASTContext &From);
   const FunctionDecl *findFunctionInDeclContext(const DeclContext *DC,
                                                 StringRef LookupFnName);
