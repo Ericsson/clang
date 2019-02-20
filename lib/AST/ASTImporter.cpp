@@ -8049,6 +8049,8 @@ Expected<Decl *> ASTImporter::Import(Decl *FromD) {
       }
 
       // FIXME: AST may contain remaining references to the failed object.
+      // However, the ImportDeclErrors in the shared state contains all the
+      // failed objects together with their error.
     }
 
     if (!getImportDeclErrorIfAny(FromD)) {
@@ -8093,7 +8095,8 @@ Expected<Decl *> ASTImporter::Import(Decl *FromD) {
   }
 
   // We could import from the current TU without error.  But previously we
-  // already had imported a Decl as `ToD` from another TU and with an error.
+  // already had imported a Decl as `ToD` from another TU (with another
+  // ASTImporter object) and with an error.
   if (auto Error = SharedState->getImportDeclErrorIfAny(ToD))
     return make_error<ImportError>(*Error);
 
