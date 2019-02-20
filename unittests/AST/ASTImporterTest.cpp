@@ -394,10 +394,11 @@ struct RedirectingImporterTest : ASTImporterOptionSpecificTestBase {
   RedirectingImporterTest() {
     Creator = [](ASTContext &ToContext, FileManager &ToFileManager,
                  ASTContext &FromContext, FileManager &FromFileManager,
-                 bool MinimalImport, ASTImporterLookupTable *LookupTable) {
+                 bool MinimalImport,
+                 const std::shared_ptr<ASTImporterSharedState> &SharedState) {
       return new RedirectingImporter(ToContext, ToFileManager, FromContext,
                                      FromFileManager, MinimalImport,
-                                     LookupTable);
+                                     SharedState);
     };
   }
 };
@@ -3024,7 +3025,7 @@ private:
       CXXMethodDecl *Method =
           FirstDeclMatcher<CXXMethodDecl>().match(ToClass, MethodMatcher);
       ToClass->removeDecl(Method);
-      LookupTablePtr->remove(Method);
+      SharedStatePtr->getLookupTable()->remove(Method);
     }
 
     ASSERT_EQ(DeclCounter<CXXMethodDecl>().match(ToClass, MethodMatcher), 0u);

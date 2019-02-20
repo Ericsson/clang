@@ -13,7 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/AST/ASTImporter.h"
-#include "clang/AST/ASTImporterLookupTable.h"
+#include "clang/AST/ASTImporterSharedState.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/ASTDiagnostic.h"
 #include "clang/AST/ASTStructuralEquivalence.h"
@@ -7598,10 +7598,15 @@ void ASTNodeImporter::ImportOverrides(CXXMethodDecl *ToMethod,
 ASTImporter::ASTImporter(ASTContext &ToContext, FileManager &ToFileManager,
                          ASTContext &FromContext, FileManager &FromFileManager,
                          bool MinimalImport,
-                         ASTImporterLookupTable *LookupTable)
-    : LookupTable(LookupTable), ToContext(ToContext), FromContext(FromContext),
+                         std::shared_ptr<ASTImporterSharedState> SharedState)
+    : SharedState(SharedState), ToContext(ToContext), FromContext(FromContext),
       ToFileManager(ToFileManager), FromFileManager(FromFileManager),
       Minimal(MinimalImport) {
+
+  // Create a default state without the lookup table: LLDB case.
+  if (!SharedState) {
+    this->SharedState = std::make_shared<ASTImporterSharedState>();
+  }
 
   ImportedDecls[FromContext.getTranslationUnitDecl()] =
       ToContext.getTranslationUnitDecl();
@@ -7641,9 +7646,9 @@ ASTImporter::findDeclsInToCtx(DeclContext *DC, DeclarationName Name) {
   // then the enum constant 'A' and the variable 'A' violates ODR.
   // We can diagnose this only if we search in the redecl context.
   DeclContext *ReDC = DC->getRedeclContext();
-  if (LookupTable) {
+  if (SharedState->getLookupTable()) {
     ASTImporterLookupTable::LookupResult LookupResult =
-        LookupTable->lookup(ReDC, Name);
+        SharedState->getLookupTable()->lookup(ReDC, Name);
     return FoundDeclsTy(LookupResult.begin(), LookupResult.end());
   } else {
     // FIXME Can we remove this kind of lookup?
@@ -7655,9 +7660,9 @@ ASTImporter::findDeclsInToCtx(DeclContext *DC, DeclarationName Name) {
 }
 
 void ASTImporter::AddToLookupTable(Decl *ToD) {
-  if (LookupTable)
+  if (SharedState->getLookupTable())
     if (auto *ToND = dyn_cast<NamedDecl>(ToD))
-      LookupTable->add(ToND);
+      SharedState->getLookupTable()->add(ToND);
 }
 
 Expected<Decl *> ASTImporter::ImportImpl(Decl *FromD) {
@@ -7762,6 +7767,10 @@ Expected<Decl *> ASTImporter::Import(Decl *FromD) {
   // Check whether we've already imported this declaration.
   Decl *ToD = GetAlreadyImportedOrNull(FromD);
   if (ToD) {
+    // Already imported (possibly from another TU) and with an error.
+    if (auto Error = SharedState->getImportDeclErrorIfAny(ToD))
+      return make_error<ImportError>(*Error);
+
     // If FromD has some updated flags after last import, apply it
     updateFlags(FromD, ToD);
     // If we encounter a cycle during an import then we save the relevant part
@@ -7795,13 +7804,15 @@ Expected<Decl *> ASTImporter::Import(Decl *FromD) {
       // traverse of the 'to' context).
       auto PosF = ImportedFromDecls.find(ToD);
       if (PosF != ImportedFromDecls.end()) {
-        if (LookupTable)
+        if (SharedState->getLookupTable())
           if (auto *ToND = dyn_cast<NamedDecl>(ToD))
-            LookupTable->remove(ToND);
+            SharedState->getLookupTable()->remove(ToND);
         ImportedFromDecls.erase(PosF);
       }
 
       // FIXME: AST may contain remaining references to the failed object.
+      // However, the ImportDeclErrors in the shared state contains all the
+      // failed objects together with their error.
     }
 
     if (!getImportDeclErrorIfAny(FromD)) {
@@ -7812,12 +7823,20 @@ Expected<Decl *> ASTImporter::Import(Decl *FromD) {
       handleAllErrors(ToDOrErr.takeError(),
                       [&ErrOut](const ImportError &E) { ErrOut = E; });
       setImportDeclError(FromD, ErrOut);
+      // Set the error for the mapped to Decl, which is in the "to" context.
+      if (Pos != ImportedDecls.end())
+        SharedState->setImportDeclError(Pos->second, ErrOut);
 
       // Set the error for all nodes which have been created before we
       // recognized the error.
       for (const auto &Path : SavedImportPaths[FromD])
-        for (Decl *Di : Path)
-          setImportDeclError(Di, ErrOut);
+        for (Decl *FromDi : Path) {
+          setImportDeclError(FromDi, ErrOut);
+          // Set the error for the mapped to Decl, which is in the "to" context.
+          auto Ii = ImportedDecls.find(FromDi);
+          if (Ii != ImportedDecls.end())
+            SharedState->setImportDeclError(Ii->second, ErrOut);
+        }
       SavedImportPaths[FromD].clear();
 
       // Do not return ToDOrErr, error was taken out of it.
@@ -7838,8 +7857,15 @@ Expected<Decl *> ASTImporter::Import(Decl *FromD) {
     return make_error<ImportError>(*Err);
   }
 
+  // We could import from the current TU without error.  But previously we
+  // already had imported a Decl as `ToD` from another TU (with another
+  // ASTImporter object) and with an error.
+  if (auto Error = SharedState->getImportDeclErrorIfAny(ToD))
+    return make_error<ImportError>(*Error);
+
   // Make sure that ImportImpl registered the imported decl.
   assert(ImportedDecls.count(FromD) != 0 && "Missing call to MapImported?");
+
   // Notify subclasses.
   Imported(FromD, ToD);
 

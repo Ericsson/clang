@@ -34,8 +34,8 @@
 namespace clang {
 
 class ASTContext;
+class ASTImporterSharedState;
 class Attr;
-class ASTImporterLookupTable;
 class CXXBaseSpecifier;
 class CXXCtorInitializer;
 class Decl;
@@ -113,13 +113,7 @@ class TypeSourceInfo;
     };
 
   private:
-
-    /// Pointer to the import specific lookup table, which may be shared
-    /// amongst several ASTImporter objects.
-    /// This is an externally managed resource (and should exist during the
-    /// lifetime of the ASTImporter object)
-    /// If not set then the original C/C++ lookup is used.
-    ASTImporterLookupTable *LookupTable = nullptr;
+    std::shared_ptr<ASTImporterSharedState> SharedState = nullptr;
 
     /// The path which we go through during the import of a given AST node.
     ImportPathTy ImportPath;
@@ -208,7 +202,7 @@ class TypeSourceInfo;
     ASTImporter(ASTContext &ToContext, FileManager &ToFileManager,
                 ASTContext &FromContext, FileManager &FromFileManager,
                 bool MinimalImport,
-                ASTImporterLookupTable *LookupTable = nullptr);
+                std::shared_ptr<ASTImporterSharedState> SharedState = nullptr);
 
     virtual ~ASTImporter();
 
