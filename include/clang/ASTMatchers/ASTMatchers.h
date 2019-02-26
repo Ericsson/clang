@@ -2159,10 +2159,6 @@ extern const internal::VariadicDynCastAllOfMatcher<Stmt, CompoundLiteralExpr>
 extern const internal::VariadicDynCastAllOfMatcher<Stmt, CXXNullPtrLiteralExpr>
     cxxNullPtrLiteralExpr;
 
-/// Matches GNU __builtin_choose_expr.
-extern const internal::VariadicDynCastAllOfMatcher<Stmt, ChooseExpr>
-    chooseExpr;
-
 /// Matches GNU __null expression.
 extern const internal::VariadicDynCastAllOfMatcher<Stmt, GNUNullExpr>
     gnuNullExpr;
