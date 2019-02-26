@@ -289,6 +289,46 @@ namespace clang {
       return nullptr;
     }
 
+    void addDeclToContexts(Decl *FromD, Decl *ToD) {
+      if (Importer.isMinimalImport()) {
+        // In minimal import case the decl must be added even if it is not
+        // contained in original context, for LLDB compatibility.
+        // FIXME: Check if a better solution is possible.
+        if (!FromD->getDescribedTemplate() &&
+            FromD->getFriendObjectKind() == Decl::FOK_None)
+          ToD->getLexicalDeclContext()->addDeclInternal(ToD);
+        return;
+      }
+
+      DeclContext *FromDC = FromD->getDeclContext();
+      DeclContext *FromLexicalDC = FromD->getLexicalDeclContext();
+      DeclContext *ToDC = ToD->getDeclContext();
+      DeclContext *ToLexicalDC = ToD->getLexicalDeclContext();
+
+      bool Visible = false;
+      if (FromDC->containsDeclAndLoad(FromD)) {
+        ToDC->addDeclInternal(ToD);
+        Visible = true;
+      }
+      if (ToDC != ToLexicalDC && FromLexicalDC->containsDeclAndLoad(FromD)) {
+        ToLexicalDC->addDeclInternal(ToD);
+        Visible = true;
+      }
+
+      // If the Decl was added to any context, it was made already visible.
+      // Otherwise it is still possible that it should be visible.
+      if (!Visible) {
+        if (auto *FromNamed = dyn_cast<NamedDecl>(FromD)) {
+          auto *ToNamed = cast<NamedDecl>(ToD);
+          DeclContextLookupResult FromLookup =
+              FromDC->lookup(FromNamed->getDeclName());
+          if (std::find(FromLookup.begin(), FromLookup.end(), FromNamed) !=
+              FromLookup.end())
+            ToDC->makeDeclVisibleInContext(ToNamed);
+        }
+      }
+    }
+
   public:
     explicit ASTNodeImporter(ASTImporter &Importer) : Importer(Importer) {}
 
@@ -2587,8 +2627,7 @@ ExpectedDecl ASTNodeImporter::VisitRecordDecl(RecordDecl *D) {
     D2 = D2CXX;
     D2->setAccess(D->getAccess());
     D2->setLexicalDeclContext(LexicalDC);
-    if (!DCXX->getDescribedClassTemplate() || DCXX->isImplicit())
-      LexicalDC->addDeclInternal(D2);
+    addDeclToContexts(D, D2);
 
     if (ClassTemplateDecl *FromDescribed =
         DCXX->getDescribedClassTemplate()) {
@@ -2654,7 +2693,7 @@ ExpectedDecl ASTNodeImporter::VisitRecordDecl(RecordDecl *D) {
                                 Name.getAsIdentifierInfo(), PrevDecl))
       return D2;
     D2->setLexicalDeclContext(LexicalDC);
-    LexicalDC->addDeclInternal(D2);
+    addDeclToContexts(D, D2);
   }
 
   if (auto QualifierLocOrErr = import(D->getQualifierLoc()))
@@ -3151,11 +3190,7 @@ ExpectedDecl ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
   if (Error Err = ImportTemplateInformation(D, ToFunction))
     return std::move(Err);
 
-  // TODO Can we generalize this approach to other AST nodes as well?
-  if (D->getDeclContext()->containsDeclAndLoad(D))
-    DC->addDeclInternal(ToFunction);
-  if (DC != LexicalDC && D->getLexicalDeclContext()->containsDeclAndLoad(D))
-    LexicalDC->addDeclInternal(ToFunction);
+  addDeclToContexts(D, ToFunction);
 
   if (auto *FromCXXMethod = dyn_cast<CXXMethodDecl>(D))
     ImportOverrides(cast<CXXMethodDecl>(ToFunction), FromCXXMethod);
@@ -3644,10 +3679,7 @@ ExpectedDecl ASTNodeImporter::VisitVarDecl(VarDecl *D) {
   if (D->isConstexpr())
     ToVar->setConstexpr(true);
 
-  if (D->getDeclContext()->containsDeclAndLoad(D))
-    DC->addDeclInternal(ToVar);
-  if (DC != LexicalDC && D->getLexicalDeclContext()->containsDeclAndLoad(D))
-    LexicalDC->addDeclInternal(ToVar);
+  addDeclToContexts(D, ToVar);
 
   // Import the rest of the chain. I.e. import all subsequent declarations.
   for (++RedeclIt; RedeclIt != Redecls.end(); ++RedeclIt) {
@@ -4965,10 +4997,7 @@ ExpectedDecl ASTNodeImporter::VisitClassTemplateDecl(ClassTemplateDecl *D) {
   D2->setAccess(D->getAccess());
   D2->setLexicalDeclContext(LexicalDC);
 
-  if (D->getDeclContext()->containsDeclAndLoad(D))
-    DC->addDeclInternal(D2);
-  if (DC != LexicalDC && D->getLexicalDeclContext()->containsDeclAndLoad(D))
-    LexicalDC->addDeclInternal(D2);
+  addDeclToContexts(D, D2);
 
   if (FoundByLookup) {
     auto *Recent =
