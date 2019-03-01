@@ -3624,6 +3624,30 @@ getFriendCountAndPosition(FriendDecl *FD) {
   return std::make_tuple(FriendCount, *FriendPosition);
 }
 
+// Returns the DeclContext of the underlying friend declaration/type.  If that
+// is a dependent type then the returned optional does not have a value.
+static Optional<DeclContext *> getDCOfUnderlyingDecl(FriendDecl *FrD) {
+  if (NamedDecl *ND = FrD->getFriendDecl())
+    return ND->getDeclContext();
+  if (FrD->getFriendType()) {
+    QualType Ty = FrD->getFriendType()->getType();
+    if (isa<ElaboratedType>(Ty))
+      Ty = cast<ElaboratedType>(Ty)->getNamedType();
+    if (!Ty->isDependentType()) {
+      if (const auto *RTy = dyn_cast<RecordType>(Ty))
+        return RTy->getAsCXXRecordDecl()->getDeclContext();
+      else if (const auto *SpecTy = dyn_cast<TemplateSpecializationType>(Ty))
+        return SpecTy->getAsCXXRecordDecl()->getDeclContext();
+      else if (const auto TypedefTy = dyn_cast<TypedefType>(Ty))
+        return TypedefTy->getDecl()->getDeclContext();
+      else
+        llvm_unreachable("Unhandled type of friend");
+    }
+  }
+  // DependentType
+  return Optional<DeclContext *>();
+}
+
 ExpectedDecl ASTNodeImporter::VisitFriendDecl(FriendDecl *D) {
   // Import the major distinguishing characteristics of a declaration.
   DeclContext *DC, *LexicalDC;
@@ -3634,25 +3658,39 @@ ExpectedDecl ASTNodeImporter::VisitFriendDecl(FriendDecl *D) {
   // FriendDecl is not a NamedDecl so we cannot use lookup.
   // We try to maintain order and count of redundant friend declarations.
   auto *RD = cast<CXXRecordDecl>(DC);
-  FriendDecl *ImportedFriend = RD->getFirstFriend();
   SmallVector<FriendDecl *, 2> ImportedEquivalentFriends;
 
-  while (ImportedFriend) {
+  for (FriendDecl *ImportedFriend = RD->getFirstFriend(); ImportedFriend;
+       ImportedFriend = ImportedFriend->getNextFriend()) {
+
+    // Compare the semantic DeclContext of the underlying declarations of the
+    // existing and the to be imported friend.
+    // Normally, lookup ensures this, but with friends we cannot use the lookup.
+    Optional<DeclContext *> ImportedFriendDC =
+        getDCOfUnderlyingDecl(ImportedFriend);
+    Optional<DeclContext *> FromFriendDC = getDCOfUnderlyingDecl(D);
+    if (FromFriendDC) { // The underlying friend type is not dependent.
+      ExpectedDecl FriendDCDeclOrErr = import(cast<Decl>(*FromFriendDC));
+      if (!FriendDCDeclOrErr)
+        return FriendDCDeclOrErr.takeError();
+      DeclContext *FriendDC = cast<DeclContext>(*FriendDCDeclOrErr);
+      if (ImportedFriendDC != FriendDC)
+        continue;
+    }
+
     bool Match = false;
-    if (D->getFriendDecl() && ImportedFriend->getFriendDecl()) {
+    if (D->getFriendDecl() && ImportedFriend->getFriendDecl())
       Match =
           IsStructuralMatch(D->getFriendDecl(), ImportedFriend->getFriendDecl(),
                             /*Complain=*/false);
-    } else if (D->getFriendType() && ImportedFriend->getFriendType()) {
+    else if (D->getFriendType() && ImportedFriend->getFriendType())
       Match = Importer.IsStructurallyEquivalent(
           D->getFriendType()->getType(),
           ImportedFriend->getFriendType()->getType(), /*Complain=*/false);
-    }
     if (Match)
       ImportedEquivalentFriends.push_back(ImportedFriend);
-
-    ImportedFriend = ImportedFriend->getNextFriend();
   }
+
   std::tuple<unsigned int, unsigned int> CountAndPosition =
       getFriendCountAndPosition(D);
 
