@@ -4083,6 +4083,35 @@ TEST_P(ASTImporterOptionSpecificTestBase, FriendFunInClassTemplate) {
   EXPECT_EQ(ImportedFoo, ToFoo);
 }
 
+TEST_P(ImportFriendClasses, ImportOfInlineFriendClassAfterFwdWithSameName) {
+  auto Code =
+      R"(
+      class Container {
+        friend class X; // A friend class ::X
+        class X{ };
+        friend class X; // Friend class Container::X
+      };
+      )";
+  Decl *FromTu = getTuDecl(Code, Lang_CXX, "from.cc");
+
+  auto *To = Import(FirstDeclMatcher<CXXRecordDecl>().match(
+                        FromTu, cxxRecordDecl(hasName("Container"))),
+                    Lang_CXX);
+  ASSERT_TRUE(To);
+
+  Decl *ToTu = To->getTranslationUnitDecl();
+  auto *ToFriend1 = FirstDeclMatcher<FriendDecl>().match(ToTu, friendDecl());
+  auto *ToFriend2 = LastDeclMatcher<FriendDecl>().match(ToTu, friendDecl());
+  auto *ToX = FirstDeclMatcher<RecordDecl>().match(
+      ToTu, cxxRecordDecl(hasName("X"), unless(isImplicit())));
+
+  EXPECT_NE(ToFriend1, ToFriend2);
+  const RecordDecl *RecordOfFriend1 = getRecordDeclOfFriend(ToFriend1);
+  const RecordDecl *RecordOfFriend2 = getRecordDeclOfFriend(ToFriend2);
+  EXPECT_NE(RecordOfFriend1, ToX);
+  EXPECT_EQ(RecordOfFriend2, ToX);
+}
+
 struct DeclContextTest : ASTImporterOptionSpecificTestBase {};
 
 TEST_P(DeclContextTest, removeDeclOfClassTemplateSpecialization) {
