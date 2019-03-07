@@ -218,22 +218,21 @@ static bool IsStructurallyEquivalent(StructuralEquivalenceContext &Context,
 static bool IsStructurallyEquivalent(StructuralEquivalenceContext &Context,
                                      const TemplateName &N1,
                                      const TemplateName &N2) {
-  auto SingleOrQualified = [](const TemplateName &N) {
-    return N.getKind() == TemplateName::Template ||
-           N.getKind() == TemplateName::QualifiedTemplate;
-  };
-  if (SingleOrQualified(N1)) {
-    return SingleOrQualified(N2) &&
-           IsStructurallyEquivalent(Context, N1.getAsTemplateDecl(),
-                                    N2.getAsTemplateDecl());
-  }
-
-  if (N1.getKind() != N2.getKind())
+  TemplateDecl *TemplateDeclN1 = N1.getAsTemplateDecl();
+  TemplateDecl *TemplateDeclN2 = N2.getAsTemplateDecl();
+  if (TemplateDeclN1 && TemplateDeclN2) {
+    if (!IsStructurallyEquivalent(Context, TemplateDeclN1, TemplateDeclN2))
+      return false;
+    // If the kind is different we compare only the template decl.
+    if (N1.getKind() != N2.getKind())
+      return true;
+  } else if (TemplateDeclN1 || TemplateDeclN2)
     return false;
+  else if (N1.getKind() != N2.getKind())
+    return false;
+
+  // Check for special case incompatibilities.
   switch (N1.getKind()) {
-  case TemplateName::Template:
-  case TemplateName::QualifiedTemplate:
-    llvm_unreachable("Single or unqualified templates are handled above");
 
   case TemplateName::OverloadedTemplate: {
     OverloadedTemplateStorage *OS1 = N1.getAsOverloadedTemplate(),
@@ -260,15 +259,6 @@ static bool IsStructurallyEquivalent(StructuralEquivalenceContext &Context,
     return false;
   }
 
-  case TemplateName::SubstTemplateTemplateParm: {
-    SubstTemplateTemplateParmStorage *TS1 = N1.getAsSubstTemplateTemplateParm(),
-                                     *TS2 = N2.getAsSubstTemplateTemplateParm();
-    return IsStructurallyEquivalent(Context, TS1->getParameter(),
-                                    TS2->getParameter()) &&
-           IsStructurallyEquivalent(Context, TS1->getReplacement(),
-                                    TS2->getReplacement());
-  }
-
   case TemplateName::SubstTemplateTemplateParmPack: {
     SubstTemplateTemplateParmPackStorage
         *P1 = N1.getAsSubstTemplateTemplateParmPack(),
@@ -279,7 +269,8 @@ static bool IsStructurallyEquivalent(StructuralEquivalenceContext &Context,
                                     P2->getParameterPack());
   }
   }
-  return false;
+
+  return true;
 }
 
 /// Determine whether two template arguments are equivalent.

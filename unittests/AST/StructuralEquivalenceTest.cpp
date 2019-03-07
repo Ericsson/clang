@@ -970,6 +970,67 @@ TEST_F(
   EXPECT_FALSE(testStructuralMatch(t));
 }
 
+TEST_F(StructuralEquivalenceTemplateTest,
+       TemplateVsSubstTemplateTemplateParmInArgEq) {
+  auto t = makeDecls<ClassTemplateSpecializationDecl>(
+      R"(
+template <typename P1> class Arg { };
+template <template <typename PP1> class P1> class Primary { };
+
+void f() {
+  // Make specialization with simple template.
+  Primary <Arg> A;
+}
+      )",
+      R"(
+template <typename P1> class Arg { };
+template <template <typename PP1> class P1> class Primary { };
+
+template <template <typename PP1> class P1> class Templ {
+  void f() {
+    // Make specialization with substituted template template param.
+    Primary <P1> A;
+  };
+};
+
+// Instantiate with substitution Arg into P1.
+template class Templ <Arg>;
+      )",
+      Lang_CXX, classTemplateSpecializationDecl(hasName("Primary")));
+  EXPECT_TRUE(testStructuralMatch(t));
+}
+
+TEST_F(StructuralEquivalenceTemplateTest,
+       TemplateVsSubstTemplateTemplateParmInArgNotEq) {
+  auto t = makeDecls<ClassTemplateSpecializationDecl>(
+      R"(
+template <typename P1> class Arg { };
+template <template <typename PP1> class P1> class Primary { };
+
+void f() {
+  // Make specialization with simple template.
+  Primary <Arg> A;
+}
+      )",
+      R"(
+// Arg is different from the other, this should cause non-equivalence.
+template <typename P1> class Arg { int X; };
+template <template <typename PP1> class P1> class Primary { };
+
+template <template <typename PP1> class P1> class Templ {
+  void f() {
+    // Make specialization with substituted template template param.
+    Primary <P1> A;
+  };
+};
+
+// Instantiate with substitution Arg into P1.
+template class Templ <Arg>;
+      )",
+      Lang_CXX, classTemplateSpecializationDecl(hasName("Primary")));
+  EXPECT_FALSE(testStructuralMatch(t));
+}
+
 struct StructuralEquivalenceDependentTemplateArgsTest
     : StructuralEquivalenceTemplateTest {};
 
