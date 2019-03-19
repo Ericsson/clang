@@ -291,6 +291,16 @@ namespace clang {
         ToD->setImplicit();
     }
 
+    // Check if we have found an existing definition.  Returns with that
+    // definition if yes, otherwise returns null.
+    Decl *FindAndMapDefinition(FunctionDecl *D, FunctionDecl *FoundFunction) {
+      const FunctionDecl *Definition = nullptr;
+      if (D->doesThisDeclarationHaveABody() &&
+          FoundFunction->hasBody(Definition))
+        return Importer.MapImported(D, const_cast<FunctionDecl *>(Definition));
+      return nullptr;
+    }
+
   public:
     explicit ASTNodeImporter(ASTImporter &Importer) : Importer(Importer) {}
 
@@ -2974,8 +2984,8 @@ ExpectedDecl ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
     if (!FoundFunctionOrErr)
       return FoundFunctionOrErr.takeError();
     if (FunctionDecl *FoundFunction = *FoundFunctionOrErr) {
-      if (D->doesThisDeclarationHaveABody() && FoundFunction->hasBody())
-        return Importer.MapImported(D, FoundFunction);
+      if (Decl *Def = FindAndMapDefinition(D, FoundFunction))
+        return Def;
       FoundByLookup = FoundFunction;
     }
   }
@@ -2994,11 +3004,8 @@ ExpectedDecl ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
           continue;
 
         if (IsStructuralMatch(D, FoundFunction)) {
-          const FunctionDecl *Definition = nullptr;
-          if (D->doesThisDeclarationHaveABody() &&
-              FoundFunction->hasBody(Definition))
-            return Importer.MapImported(D,
-                                        const_cast<FunctionDecl *>(Definition));
+          if (Decl *Def = FindAndMapDefinition(D, FoundFunction))
+            return Def;
           FoundByLookup = FoundFunction;
           break;
         }
