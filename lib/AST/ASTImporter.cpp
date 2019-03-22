@@ -2456,10 +2456,11 @@ ExpectedDecl ASTNodeImporter::VisitEnumDecl(EnumDecl *D) {
 
   SourceLocation ToBeginLoc;
   NestedNameSpecifierLoc ToQualifierLoc;
+  SourceRange ToBraceRange;
   QualType ToIntegerType;
-  if (auto Imp = importSeq(
-      D->getBeginLoc(), D->getQualifierLoc(), D->getIntegerType()))
-    std::tie(ToBeginLoc, ToQualifierLoc, ToIntegerType) = *Imp;
+  if (auto Imp = importSeq(D->getBeginLoc(), D->getQualifierLoc(),
+                           D->getIntegerType(), D->getBraceRange()))
+    std::tie(ToBeginLoc, ToQualifierLoc, ToIntegerType, ToBraceRange) = *Imp;
   else
     return Imp.takeError();
 
@@ -2473,6 +2474,7 @@ ExpectedDecl ASTNodeImporter::VisitEnumDecl(EnumDecl *D) {
 
   D2->setQualifierInfo(ToQualifierLoc);
   D2->setIntegerType(ToIntegerType);
+  D2->setBraceRange(ToBraceRange);
   D2->setAccess(D->getAccess());
   D2->setLexicalDeclContext(LexicalDC);
   LexicalDC->addDeclInternal(D2);
