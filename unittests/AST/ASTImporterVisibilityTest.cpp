@@ -194,7 +194,7 @@ protected:
       EXPECT_FALSE(ToF1->getPreviousDecl());
   }
 
-  void TypedTest_ImportAfterWithDef() {
+  void TypedTest_ImportAfterWithMerge() {
     TranslationUnitDecl *ToTu = getToTuDecl(getCode0(), Lang_CXX);
     TranslationUnitDecl *FromTu = getTuDecl(getCode1(), Lang_CXX, "input1.cc");
 
@@ -215,7 +215,7 @@ protected:
     EXPECT_EQ(0u, ToTu->getASTContext().getDiagnostics().getNumWarnings());
   }
 
-  void TypedTest_ImportAfterImportWithDef() {
+  void TypedTest_ImportAfterImportWithMerge() {
     TranslationUnitDecl *FromTu0 = getTuDecl(getCode0(), Lang_CXX, "input0.cc");
     TranslationUnitDecl *FromTu1 = getTuDecl(getCode1(), Lang_CXX, "input1.cc");
     auto *FromF0 = FirstDeclMatcher<DeclTy>().match(FromTu0, getPattern());
@@ -263,9 +263,9 @@ TEST_P(ImportClassesVisibility, ImportAfterImport) {
   TypedTest_ImportAfterImport();
 }
 // EnumDecl.
-TEST_P(ImportEnumsVisibility, ImportAfter) { TypedTest_ImportAfterWithDef(); }
+TEST_P(ImportEnumsVisibility, ImportAfter) { TypedTest_ImportAfterWithMerge(); }
 TEST_P(ImportEnumsVisibility, ImportAfterImport) {
-  TypedTest_ImportAfterImportWithDef();
+  TypedTest_ImportAfterImportWithMerge();
 }
 
 bool ExpectLink = true;
