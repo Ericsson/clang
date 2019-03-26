@@ -55,6 +55,8 @@ const auto *AnonC = "namespace { class X; }";
 // EnumDecl:
 const auto *ExternE = "enum E {};";
 const auto *AnonE = "namespace { enum E {}; }";
+const auto *ExternEC = "enum class E;";
+const auto *AnonEC = "namespace { enum class E; }";
 
 // First value in tuple: Compile options.
 // Second value in tuple: Source code to be used in the test.
@@ -80,13 +82,13 @@ protected:
     std::string Code = getCode() + getCode();
     auto Pattern = getPattern();
 
-    TranslationUnitDecl *FromTu = getTuDecl(Code, Lang_CXX, "input0.cc");
+    TranslationUnitDecl *FromTu = getTuDecl(Code, Lang_CXX11, "input0.cc");
 
     auto *FromD0 = FirstDeclMatcher<DeclTy>().match(FromTu, Pattern);
     auto *FromD1 = LastDeclMatcher<DeclTy>().match(FromTu, Pattern);
 
-    auto *ToD0 = Import(FromD0, Lang_CXX);
-    auto *ToD1 = Import(FromD1, Lang_CXX);
+    auto *ToD0 = Import(FromD0, Lang_CXX11);
+    auto *ToD1 = Import(FromD1, Lang_CXX11);
 
     EXPECT_TRUE(ToD0);
     ASSERT_TRUE(ToD1);
@@ -99,6 +101,7 @@ protected:
 using ImportFunctionsVisibilityChain = ImportVisibilityChain<GetFunPattern>;
 using ImportVariablesVisibilityChain = ImportVisibilityChain<GetVarPattern>;
 using ImportClassesVisibilityChain = ImportVisibilityChain<GetClassPattern>;
+using ImportScopedEnumsVisibilityChain = ImportVisibilityChain<GetEnumPattern>;
 // Value-parameterized test for functions.
 TEST_P(ImportFunctionsVisibilityChain, ImportChain) {
   TypedTest_ImportChain();
@@ -109,6 +112,10 @@ TEST_P(ImportVariablesVisibilityChain, ImportChain) {
 }
 // Value-parameterized test for classes.
 TEST_P(ImportClassesVisibilityChain, ImportChain) {
+  TypedTest_ImportChain();
+}
+// Value-parameterized test for scoped enums.
+TEST_P(ImportScopedEnumsVisibilityChain, ImportChain) {
   TypedTest_ImportChain();
 }
 
@@ -134,6 +141,11 @@ INSTANTIATE_TEST_CASE_P(
     ::testing::Combine(
         DefaultTestValuesForRunOptions,
         ::testing::Values(ExternC, AnonC)), );
+INSTANTIATE_TEST_CASE_P(
+    ParameterizedTests, ImportScopedEnumsVisibilityChain,
+    ::testing::Combine(
+        DefaultTestValuesForRunOptions,
+        ::testing::Values(ExternEC, AnonEC)), );
 
 // First value in tuple: Compile options.
 // Second value in tuple: Tuple with informations for the test.
@@ -157,8 +169,8 @@ protected:
   BindableMatcher<Decl> getPattern() const { return PatternFactory()(); }
 
   void TypedTest_ImportAfter() {
-    TranslationUnitDecl *ToTu = getToTuDecl(getCode0(), Lang_CXX);
-    TranslationUnitDecl *FromTu = getTuDecl(getCode1(), Lang_CXX, "input1.cc");
+    TranslationUnitDecl *ToTu = getToTuDecl(getCode0(), Lang_CXX11);
+    TranslationUnitDecl *FromTu = getTuDecl(getCode1(), Lang_CXX11, "input1.cc");
 
     auto *ToD0 = FirstDeclMatcher<DeclTy>().match(ToTu, getPattern());
     auto *FromD1 = FirstDeclMatcher<DeclTy>().match(FromTu, getPattern());
@@ -176,10 +188,12 @@ protected:
   }
 
   void TypedTest_ImportAfterImport() {
-    TranslationUnitDecl *FromTu0 = getTuDecl(getCode0(), Lang_CXX, "input0.cc");
-    TranslationUnitDecl *FromTu1 = getTuDecl(getCode1(), Lang_CXX, "input1.cc");
-    auto *FromD0 = FirstDeclMatcher<DeclTy>().match(FromTu0, getPattern());
-    auto *FromD1 = FirstDeclMatcher<DeclTy>().match(FromTu1, getPattern());
+    TranslationUnitDecl *FromTu0 = getTuDecl(getCode0(), Lang_CXX11, "input0.cc");
+    TranslationUnitDecl *FromTu1 = getTuDecl(getCode1(), Lang_CXX11, "input1.cc");
+    auto *FromD0 =
+        FirstDeclMatcher<DeclTy>().match(FromTu0, getPattern());
+    auto *FromD1 =
+        FirstDeclMatcher<DeclTy>().match(FromTu1, getPattern());
     auto *ToD0 = Import(FromD0, Lang_CXX);
     auto *ToD1 = Import(FromD1, Lang_CXX);
     ASSERT_TRUE(ToD0);
@@ -233,10 +247,12 @@ protected:
                       .getNumWarnings());
   }
 };
+
 using ImportFunctionsVisibility = ImportVisibility<GetFunPattern>;
 using ImportVariablesVisibility = ImportVisibility<GetVarPattern>;
 using ImportClassesVisibility = ImportVisibility<GetClassPattern>;
 using ImportEnumsVisibility = ImportVisibility<GetEnumPattern>;
+using ImportScopedEnumsVisibility = ImportVisibility<GetEnumPattern>;
 
 // FunctionDecl.
 TEST_P(ImportFunctionsVisibility, ImportAfter) {
@@ -260,9 +276,17 @@ TEST_P(ImportClassesVisibility, ImportAfterImport) {
   TypedTest_ImportAfterImport();
 }
 // EnumDecl.
-TEST_P(ImportEnumsVisibility, ImportAfter) { TypedTest_ImportAfterWithMerge(); }
+TEST_P(ImportEnumsVisibility, ImportAfter) {
+  TypedTest_ImportAfterWithMerge();
+}
 TEST_P(ImportEnumsVisibility, ImportAfterImport) {
   TypedTest_ImportAfterImportWithMerge();
+}
+TEST_P(ImportScopedEnumsVisibility, ImportAfter) {
+  TypedTest_ImportAfter();
+}
+TEST_P(ImportScopedEnumsVisibility, ImportAfterImport) {
+  TypedTest_ImportAfterImport();
 }
 
 const bool ExpectLink = true;
@@ -310,6 +334,14 @@ INSTANTIATE_TEST_CASE_P(
                           std::make_tuple(ExternE, AnonE, ExpectNotLink),
                           std::make_tuple(AnonE, ExternE, ExpectNotLink),
                           std::make_tuple(AnonE, AnonE, ExpectNotLink))), );
+INSTANTIATE_TEST_CASE_P(
+    ParameterizedTests, ImportScopedEnumsVisibility,
+    ::testing::Combine(
+        DefaultTestValuesForRunOptions,
+        ::testing::Values(std::make_tuple(ExternEC, ExternEC, ExpectLink),
+                          std::make_tuple(ExternEC, AnonEC, ExpectNotLink),
+                          std::make_tuple(AnonEC, ExternEC, ExpectNotLink),
+                          std::make_tuple(AnonEC, AnonEC, ExpectNotLink))), );
 
 } // end namespace ast_matchers
 } // end namespace clang
