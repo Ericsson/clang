@@ -5575,11 +5575,32 @@ TEST_P(ASTImporterOptionSpecificTestBase,
   EXPECT_EQ(ImportedX->isAggregate(), FromX->isAggregate());
 }
 
-INSTANTIATE_TEST_CASE_P(ParameterizedTests, DeclContextTest,
-                        ::testing::Values(ArgVector()), );
+TEST_P(ASTImporterOptionSpecificTestBase,
+       ImportOfEnumDefinitionAfterFwdDeclaration) {
+  Decl *ToTU = getToTuDecl(
+      R"(
+      enum class E;
+      )",
+      Lang_CXX11);
+  Decl *FromTU = getTuDecl(
+      R"(
+      enum class E {};
+      )",
+      Lang_CXX11);
+  auto *ToFwdE = FirstDeclMatcher<EnumDecl>().match(
+      ToTU, enumDecl(hasName("E"), unless(isImplicit())));
+  auto *FromDefE = FirstDeclMatcher<EnumDecl>().match(
+      FromTU,
+      enumDecl(hasName("E"), isDefinition(), unless(isImplicit())));
+  ASSERT_FALSE(ToFwdE->isThisDeclarationADefinition());
+  ASSERT_TRUE(FromDefE->isThisDeclarationADefinition());
 
-INSTANTIATE_TEST_CASE_P(ParameterizedTests, CanonicalRedeclChain,
-                        ::testing::Values(ArgVector()), );
+  auto *ToDefE = Import(FromDefE, Lang_CXX11);
+
+  EXPECT_TRUE(ToDefE);
+  EXPECT_TRUE(ToDefE->isThisDeclarationADefinition());
+  EXPECT_EQ(ToFwdE->getCanonicalDecl(), ToDefE->getCanonicalDecl());
+}
 
 TEST_P(ASTImporterOptionSpecificTestBase, LambdasAreDifferentiated) {
   Decl *FromTU = getTuDecl(
@@ -5691,6 +5712,12 @@ TEST_P(ASTImporterOptionSpecificTestBase, ImportDefaultConstructibleLambdas) {
   EXPECT_EQ(DeclCounter<CXXRecordDecl>().match(ToTU, cxxRecordDecl(isLambda())),
             2u);
 }
+
+INSTANTIATE_TEST_CASE_P(ParameterizedTests, DeclContextTest,
+                        ::testing::Values(ArgVector()), );
+
+INSTANTIATE_TEST_CASE_P(ParameterizedTests, CanonicalRedeclChain,
+                        ::testing::Values(ArgVector()), );
 
 INSTANTIATE_TEST_CASE_P(ParameterizedTests, ASTImporterLookupTableTest,
                         DefaultTestValuesForRunOptions, );

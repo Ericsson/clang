@@ -69,6 +69,8 @@ const auto *AnonC = "namespace { class X; }";
 // EnumDecl:
 const auto *ExternE = "enum E {};";
 const auto *AnonE = "namespace { enum E {}; }";
+const auto *ExternEC = "enum class E;";
+const auto *AnonEC = "namespace { enum class E; }";
 // TypedefNameDecl:
 const auto *ExternTypedef = "typedef int T;";
 const auto *AnonTypedef = "namespace { typedef int T; }";
@@ -129,7 +131,7 @@ using ImportFunctionTemplatesVisibilityChain =
     ImportVisibilityChain<GetFunTemplPattern>;
 using ImportClassTemplatesVisibilityChain =
     ImportVisibilityChain<GetClassTemplPattern>;
-
+using ImportScopedEnumsVisibilityChain = ImportVisibilityChain<GetEnumPattern>;
 // Value-parameterized test for functions.
 TEST_P(ImportFunctionsVisibilityChain, ImportChain) {
   TypedTest_ImportChain();
@@ -148,6 +150,10 @@ TEST_P(ImportFunctionTemplatesVisibilityChain, ImportChain) {
 }
 // Value-parameterized test for class templates.
 TEST_P(ImportClassTemplatesVisibilityChain, ImportChain) {
+  TypedTest_ImportChain();
+}
+// Value-parameterized test for scoped enums.
+TEST_P(ImportScopedEnumsVisibilityChain, ImportChain) {
   TypedTest_ImportChain();
 }
 
@@ -182,6 +188,11 @@ INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportClassTemplatesVisibilityChain,
                         ::testing::Combine(DefaultTestValuesForRunOptions,
                                            ::testing::Values(ExternCT,
                                                              AnonCT)), );
+INSTANTIATE_TEST_CASE_P(
+    ParameterizedTests, ImportScopedEnumsVisibilityChain,
+    ::testing::Combine(
+        DefaultTestValuesForRunOptions,
+        ::testing::Values(ExternEC, AnonEC)), );
 
 // First value in tuple: Compile options.
 // Second value in tuple: Tuple with informations for the test.
@@ -287,6 +298,7 @@ protected:
                       .getNumWarnings());
   }
 };
+
 using ImportFunctionsVisibility = ImportVisibility<GetFunPattern>;
 using ImportVariablesVisibility = ImportVisibility<GetVarPattern>;
 using ImportClassesVisibility = ImportVisibility<GetClassPattern>;
@@ -294,6 +306,7 @@ using ImportEnumsVisibility = ImportVisibility<GetEnumPattern>;
 using ImportTypedefNameVisibility = ImportVisibility<GetTypedefNamePattern>;
 using ImportFunctionTemplatesVisibility = ImportVisibility<GetFunTemplPattern>;
 using ImportClassTemplatesVisibility = ImportVisibility<GetClassTemplPattern>;
+using ImportScopedEnumsVisibility = ImportVisibility<GetEnumPattern>;
 
 // FunctionDecl.
 TEST_P(ImportFunctionsVisibility, ImportAfter) {
@@ -340,6 +353,13 @@ TEST_P(ImportFunctionTemplatesVisibility, ImportAfterImport) {
 // ClassTemplateDecl.
 TEST_P(ImportClassTemplatesVisibility, ImportAfter) { TypedTest_ImportAfter(); }
 TEST_P(ImportClassTemplatesVisibility, ImportAfterImport) {
+  TypedTest_ImportAfterImport();
+}
+// Scoped Enums.
+TEST_P(ImportScopedEnumsVisibility, ImportAfter) {
+  TypedTest_ImportAfter();
+}
+TEST_P(ImportScopedEnumsVisibility, ImportAfterImport) {
   TypedTest_ImportAfterImport();
 }
 
@@ -438,9 +458,19 @@ INSTANTIATE_TEST_CASE_P(
     ParameterizedTests, ImportClassTemplatesVisibility,
     ::testing::Combine(
         DefaultTestValuesForRunOptions,
-        ::testing::Values(std::make_tuple(ExternCT, ExternCT, ExpectLinkedDeclChain),
-                          std::make_tuple(ExternCT, AnonCT, ExpectUnlinkedDeclChain),
-                          std::make_tuple(AnonCT, ExternCT, ExpectUnlinkedDeclChain),
-                          std::make_tuple(AnonCT, AnonCT, ExpectUnlinkedDeclChain))), );
+        ::testing::Values(
+            std::make_tuple(ExternCT, ExternCT, ExpectLinkedDeclChain),
+            std::make_tuple(ExternCT, AnonCT, ExpectUnlinkedDeclChain),
+            std::make_tuple(AnonCT, ExternCT, ExpectUnlinkedDeclChain),
+            std::make_tuple(AnonCT, AnonCT, ExpectUnlinkedDeclChain))), );
+INSTANTIATE_TEST_CASE_P(
+    ParameterizedTests, ImportScopedEnumsVisibility,
+    ::testing::Combine(
+        DefaultTestValuesForRunOptions,
+        ::testing::Values(
+            std::make_tuple(ExternEC, ExternEC, ExpectLinkedDeclChain),
+            std::make_tuple(ExternEC, AnonEC, ExpectUnlinkedDeclChain),
+            std::make_tuple(AnonEC, ExternEC, ExpectUnlinkedDeclChain),
+            std::make_tuple(AnonEC, AnonEC, ExpectUnlinkedDeclChain))), );
 } // end namespace ast_matchers
 } // end namespace clang
