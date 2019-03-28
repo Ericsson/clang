@@ -41,6 +41,10 @@ struct GetClassPattern {
   using DeclTy = CXXRecordDecl;
   BindableMatcher<Decl> operator()() { return cxxRecordDecl(hasName("X")); }
 };
+struct GetClassTemplPattern {
+  using DeclTy = ClassTemplateDecl;
+  BindableMatcher<Decl> operator()() { return classTemplateDecl(hasName("X")); }
+};
 struct GetEnumPattern {
   using DeclTy = EnumDecl;
   BindableMatcher<Decl> operator()() { return enumDecl(hasName("E")); }
@@ -70,6 +74,9 @@ const auto *AnonV = "namespace { extern int v; }";
 // CXXRecordDecl:
 const auto *ExternC = "class X;";
 const auto *AnonC = "namespace { class X; }";
+// ClassTemplateDecl:
+const auto *ExternCT = "template <class> class X;";
+const auto *AnonCT = "namespace { template <class> class X; }";
 // EnumDecl:
 const auto *ExternE = "enum E {};";
 const auto *AnonE = "namespace { enum E {}; }";
@@ -126,6 +133,8 @@ using ImportFunctionTemplatesVisibilityChain =
     ImportVisibilityChain<GetFunTemplPattern>;
 using ImportVariablesVisibilityChain = ImportVisibilityChain<GetVarPattern>;
 using ImportClassesVisibilityChain = ImportVisibilityChain<GetClassPattern>;
+using ImportClassTemplatesVisibilityChain =
+    ImportVisibilityChain<GetClassTemplPattern>;
 using ImportScopedEnumsVisibilityChain = ImportVisibilityChain<GetEnumPattern>;
 
 // Value-parameterized test for functions.
@@ -142,6 +151,10 @@ TEST_P(ImportVariablesVisibilityChain, ImportChain) {
 }
 // Value-parameterized test for classes.
 TEST_P(ImportClassesVisibilityChain, ImportChain) {
+  TypedTest_ImportChain();
+}
+// Value-parameterized test for classes.
+TEST_P(ImportClassTemplatesVisibilityChain, ImportChain) {
   TypedTest_ImportChain();
 }
 // Value-parameterized test for scoped enums.
@@ -176,11 +189,14 @@ INSTANTIATE_TEST_CASE_P(
     ::testing::Combine(
         DefaultTestValuesForRunOptions,
         ::testing::Values(ExternC, AnonC)), );
-INSTANTIATE_TEST_CASE_P(
-    ParameterizedTests, ImportScopedEnumsVisibilityChain,
-    ::testing::Combine(
-        DefaultTestValuesForRunOptions,
-        ::testing::Values(ExternEC, AnonEC)), );
+INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportClassTemplatesVisibilityChain,
+                        ::testing::Combine(DefaultTestValuesForRunOptions,
+                                           ::testing::Values(ExternCT,
+                                                             AnonCT)), );
+INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportScopedEnumsVisibilityChain,
+                        ::testing::Combine(DefaultTestValuesForRunOptions,
+                                           ::testing::Values(ExternEC,
+                                                             AnonEC)), );
 
 // First value in tuple: Compile options.
 // Second value in tuple: Tuple with informations for the test.
@@ -293,6 +309,7 @@ using ImportFunctionsVisibility = ImportVisibility<GetFunPattern>;
 using ImportFunctionTemplatesVisibility = ImportVisibility<GetFunTemplPattern>;
 using ImportVariablesVisibility = ImportVisibility<GetVarPattern>;
 using ImportClassesVisibility = ImportVisibility<GetClassPattern>;
+using ImportClassTemplatesVisibility = ImportVisibility<GetClassTemplPattern>;
 using ImportEnumsVisibility = ImportVisibility<GetEnumPattern>;
 using ImportScopedEnumsVisibility = ImportVisibility<GetEnumPattern>;
 using ImportTypedefVisibility = ImportVisibility<GetTypedefPattern>;
@@ -324,6 +341,11 @@ TEST_P(ImportClassesVisibility, ImportAfter) {
   TypedTest_ImportAfter();
 }
 TEST_P(ImportClassesVisibility, ImportAfterImport) {
+  TypedTest_ImportAfterImport();
+}
+// ClassTemplateDecl.
+TEST_P(ImportClassTemplatesVisibility, ImportAfter) { TypedTest_ImportAfter(); }
+TEST_P(ImportClassTemplatesVisibility, ImportAfterImport) {
   TypedTest_ImportAfterImport();
 }
 // EnumDecl.
@@ -403,6 +425,14 @@ INSTANTIATE_TEST_CASE_P(
                           std::make_tuple(ExternC, AnonC, ExpectNotLink),
                           std::make_tuple(AnonC, ExternC, ExpectNotLink),
                           std::make_tuple(AnonC, AnonC, ExpectNotLink))), );
+INSTANTIATE_TEST_CASE_P(
+    ParameterizedTests, ImportClassTemplatesVisibility,
+    ::testing::Combine(
+        DefaultTestValuesForRunOptions,
+        ::testing::Values(std::make_tuple(ExternCT, ExternCT, ExpectLink),
+                          std::make_tuple(ExternCT, AnonCT, ExpectNotLink),
+                          std::make_tuple(AnonCT, ExternCT, ExpectNotLink),
+                          std::make_tuple(AnonCT, AnonCT, ExpectNotLink))), );
 INSTANTIATE_TEST_CASE_P(
     ParameterizedTests, ImportEnumsVisibility,
     ::testing::Combine(
