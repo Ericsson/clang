@@ -950,6 +950,44 @@ Expected<LambdaCapture> ASTNodeImporter::import(const LambdaCapture &From) {
       EllipsisLoc);
 }
 
+Error ASTNodeImporter::ImportTemplateParameterLists(const DeclaratorDecl *FromD,
+                                                    DeclaratorDecl *ToD) {
+  unsigned int Num = FromD->getNumTemplateParameterLists();
+  if (Num == 0)
+    return Error::success();
+  SmallVector<TemplateParameterList *, 2> ToTPLists(Num);
+  for (unsigned int I = 0; I < Num; ++I)
+    if (Expected<TemplateParameterList *> ToTPListOrErr =
+            import(FromD->getTemplateParameterList(I)))
+      ToTPLists[I] = *ToTPListOrErr;
+    else
+      return ToTPListOrErr.takeError();
+  ToD->setTemplateParameterListsInfo(Importer.ToContext, ToTPLists);
+  return Error::success();
+}
+
+template <typename T>
+bool ASTNodeImporter::hasSameVisibilityContext(T *Found, T *From) {
+  if (From->hasExternalFormalLinkage())
+    return Found->hasExternalFormalLinkage();
+  else if (Importer.GetFromTU(Found) == From->getTranslationUnitDecl()) {
+    if (From->isInAnonymousNamespace())
+      return Found->isInAnonymousNamespace();
+    else
+      return !Found->isInAnonymousNamespace() &&
+             !Found->hasExternalFormalLinkage();
+  }
+  return false;
+}
+
+template <>
+bool ASTNodeImporter::hasSameVisibilityContext(TypedefNameDecl *Found,
+                                               TypedefNameDecl *From) {
+  if (From->isInAnonymousNamespace() && Found->isInAnonymousNamespace())
+    return Importer.GetFromTU(Found) == From->getTranslationUnitDecl();
+  return From->isInAnonymousNamespace() == Found->isInAnonymousNamespace();
+}
+
 } // namespace clang
 
 //----------------------------------------------------------------------------
@@ -2246,9 +2284,13 @@ ASTNodeImporter::VisitTypedefNameDecl(TypedefNameDecl *D, bool IsAlias) {
       if (!FoundDecl->isInIdentifierNamespace(IDNS))
         continue;
       if (auto *FoundTypedef = dyn_cast<TypedefNameDecl>(FoundDecl)) {
+        if (!hasSameVisibilityContext(FoundTypedef, D))
+          continue;
+
         QualType FromUT = D->getUnderlyingType();
         QualType FoundUT = FoundTypedef->getUnderlyingType();
         if (Importer.IsStructurallyEquivalent(FromUT, FoundUT)) {
+
           // If the "From" context has a complete underlying type but we
           // already have a complete underlying type then return with that.
           if (!FromUT->isIncompleteType() && !FoundUT->isIncompleteType())
@@ -2780,22 +2822,6 @@ ExpectedDecl ASTNodeImporter::VisitEnumConstantDecl(EnumConstantDecl *D) {
   return ToEnumerator;
 }
 
-Error ASTNodeImporter::ImportTemplateParameterLists(const DeclaratorDecl *FromD,
-                                                    DeclaratorDecl *ToD) {
-  unsigned int Num = FromD->getNumTemplateParameterLists();
-  if (Num == 0)
-    return Error::success();
-  SmallVector<TemplateParameterList *, 2> ToTPLists(Num);
-  for (unsigned int I = 0; I < Num; ++I)
-    if (Expected<TemplateParameterList *> ToTPListOrErr =
-            import(FromD->getTemplateParameterList(I)))
-      ToTPLists[I] = *ToTPListOrErr;
-    else
-      return ToTPListOrErr.takeError();
-  ToD->setTemplateParameterListsInfo(Importer.ToContext, ToTPLists);
-  return Error::success();
-}
-
 Error ASTNodeImporter::ImportTemplateInformation(
     FunctionDecl *FromFD, FunctionDecl *ToFD) {
   switch (FromFD->getTemplatedKind()) {
@@ -2905,19 +2931,6 @@ Error ASTNodeImporter::ImportFunctionDeclBody(FunctionDecl *FromFD,
       return ToBodyOrErr.takeError();
   }
   return Error::success();
-}
-
-template <typename T>
-bool ASTNodeImporter::hasSameVisibilityContext(T *Found, T *From) {
-  if (From->hasExternalFormalLinkage())
-    return Found->hasExternalFormalLinkage();
-  if (Importer.GetFromTU(Found) != From->getTranslationUnitDecl())
-    return false;
-  if (From->isInAnonymousNamespace())
-    return Found->isInAnonymousNamespace();
-  else
-    return !Found->isInAnonymousNamespace() &&
-           !Found->hasExternalFormalLinkage();
 }
 
 ExpectedDecl ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {

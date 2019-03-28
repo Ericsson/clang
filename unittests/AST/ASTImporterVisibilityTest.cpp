@@ -39,6 +39,14 @@ struct GetEnumPattern {
   using DeclTy = EnumDecl;
   BindableMatcher<Decl> operator()() { return enumDecl(hasName("E")); }
 };
+struct GetTypedefPattern {
+  using DeclTy = TypedefDecl;
+  BindableMatcher<Decl> operator()() { return typedefDecl(hasName("T")); }
+};
+struct GetTypeAliasPattern {
+  using DeclTy = TypeAliasDecl;
+  BindableMatcher<Decl> operator()() { return typeAliasDecl(hasName("T")); }
+};
 
 // Values for the value-parameterized test fixtures.
 // FunctionDecl:
@@ -57,6 +65,11 @@ const auto *ExternE = "enum E {};";
 const auto *AnonE = "namespace { enum E {}; }";
 const auto *ExternEC = "enum class E;";
 const auto *AnonEC = "namespace { enum class E; }";
+// TypedefNameDecl:
+const auto *ExternTypedef = "typedef int T;";
+const auto *AnonTypedef = "namespace { typedef int T; }";
+const auto *ExternUsing = "using T = int;";
+const auto *AnonUsing = "namespace { using T = int; }";
 
 // First value in tuple: Compile options.
 // Second value in tuple: Source code to be used in the test.
@@ -102,6 +115,7 @@ using ImportFunctionsVisibilityChain = ImportVisibilityChain<GetFunPattern>;
 using ImportVariablesVisibilityChain = ImportVisibilityChain<GetVarPattern>;
 using ImportClassesVisibilityChain = ImportVisibilityChain<GetClassPattern>;
 using ImportScopedEnumsVisibilityChain = ImportVisibilityChain<GetEnumPattern>;
+
 // Value-parameterized test for functions.
 TEST_P(ImportFunctionsVisibilityChain, ImportChain) {
   TypedTest_ImportChain();
@@ -170,12 +184,13 @@ protected:
 
   void TypedTest_ImportAfter() {
     TranslationUnitDecl *ToTu = getToTuDecl(getCode0(), Lang_CXX11);
-    TranslationUnitDecl *FromTu = getTuDecl(getCode1(), Lang_CXX11, "input1.cc");
+    TranslationUnitDecl *FromTu =
+        getTuDecl(getCode1(), Lang_CXX11, "input1.cc");
 
     auto *ToD0 = FirstDeclMatcher<DeclTy>().match(ToTu, getPattern());
     auto *FromD1 = FirstDeclMatcher<DeclTy>().match(FromTu, getPattern());
 
-    auto *ToD1 = Import(FromD1, Lang_CXX);
+    auto *ToD1 = Import(FromD1, Lang_CXX11);
 
     ASSERT_TRUE(ToD0);
     ASSERT_TRUE(ToD1);
@@ -188,14 +203,16 @@ protected:
   }
 
   void TypedTest_ImportAfterImport() {
-    TranslationUnitDecl *FromTu0 = getTuDecl(getCode0(), Lang_CXX11, "input0.cc");
-    TranslationUnitDecl *FromTu1 = getTuDecl(getCode1(), Lang_CXX11, "input1.cc");
+    TranslationUnitDecl *FromTu0 =
+        getTuDecl(getCode0(), Lang_CXX11, "input0.cc");
+    TranslationUnitDecl *FromTu1 =
+        getTuDecl(getCode1(), Lang_CXX11, "input1.cc");
     auto *FromD0 =
         FirstDeclMatcher<DeclTy>().match(FromTu0, getPattern());
     auto *FromD1 =
         FirstDeclMatcher<DeclTy>().match(FromTu1, getPattern());
-    auto *ToD0 = Import(FromD0, Lang_CXX);
-    auto *ToD1 = Import(FromD1, Lang_CXX);
+    auto *ToD0 = Import(FromD0, Lang_CXX11);
+    auto *ToD1 = Import(FromD1, Lang_CXX11);
     ASSERT_TRUE(ToD0);
     ASSERT_TRUE(ToD1);
     EXPECT_NE(ToD0, ToD1);
@@ -206,13 +223,14 @@ protected:
   }
 
   void TypedTest_ImportAfterWithMerge() {
-    TranslationUnitDecl *ToTu = getToTuDecl(getCode0(), Lang_CXX);
-    TranslationUnitDecl *FromTu = getTuDecl(getCode1(), Lang_CXX, "input1.cc");
+    TranslationUnitDecl *ToTu = getToTuDecl(getCode0(), Lang_CXX11);
+    TranslationUnitDecl *FromTu =
+        getTuDecl(getCode1(), Lang_CXX11, "input1.cc");
 
     auto *ToF0 = FirstDeclMatcher<DeclTy>().match(ToTu, getPattern());
     auto *FromF1 = FirstDeclMatcher<DeclTy>().match(FromTu, getPattern());
 
-    auto *ToF1 = Import(FromF1, Lang_CXX);
+    auto *ToF1 = Import(FromF1, Lang_CXX11);
 
     ASSERT_TRUE(ToF0);
     ASSERT_TRUE(ToF1);
@@ -227,12 +245,14 @@ protected:
   }
 
   void TypedTest_ImportAfterImportWithMerge() {
-    TranslationUnitDecl *FromTu0 = getTuDecl(getCode0(), Lang_CXX, "input0.cc");
-    TranslationUnitDecl *FromTu1 = getTuDecl(getCode1(), Lang_CXX, "input1.cc");
+    TranslationUnitDecl *FromTu0 =
+        getTuDecl(getCode0(), Lang_CXX11, "input0.cc");
+    TranslationUnitDecl *FromTu1 =
+        getTuDecl(getCode1(), Lang_CXX11, "input1.cc");
     auto *FromF0 = FirstDeclMatcher<DeclTy>().match(FromTu0, getPattern());
     auto *FromF1 = FirstDeclMatcher<DeclTy>().match(FromTu1, getPattern());
-    auto *ToF0 = Import(FromF0, Lang_CXX);
-    auto *ToF1 = Import(FromF1, Lang_CXX);
+    auto *ToF0 = Import(FromF0, Lang_CXX11);
+    auto *ToF1 = Import(FromF1, Lang_CXX11);
     ASSERT_TRUE(ToF0);
     ASSERT_TRUE(ToF1);
     if (shouldBeLinked())
@@ -253,6 +273,8 @@ using ImportVariablesVisibility = ImportVisibility<GetVarPattern>;
 using ImportClassesVisibility = ImportVisibility<GetClassPattern>;
 using ImportEnumsVisibility = ImportVisibility<GetEnumPattern>;
 using ImportScopedEnumsVisibility = ImportVisibility<GetEnumPattern>;
+using ImportTypedefVisibility = ImportVisibility<GetTypedefPattern>;
+using ImportTypeAliasVisibility = ImportVisibility<GetTypeAliasPattern>;
 
 // FunctionDecl.
 TEST_P(ImportFunctionsVisibility, ImportAfter) {
@@ -287,6 +309,19 @@ TEST_P(ImportScopedEnumsVisibility, ImportAfter) {
 }
 TEST_P(ImportScopedEnumsVisibility, ImportAfterImport) {
   TypedTest_ImportAfterImport();
+}
+// TypedefNameDecl.
+TEST_P(ImportTypedefVisibility, ImportAfter) {
+  TypedTest_ImportAfterWithMerge();
+}
+TEST_P(ImportTypedefVisibility, ImportAfterImport) {
+  TypedTest_ImportAfterImportWithMerge();
+}
+TEST_P(ImportTypeAliasVisibility, ImportAfter) {
+  TypedTest_ImportAfterWithMerge();
+}
+TEST_P(ImportTypeAliasVisibility, ImportAfterImport) {
+  TypedTest_ImportAfterImportWithMerge();
 }
 
 const bool ExpectLink = true;
@@ -342,6 +377,24 @@ INSTANTIATE_TEST_CASE_P(
                           std::make_tuple(ExternEC, AnonEC, ExpectNotLink),
                           std::make_tuple(AnonEC, ExternEC, ExpectNotLink),
                           std::make_tuple(AnonEC, AnonEC, ExpectNotLink))), );
+INSTANTIATE_TEST_CASE_P(
+    ParameterizedTests, ImportTypedefVisibility,
+    ::testing::Combine(
+        DefaultTestValuesForRunOptions,
+        ::testing::Values(
+            std::make_tuple(ExternTypedef, ExternTypedef, ExpectLink),
+            std::make_tuple(ExternTypedef, AnonTypedef, ExpectNotLink),
+            std::make_tuple(AnonTypedef, ExternTypedef, ExpectNotLink),
+            std::make_tuple(AnonTypedef, AnonTypedef, ExpectNotLink))), );
+INSTANTIATE_TEST_CASE_P(
+    ParameterizedTests, ImportTypeAliasVisibility,
+    ::testing::Combine(
+        DefaultTestValuesForRunOptions,
+        ::testing::Values(
+            std::make_tuple(ExternUsing, ExternUsing, ExpectLink),
+            std::make_tuple(ExternUsing, AnonUsing, ExpectNotLink),
+            std::make_tuple(AnonUsing, ExternUsing, ExpectNotLink),
+            std::make_tuple(AnonUsing, AnonUsing, ExpectNotLink))), );
 
 } // end namespace ast_matchers
 } // end namespace clang
