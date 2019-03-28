@@ -27,6 +27,12 @@ struct GetFunPattern {
   using DeclTy = FunctionDecl;
   BindableMatcher<Decl> operator()() { return functionDecl(hasName("f")); }
 };
+struct GetFunTemplPattern {
+  using DeclTy = FunctionTemplateDecl;
+  BindableMatcher<Decl> operator()() {
+    return functionTemplateDecl(hasName("f"));
+  }
+};
 struct GetVarPattern {
   using DeclTy = VarDecl;
   BindableMatcher<Decl> operator()() { return varDecl(hasName("v")); }
@@ -53,6 +59,10 @@ struct GetTypeAliasPattern {
 const auto *ExternF = "void f();";
 const auto *StaticF = "static void f();";
 const auto *AnonF = "namespace { void f(); }";
+// FunctionTemplateDecl:
+const auto *ExternFT = "template <class> void f();";
+const auto *StaticFT = "template <class> static void f();";
+const auto *AnonFT = "namespace { template <class> void f(); }";
 // VarDecl:
 const auto *ExternV = "extern int v;";
 const auto *StaticV = "static int v;";
@@ -112,12 +122,18 @@ protected:
 
 // Manual instantiation of the fixture with each type.
 using ImportFunctionsVisibilityChain = ImportVisibilityChain<GetFunPattern>;
+using ImportFunctionTemplatesVisibilityChain =
+    ImportVisibilityChain<GetFunTemplPattern>;
 using ImportVariablesVisibilityChain = ImportVisibilityChain<GetVarPattern>;
 using ImportClassesVisibilityChain = ImportVisibilityChain<GetClassPattern>;
 using ImportScopedEnumsVisibilityChain = ImportVisibilityChain<GetEnumPattern>;
 
 // Value-parameterized test for functions.
 TEST_P(ImportFunctionsVisibilityChain, ImportChain) {
+  TypedTest_ImportChain();
+}
+// Value-parameterized test for function templates.
+TEST_P(ImportFunctionTemplatesVisibilityChain, ImportChain) {
   TypedTest_ImportChain();
 }
 // Value-parameterized test for variables.
@@ -138,6 +154,11 @@ INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportFunctionsVisibilityChain,
                         ::testing::Combine(
                            DefaultTestValuesForRunOptions,
                            ::testing::Values(ExternF, StaticF, AnonF)), );
+INSTANTIATE_TEST_CASE_P(ParameterizedTests,
+                        ImportFunctionTemplatesVisibilityChain,
+                        ::testing::Combine(DefaultTestValuesForRunOptions,
+                                           ::testing::Values(ExternFT, StaticFT,
+                                                             AnonFT)), );
 INSTANTIATE_TEST_CASE_P(
     ParameterizedTests, ImportVariablesVisibilityChain,
     ::testing::Combine(
@@ -269,6 +290,7 @@ protected:
 };
 
 using ImportFunctionsVisibility = ImportVisibility<GetFunPattern>;
+using ImportFunctionTemplatesVisibility = ImportVisibility<GetFunTemplPattern>;
 using ImportVariablesVisibility = ImportVisibility<GetVarPattern>;
 using ImportClassesVisibility = ImportVisibility<GetClassPattern>;
 using ImportEnumsVisibility = ImportVisibility<GetEnumPattern>;
@@ -281,6 +303,13 @@ TEST_P(ImportFunctionsVisibility, ImportAfter) {
   TypedTest_ImportAfter();
 }
 TEST_P(ImportFunctionsVisibility, ImportAfterImport) {
+  TypedTest_ImportAfterImport();
+}
+// FunctionTemplateDecl.
+TEST_P(ImportFunctionTemplatesVisibility, ImportAfter) {
+  TypedTest_ImportAfter();
+}
+TEST_P(ImportFunctionTemplatesVisibility, ImportAfterImport) {
   TypedTest_ImportAfterImport();
 }
 // VarDecl.
@@ -340,6 +369,19 @@ INSTANTIATE_TEST_CASE_P(
                           std::make_tuple(AnonF, ExternF, ExpectNotLink),
                           std::make_tuple(AnonF, StaticF, ExpectNotLink),
                           std::make_tuple(AnonF, AnonF, ExpectNotLink))), );
+INSTANTIATE_TEST_CASE_P(
+    ParameterizedTests, ImportFunctionTemplatesVisibility,
+    ::testing::Combine(
+        DefaultTestValuesForRunOptions,
+        ::testing::Values(std::make_tuple(ExternFT, ExternFT, ExpectLink),
+                          std::make_tuple(ExternFT, StaticFT, ExpectNotLink),
+                          std::make_tuple(ExternFT, AnonFT, ExpectNotLink),
+                          std::make_tuple(StaticFT, ExternFT, ExpectNotLink),
+                          std::make_tuple(StaticFT, StaticFT, ExpectNotLink),
+                          std::make_tuple(StaticFT, AnonFT, ExpectNotLink),
+                          std::make_tuple(AnonFT, ExternFT, ExpectNotLink),
+                          std::make_tuple(AnonFT, StaticFT, ExpectNotLink),
+                          std::make_tuple(AnonFT, AnonFT, ExpectNotLink))), );
 INSTANTIATE_TEST_CASE_P(
     ParameterizedTests, ImportVariablesVisibility,
     ::testing::Combine(
