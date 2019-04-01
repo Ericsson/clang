@@ -2962,7 +2962,7 @@ ExpectedDecl ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
           continue;
 
         // Complain about inconsistent function types.
-        Importer.ToDiag(Loc, diag::err_odr_function_type_inconsistent)
+        Importer.ToDiag(Loc, diag::warn_odr_function_type_inconsistent)
             << Name << D->getType() << FoundFunction->getType();
         Importer.ToDiag(FoundFunction->getLocation(), diag::note_odr_value_here)
             << FoundFunction->getType();
@@ -3266,7 +3266,7 @@ ExpectedDecl ASTNodeImporter::VisitFieldDecl(FieldDecl *D) {
       }
 
       // FIXME: Why is this case not handled with calling HandleNameConflict?
-      Importer.ToDiag(Loc, diag::err_odr_field_type_inconsistent)
+      Importer.ToDiag(Loc, diag::warn_odr_field_type_inconsistent)
         << Name << D->getType() << FoundField->getType();
       Importer.ToDiag(FoundField->getLocation(), diag::note_odr_value_here)
         << FoundField->getType();
@@ -3337,7 +3337,7 @@ ExpectedDecl ASTNodeImporter::VisitIndirectFieldDecl(IndirectFieldDecl *D) {
         continue;
 
       // FIXME: Why is this case not handled with calling HandleNameConflict?
-      Importer.ToDiag(Loc, diag::err_odr_field_type_inconsistent)
+      Importer.ToDiag(Loc, diag::warn_odr_field_type_inconsistent)
         << Name << D->getType() << FoundField->getType();
       Importer.ToDiag(FoundField->getLocation(), diag::note_odr_value_here)
         << FoundField->getType();
@@ -3468,7 +3468,7 @@ ExpectedDecl ASTNodeImporter::VisitObjCIvarDecl(ObjCIvarDecl *D) {
         return FoundIvar;
       }
 
-      Importer.ToDiag(Loc, diag::err_odr_ivar_type_inconsistent)
+      Importer.ToDiag(Loc, diag::warn_odr_ivar_type_inconsistent)
         << Name << D->getType() << FoundIvar->getType();
       Importer.ToDiag(FoundIvar->getLocation(), diag::note_odr_value_here)
         << FoundIvar->getType();
@@ -3581,7 +3581,7 @@ ExpectedDecl ASTNodeImporter::VisitVarDecl(VarDecl *D) {
           }
         }
 
-        Importer.ToDiag(Loc, diag::err_odr_variable_type_inconsistent)
+        Importer.ToDiag(Loc, diag::warn_odr_variable_type_inconsistent)
           << Name << D->getType() << FoundVar->getType();
         Importer.ToDiag(FoundVar->getLocation(), diag::note_odr_value_here)
           << FoundVar->getType();
@@ -3746,7 +3746,7 @@ ExpectedDecl ASTNodeImporter::VisitObjCMethodDecl(ObjCMethodDecl *D) {
       // Check return types.
       if (!Importer.IsStructurallyEquivalent(D->getReturnType(),
                                              FoundMethod->getReturnType())) {
-        Importer.ToDiag(Loc, diag::err_odr_objc_method_result_type_inconsistent)
+        Importer.ToDiag(Loc, diag::warn_odr_objc_method_result_type_inconsistent)
             << D->isInstanceMethod() << Name << D->getReturnType()
             << FoundMethod->getReturnType();
         Importer.ToDiag(FoundMethod->getLocation(),
@@ -3758,7 +3758,7 @@ ExpectedDecl ASTNodeImporter::VisitObjCMethodDecl(ObjCMethodDecl *D) {
 
       // Check the number of parameters.
       if (D->param_size() != FoundMethod->param_size()) {
-        Importer.ToDiag(Loc, diag::err_odr_objc_method_num_params_inconsistent)
+        Importer.ToDiag(Loc, diag::warn_odr_objc_method_num_params_inconsistent)
           << D->isInstanceMethod() << Name
           << D->param_size() << FoundMethod->param_size();
         Importer.ToDiag(FoundMethod->getLocation(),
@@ -3775,7 +3775,7 @@ ExpectedDecl ASTNodeImporter::VisitObjCMethodDecl(ObjCMethodDecl *D) {
         if (!Importer.IsStructurallyEquivalent((*P)->getType(),
                                                (*FoundP)->getType())) {
           Importer.FromDiag((*P)->getLocation(),
-                            diag::err_odr_objc_method_param_type_inconsistent)
+                            diag::warn_odr_objc_method_param_type_inconsistent)
             << D->isInstanceMethod() << Name
             << (*P)->getType() << (*FoundP)->getType();
           Importer.ToDiag((*FoundP)->getLocation(), diag::note_odr_value_here)
@@ -3788,7 +3788,7 @@ ExpectedDecl ASTNodeImporter::VisitObjCMethodDecl(ObjCMethodDecl *D) {
       // Check variadic/non-variadic.
       // Check the number of parameters.
       if (D->isVariadic() != FoundMethod->isVariadic()) {
-        Importer.ToDiag(Loc, diag::err_odr_objc_method_variadic_inconsistent)
+        Importer.ToDiag(Loc, diag::warn_odr_objc_method_variadic_inconsistent)
           << D->isInstanceMethod() << Name;
         Importer.ToDiag(FoundMethod->getLocation(),
                         diag::note_odr_objc_method_here)
@@ -4333,7 +4333,7 @@ Error ASTNodeImporter::ImportDefinition(
     if ((bool)FromSuper != (bool)ToSuper ||
         (FromSuper && !declaresSameEntity(FromSuper, ToSuper))) {
       Importer.ToDiag(To->getLocation(),
-                      diag::err_odr_objc_superclass_inconsistent)
+                      diag::warn_odr_objc_superclass_inconsistent)
         << To->getDeclName();
       if (ToSuper)
         Importer.ToDiag(To->getSuperClassLoc(), diag::note_odr_objc_superclass)
@@ -4602,7 +4602,7 @@ ASTNodeImporter::VisitObjCImplementationDecl(ObjCImplementationDecl *D) {
          !declaresSameEntity(Super->getCanonicalDecl(),
                              Impl->getSuperClass()))) {
       Importer.ToDiag(Impl->getLocation(),
-                      diag::err_odr_objc_superclass_inconsistent)
+                      diag::warn_odr_objc_superclass_inconsistent)
         << Iface->getDeclName();
       // FIXME: It would be nice to have the location of the superclass
       // below.
@@ -4650,7 +4650,7 @@ ExpectedDecl ASTNodeImporter::VisitObjCPropertyDecl(ObjCPropertyDecl *D) {
       // Check property types.
       if (!Importer.IsStructurallyEquivalent(D->getType(),
                                              FoundProp->getType())) {
-        Importer.ToDiag(Loc, diag::err_odr_objc_property_type_inconsistent)
+        Importer.ToDiag(Loc, diag::warn_odr_objc_property_type_inconsistent)
           << Name << D->getType() << FoundProp->getType();
         Importer.ToDiag(FoundProp->getLocation(), diag::note_odr_value_here)
           << FoundProp->getType();
@@ -4757,7 +4757,7 @@ ASTNodeImporter::VisitObjCPropertyImplDecl(ObjCPropertyImplDecl *D) {
     // vs. @dynamic).
     if (D->getPropertyImplementation() != ToImpl->getPropertyImplementation()) {
       Importer.ToDiag(ToImpl->getLocation(),
-                      diag::err_odr_objc_property_impl_kind_inconsistent)
+                      diag::warn_odr_objc_property_impl_kind_inconsistent)
         << Property->getDeclName()
         << (ToImpl->getPropertyImplementation()
                                               == ObjCPropertyImplDecl::Dynamic);
@@ -4773,7 +4773,7 @@ ASTNodeImporter::VisitObjCPropertyImplDecl(ObjCPropertyImplDecl *D) {
     if (D->getPropertyImplementation() == ObjCPropertyImplDecl::Synthesize &&
         Ivar != ToImpl->getPropertyIvarDecl()) {
       Importer.ToDiag(ToImpl->getPropertyIvarDeclLoc(),
-                      diag::err_odr_objc_synthesize_ivar_inconsistent)
+                      diag::warn_odr_objc_synthesize_ivar_inconsistent)
         << Property->getDeclName()
         << ToImpl->getPropertyIvarDecl()->getDeclName()
         << Ivar->getDeclName();
