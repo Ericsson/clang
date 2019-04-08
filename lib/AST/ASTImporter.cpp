@@ -5510,6 +5510,10 @@ ExpectedDecl ASTNodeImporter::VisitVarTemplateDecl(VarTemplateDecl *D) {
       continue;
 
     if (VarTemplateDecl *FoundTemplate = dyn_cast<VarTemplateDecl>(FoundDecl)) {
+      // FIXME: Use the templated decl, some linkage flags are set only there.
+      if (!hasSameVisibilityContext(FoundTemplate->getTemplatedDecl(),
+                                    D->getTemplatedDecl()))
+        continue;
       if (IsStructuralMatch(D, FoundTemplate)) {
         // The Decl in the "From" context has a definition, but in the
         // "To" context we already have a definition.

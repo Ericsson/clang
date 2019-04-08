@@ -31,6 +31,12 @@ struct GetVarPattern {
   using DeclTy = VarDecl;
   BindableMatcher<Decl> operator()() { return varDecl(hasName("v")); }
 };
+struct GetVarTemplPattern {
+  using DeclTy = VarTemplateDecl;
+  BindableMatcher<Decl> operator()() {
+    return namedDecl(hasName("v"), has(templateTypeParmDecl()));
+  }
+};
 struct GetClassPattern {
   using DeclTy = CXXRecordDecl;
   BindableMatcher<Decl> operator()() { return cxxRecordDecl(hasName("X")); }
@@ -63,6 +69,10 @@ const auto *AnonF = "namespace { void f(); }";
 const auto *ExternV = "extern int v;";
 const auto *StaticV = "static int v;";
 const auto *AnonV = "namespace { extern int v; }";
+// VarTemplateDecl:
+const auto *ExternVT = "template <class> extern int v;";
+const auto *StaticVT = "template <class> static int v;";
+const auto *AnonVT = "namespace { template <class> extern int v; }";
 // CXXRecordDecl:
 const auto *ExternC = "class X;";
 const auto *AnonC = "namespace { class X; }";
@@ -126,6 +136,8 @@ protected:
 // Manual instantiation of the fixture with each type.
 using ImportFunctionsVisibilityChain = ImportVisibilityChain<GetFunPattern>;
 using ImportVariablesVisibilityChain = ImportVisibilityChain<GetVarPattern>;
+using ImportVariableTemplatesVisibilityChain =
+    ImportVisibilityChain<GetVarTemplPattern>;
 using ImportClassesVisibilityChain = ImportVisibilityChain<GetClassPattern>;
 using ImportFunctionTemplatesVisibilityChain =
     ImportVisibilityChain<GetFunTemplPattern>;
@@ -138,6 +150,10 @@ TEST_P(ImportFunctionsVisibilityChain, ImportChain) {
 }
 // Value-parameterized test for variables.
 TEST_P(ImportVariablesVisibilityChain, ImportChain) {
+  TypedTest_ImportChain();
+}
+// Value-parameterized test for variable templates.
+TEST_P(ImportVariableTemplatesVisibilityChain, ImportChain) {
   TypedTest_ImportChain();
 }
 // Value-parameterized test for classes.
@@ -174,25 +190,28 @@ INSTANTIATE_TEST_CASE_P(
         // provided but they must have the same linkage.  See also the test
         // ImportVariableChainInC which test for this special C Lang case.
         ::testing::Values(ExternV, AnonV)), );
-INSTANTIATE_TEST_CASE_P(
-    ParameterizedTests, ImportClassesVisibilityChain,
-    ::testing::Combine(
-        DefaultTestValuesForRunOptions,
-        ::testing::Values(ExternC, AnonC)), );
+INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportClassesVisibilityChain,
+                        ::testing::Combine(DefaultTestValuesForRunOptions,
+                                           ::testing::Values(ExternC,
+                                                             AnonC)), );
 INSTANTIATE_TEST_CASE_P(ParameterizedTests,
                         ImportFunctionTemplatesVisibilityChain,
                         ::testing::Combine(DefaultTestValuesForRunOptions,
                                            ::testing::Values(ExternFT, StaticFT,
                                                              AnonFT)), );
+INSTANTIATE_TEST_CASE_P(ParameterizedTests,
+                        ImportVariableTemplatesVisibilityChain,
+                        ::testing::Combine(DefaultTestValuesForRunOptions,
+                                           ::testing::Values(ExternVT,
+                                                             AnonVT)), );
 INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportClassTemplatesVisibilityChain,
                         ::testing::Combine(DefaultTestValuesForRunOptions,
                                            ::testing::Values(ExternCT,
                                                              AnonCT)), );
-INSTANTIATE_TEST_CASE_P(
-    ParameterizedTests, ImportScopedEnumsVisibilityChain,
-    ::testing::Combine(
-        DefaultTestValuesForRunOptions,
-        ::testing::Values(ExternEC, AnonEC)), );
+INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportScopedEnumsVisibilityChain,
+                        ::testing::Combine(DefaultTestValuesForRunOptions,
+                                           ::testing::Values(ExternEC,
+                                                             AnonEC)), );
 
 // First value in tuple: Compile options.
 // Second value in tuple: Tuple with informations for the test.
@@ -301,6 +320,7 @@ protected:
 
 using ImportFunctionsVisibility = ImportVisibility<GetFunPattern>;
 using ImportVariablesVisibility = ImportVisibility<GetVarPattern>;
+using ImportVariableTemplatesVisibility = ImportVisibility<GetVarTemplPattern>;
 using ImportClassesVisibility = ImportVisibility<GetClassPattern>;
 using ImportEnumsVisibility = ImportVisibility<GetEnumPattern>;
 using ImportTypedefNameVisibility = ImportVisibility<GetTypedefNamePattern>;
@@ -320,6 +340,13 @@ TEST_P(ImportVariablesVisibility, ImportAfter) {
   TypedTest_ImportAfter();
 }
 TEST_P(ImportVariablesVisibility, ImportAfterImport) {
+  TypedTest_ImportAfterImport();
+}
+// VarTemplateDecl.
+TEST_P(ImportVariableTemplatesVisibility, ImportAfter) {
+  TypedTest_ImportAfter();
+}
+TEST_P(ImportVariableTemplatesVisibility, ImportAfterImport) {
   TypedTest_ImportAfterImport();
 }
 // CXXRecordDecl.
@@ -394,6 +421,20 @@ INSTANTIATE_TEST_CASE_P(
             std::make_tuple(AnonV, ExternV, ExpectUnlinkedDeclChain),
             std::make_tuple(AnonV, StaticV, ExpectUnlinkedDeclChain),
             std::make_tuple(AnonV, AnonV, ExpectUnlinkedDeclChain))), );
+INSTANTIATE_TEST_CASE_P(
+    ParameterizedTests, ImportVariableTemplatesVisibility,
+    ::testing::Combine(
+        DefaultTestValuesForRunOptions,
+        ::testing::Values(
+            std::make_tuple(ExternVT, ExternVT, ExpectLinkedDeclChain),
+            std::make_tuple(ExternVT, StaticVT, ExpectUnlinkedDeclChain),
+            std::make_tuple(ExternVT, AnonVT, ExpectUnlinkedDeclChain),
+            std::make_tuple(StaticVT, ExternVT, ExpectUnlinkedDeclChain),
+            std::make_tuple(StaticVT, StaticVT, ExpectUnlinkedDeclChain),
+            std::make_tuple(StaticVT, AnonVT, ExpectUnlinkedDeclChain),
+            std::make_tuple(AnonVT, ExternVT, ExpectUnlinkedDeclChain),
+            std::make_tuple(AnonVT, StaticVT, ExpectUnlinkedDeclChain),
+            std::make_tuple(AnonVT, AnonVT, ExpectUnlinkedDeclChain))), );
 INSTANTIATE_TEST_CASE_P(
     ParameterizedTests, ImportClassesVisibility,
     ::testing::Combine(
