@@ -1056,6 +1056,17 @@ IsStructurallyEquivalentLambdas(StructuralEquivalenceContext &Context,
                                 D2->getLambdaCallOperator()))
     return false;
 
+  auto &SM1 = Context.FromCtx.getSourceManager();
+  auto &SM2 = Context.ToCtx.getSourceManager();
+  auto Loc1 = SM1.getSpellingLoc(SM1.getExpansionLoc(D1->getLocation()));
+  auto Loc2 = SM2.getSpellingLoc(SM2.getExpansionLoc(D2->getLocation()));
+  if (SM1.getSpellingLineNumber(Loc1) != SM2.getSpellingLineNumber(Loc2))
+    return false;
+  if (SM1.getSpellingColumnNumber(Loc1) != SM2.getSpellingColumnNumber(Loc2))
+    return false;
+  if (SM1.getFilename(Loc1) != SM2.getFilename(Loc2))
+    return false;
+
   return true;
 }
 

@@ -861,6 +861,33 @@ TEST_F(StructuralEquivalenceLambdaTest, LambdaClassesWithEqFields) {
   EXPECT_TRUE(testStructuralMatch(L0, L1));
 }
 
+TEST_F(StructuralEquivalenceLambdaTest,
+       LambdaClassesWithDifferentSpellingLocations) {
+  auto t = makeDecls<LambdaExpr>("void f() { auto L = [](int){}; }",
+                                 "void f() { auto L =  [](int){}; }",
+                                 Lang_CXX11, lambdaExpr(), lambdaExpr());
+  CXXRecordDecl *L0 = get<0>(t)->getLambdaClass();
+  CXXRecordDecl *L1 = get<1>(t)->getLambdaClass();
+  EXPECT_FALSE(testStructuralMatch(L0, L1));
+}
+
+TEST_F(StructuralEquivalenceLambdaTest,
+       LambdaClassesWithDifferentExpansionLocations) {
+  auto t = makeDecls<LambdaExpr>(
+      R"(
+      #define LAMBDA [](){}
+      void f() { auto L = LAMBDA; }
+      )",
+      R"(
+      #define LAMBDA [](){}
+      void f() { auto L =       LAMBDA; }
+      )",
+      Lang_CXX11, lambdaExpr(), lambdaExpr());
+  CXXRecordDecl *L0 = get<0>(t)->getLambdaClass();
+  CXXRecordDecl *L1 = get<1>(t)->getLambdaClass();
+  EXPECT_FALSE(testStructuralMatch(L0, L1));
+}
+
 TEST_F(StructuralEquivalenceTest, CompareSameDeclWithMultiple) {
   auto t = makeNamedDecls(
       "struct A{ }; struct B{ }; void foo(A a, A b);",
