@@ -5001,6 +5001,63 @@ TEST_P(ASTImporterOptionSpecificTestBase,
   EXPECT_EQ(ToFwdE->getCanonicalDecl(), ToDefE->getCanonicalDecl());
 }
 
+TEST_P(ASTImporterOptionSpecificTestBase, LambdaInFunctionBody) {
+  Decl *FromTU = getTuDecl(
+      R"(
+      void f() {
+        auto L = [](){};
+      }
+      )",
+      Lang_CXX11, "input0.cc");
+  auto Pattern = lambdaExpr();
+  CXXRecordDecl *FromL =
+      FirstDeclMatcher<LambdaExpr>().match(FromTU, Pattern)->getLambdaClass();
+
+  auto ToL = Import(FromL, Lang_CXX11);
+  unsigned ToLSize = 0;
+  unsigned FromLSize = 0;
+  // operator- is not defined for decl_iterator, so we have to traverse and
+  // count.
+  for (auto &D : ToL->decls()) {
+    (void)D;
+    ++ToLSize;
+  }
+  for (auto &D : FromL->decls()) {
+    (void)D;
+    ++FromLSize;
+  }
+  EXPECT_NE(ToLSize, 0u);
+  EXPECT_EQ(ToLSize, FromLSize);
+}
+
+TEST_P(ASTImporterOptionSpecificTestBase, LambdaInFunctionParam) {
+  Decl *FromTU = getTuDecl(
+      R"(
+      template <typename F>
+      void f(F L = [](){}) {}
+      )",
+      Lang_CXX11, "input0.cc");
+  auto Pattern = lambdaExpr();
+  CXXRecordDecl *FromL =
+      FirstDeclMatcher<LambdaExpr>().match(FromTU, Pattern)->getLambdaClass();
+
+  auto ToL = Import(FromL, Lang_CXX11);
+  unsigned ToLSize = 0;
+  unsigned FromLSize = 0;
+  // operator- is not defined for decl_iterator, so we have to traverse and
+  // count.
+  for (auto &D : ToL->decls()) {
+    (void)D;
+    ++ToLSize;
+  }
+  for (auto &D : FromL->decls()) {
+    (void)D;
+    ++FromLSize;
+  }
+  EXPECT_NE(ToLSize, 0u);
+  EXPECT_EQ(ToLSize, FromLSize);
+}
+
 INSTANTIATE_TEST_CASE_P(ParameterizedTests, ASTImporterLookupTableTest,
                         DefaultTestValuesForRunOptions, );
 
