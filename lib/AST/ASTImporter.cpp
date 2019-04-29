@@ -256,8 +256,7 @@ namespace clang {
         return true; // Already imported.
       ToD = CreateFun(std::forward<Args>(args)...);
       // Keep track of imported Decls.
-      Importer.MapImported(FromD, ToD);
-      Importer.AddToLookupTable(ToD);
+      Importer.RegisterImportedDecl(FromD, ToD);
       InitializeImportedDecl(FromD, ToD);
       return false; // A new Decl is created.
     }
@@ -7657,6 +7656,17 @@ void ASTImporter::AddToLookupTable(Decl *ToD) {
       LookupTable->add(ToND);
 }
 
+Expected<Decl *> ASTImporter::ImportImpl(Decl *FromD) {
+  // Import the decl using ASTNodeImporter.
+  ASTNodeImporter Importer(*this);
+  return Importer.Visit(FromD);
+}
+
+void ASTImporter::RegisterImportedDecl(Decl *FromD, Decl *ToD) {
+  MapImported(FromD, ToD);
+  AddToLookupTable(ToD);
+}
+
 Expected<QualType> ASTImporter::Import_New(QualType FromT) {
   if (FromT.isNull())
     return QualType{};
@@ -7750,7 +7760,6 @@ Expected<Decl *> ASTImporter::Import_New(Decl *FromD) {
   if (!FromD)
     return nullptr;
 
-  ASTNodeImporter Importer(*this);
 
   // Check whether we've already imported this declaration.
   Decl *ToD = GetAlreadyImportedOrNull(FromD);
@@ -7761,7 +7770,7 @@ Expected<Decl *> ASTImporter::Import_New(Decl *FromD) {
   }
 
   // Import the declaration.
-  ExpectedDecl ToDOrErr = Importer.Visit(FromD);
+  ExpectedDecl ToDOrErr = ImportImpl(FromD);
   if (!ToDOrErr)
     return ToDOrErr;
   ToD = *ToDOrErr;
@@ -7771,6 +7780,9 @@ Expected<Decl *> ASTImporter::Import_New(Decl *FromD) {
   if (!ToD) {
     return nullptr;
   }
+
+  // Make sure that ImportImpl registered the imported decl.
+  assert(ImportedDecls.count(FromD) != 0 && "Missing call to MapImported?");
 
   // Once the decl is connected to the existing declarations, i.e. when the
   // redecl chain is properly set then we populate the lookup again.
