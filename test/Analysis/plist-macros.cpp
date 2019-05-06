@@ -1,7 +1,7 @@
 // RUN: %clang_analyze_cc1 -analyzer-checker=core,unix -analyzer-eagerly-assume -verify %s
 // RUN: %clang_analyze_cc1 -analyzer-checker=core,unix -analyzer-eagerly-assume -analyzer-output=plist-multi-file %s -o %t.plist
-// RUN: FileCheck --input-file=%t.plist %s
-
+// RUN: %clang_cc1 %z3 -E -CC -P %s 2>&1 > %t.check
+// RUN: FileCheck --input-file=%t.plist %t.check
 
 typedef __typeof(sizeof(int)) size_t;
 void *malloc(size_t);
@@ -637,19 +637,30 @@ void test2(int *p) {
 // CHECK-NEXT:         <key>end</key>
 // CHECK-NEXT:          <array>
 // CHECK-NEXT:           <dict>
+#ifndef ANALYZER_CM_Z3
 // CHECK-NEXT:            <key>line</key><integer>36</integer>
 // CHECK-NEXT:            <key>col</key><integer>7</integer>
+#else
+// CHECK-NEXT:            <key>line</key><integer>37</integer>
+// CHECK-NEXT:            <key>col</key><integer>5</integer>
+#endif
 // CHECK-NEXT:            <key>file</key><integer>0</integer>
 // CHECK-NEXT:           </dict>
 // CHECK-NEXT:           <dict>
+#ifndef ANALYZER_CM_Z3
 // CHECK-NEXT:            <key>line</key><integer>36</integer>
 // CHECK-NEXT:            <key>col</key><integer>7</integer>
+#else
+// CHECK-NEXT:            <key>line</key><integer>37</integer>
+// CHECK-NEXT:            <key>col</key><integer>6</integer>
+#endif
 // CHECK-NEXT:            <key>file</key><integer>0</integer>
 // CHECK-NEXT:           </dict>
 // CHECK-NEXT:          </array>
 // CHECK-NEXT:        </dict>
 // CHECK-NEXT:       </array>
 // CHECK-NEXT:     </dict>
+#ifndef ANALYZER_CM_Z3
 // CHECK-NEXT:     <dict>
 // CHECK-NEXT:      <key>kind</key><string>event</string>
 // CHECK-NEXT:      <key>location</key>
@@ -713,6 +724,7 @@ void test2(int *p) {
 // CHECK-NEXT:        </dict>
 // CHECK-NEXT:       </array>
 // CHECK-NEXT:     </dict>
+#endif
 // CHECK-NEXT:     <dict>
 // CHECK-NEXT:      <key>kind</key><string>control</string>
 // CHECK-NEXT:      <key>edges</key>

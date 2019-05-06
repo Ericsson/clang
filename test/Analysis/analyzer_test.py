@@ -12,16 +12,20 @@ class AnalyzerTest(lit.formats.ShTest):
         lit.TestRunner.parseIntegratedTestScript(test)
 
         if 'z3' not in test.requires:
-            results.append(self.executeWithAnalyzeSubstitution(
-                saved_test, litConfig, '-analyzer-constraints=range'))
+            results.append(self.executeWithSubstitutions(
+                saved_test, litConfig, [
+                    ('%analyze', '-analyzer-constraints=range'),
+                    ('%z3', '')]))
 
             if results[-1].code == lit.Test.FAIL:
                 return results[-1]
 
         # If z3 backend available, add an additional run line for it
         if test.config.clang_staticanalyzer_z3 == '1':
-            results.append(self.executeWithAnalyzeSubstitution(
-                saved_test, litConfig, '-analyzer-constraints=z3 -DANALYZER_CM_Z3'))
+            results.append(self.executeWithSubstitutions(
+                saved_test, litConfig, [
+                    ('%analyze', '-analyzer-constraints=z3 -DANALYZER_CM_Z3'),
+                    ('%z3', '-DANALYZER_CM_Z3')]))
 
         # Combine all result outputs into the last element
         for x in results:
@@ -33,9 +37,9 @@ class AnalyzerTest(lit.formats.ShTest):
         return lit.Test.Result(lit.Test.UNSUPPORTED,
             "Test requires the following unavailable features: z3")
 
-    def executeWithAnalyzeSubstitution(self, test, litConfig, substitution):
+    def executeWithSubstitutions(self, test, litConfig, substitutions):
         saved_substitutions = list(test.config.substitutions)
-        test.config.substitutions.append(('%analyze', substitution))
+        test.config.substitutions.extend(substitutions)
         result = lit.TestRunner.executeShTest(test, litConfig,
             self.execute_external)
         test.config.substitutions = saved_substitutions
