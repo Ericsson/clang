@@ -8421,11 +8421,42 @@ Expected<TypeSourceInfo *> ASTImporter::Import(TypeSourceInfo *FromTSI) {
 }
 
 Expected<Attr *> ASTImporter::Import(const Attr *FromAttr) {
-  Attr *ToAttr = FromAttr->clone(ToContext);
-  if (auto ToRangeOrErr = Import(FromAttr->getRange()))
-    ToAttr->setRange(*ToRangeOrErr);
-  else
-    return ToRangeOrErr.takeError();
+  Attr *ToAttr = nullptr;
+  SourceRange ToRange;
+  if (Error Err = importInto(ToRange, FromAttr->getRange()))
+    return std::move(Err);
+
+  // FIXME: Does a AttrVisitor exist, instead of this switch?
+  switch (FromAttr->getKind()) {
+  case attr::Aligned: {
+    auto *From = cast<AlignedAttr>(FromAttr);
+    AlignedAttr *To;
+    if (From->isAlignmentExpr()) {
+      if (auto ToEOrErr = Import(From->getAlignmentExpr()))
+        To = new (ToContext) AlignedAttr(ToRange, ToContext, true, *ToEOrErr,
+                                         FromAttr->getSpellingListIndex());
+      else
+        return ToEOrErr.takeError();
+    } else {
+      if (auto ToTOrErr = Import(From->getAlignmentType()))
+        To = new (ToContext) AlignedAttr(ToRange, ToContext, false, *ToTOrErr,
+                                         FromAttr->getSpellingListIndex());
+      else
+        return ToTOrErr.takeError();
+    }
+    To->setInherited(From->isInherited());
+    To->setPackExpansion(From->isPackExpansion());
+    To->setImplicit(From->isImplicit());
+    ToAttr = To;
+    break;
+  }
+  default:
+    // FIXME: 'clone' copies every member but some of them should be imported.
+    // Handle other Attrs that have parameters that should be imported.
+    ToAttr = FromAttr->clone(ToContext);
+    ToAttr->setRange(ToRange);
+    break;
+  }
 
   return ToAttr;
 }
