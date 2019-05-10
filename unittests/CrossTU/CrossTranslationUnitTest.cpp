@@ -24,8 +24,9 @@ namespace {
 
 class CTUASTConsumer : public clang::ASTConsumer {
 public:
-  explicit CTUASTConsumer(clang::CompilerInstance &CI, bool *Success)
-      : CTU(CI), Success(Success) {}
+  explicit CTUASTConsumer(clang::CompilerInstance &CI, bool *Success,
+                          unsigned ImportLimit)
+      : CTU(CI), Success(Success), ImportLimit(ImportLimit) {}
 
   void HandleTranslationUnit(ASTContext &Ctx) {
     const TranslationUnitDecl *TU = Ctx.getTranslationUnitDecl();
@@ -71,39 +72,52 @@ public:
     EXPECT_TRUE(llvm::sys::fs::exists(ASTFileName));
 
     // Load the definition from the AST file.
-    llvm::Expected<const FunctionDecl *> NewFDorError =
-        CTU.getCrossTUDefinition(FD, "", IndexFileName);
-    EXPECT_TRUE((bool)NewFDorError);
-    const FunctionDecl *NewFD = *NewFDorError;
+    llvm::Expected<const FunctionDecl *> NewFDorError = handleExpected(
+        CTU.getCrossTUDefinition(FD, "", IndexFileName, false, ImportLimit),
+        []() { return nullptr; }, [](IndexError &) {});
 
-    *Success = NewFD && NewFD->hasBody() && !OrigFDHasBody;
+    if (NewFDorError) {
+      const FunctionDecl *NewFD = *NewFDorError;
+      *Success = NewFD && NewFD->hasBody() && !OrigFDHasBody;
+    }
   }
 
 private:
   CrossTranslationUnitContext CTU;
   bool *Success;
+  unsigned ImportLimit;
 };
 
 class CTUAction : public clang::ASTFrontendAction {
 public:
-  CTUAction(bool *Success) : Success(Success) {}
+  CTUAction(bool *Success, unsigned ImportLimit)
+      : Success(Success), ImportLimit(ImportLimit) {}
 
 protected:
   std::unique_ptr<clang::ASTConsumer>
   CreateASTConsumer(clang::CompilerInstance &CI, StringRef) override {
-    return llvm::make_unique<CTUASTConsumer>(CI, Success);
+    return llvm::make_unique<CTUASTConsumer>(CI, Success, ImportLimit);
   }
 
 private:
   bool *Success;
+  unsigned ImportLimit;
 };
 
 } // end namespace
 
 TEST(CrossTranslationUnit, CanLoadFunctionDefinition) {
   bool Success = false;
-  EXPECT_TRUE(tooling::runToolOnCode(new CTUAction(&Success), "int f(int);"));
+  EXPECT_TRUE(
+      tooling::runToolOnCode(new CTUAction(&Success, 1u), "int f(int);"));
   EXPECT_TRUE(Success);
+}
+
+TEST(CrossTranslationUnit, RespectsLoadThreshold) {
+  bool Success = false;
+  EXPECT_TRUE(
+      tooling::runToolOnCode(new CTUAction(&Success, 0u), "int f(int);"));
+  EXPECT_FALSE(Success);
 }
 
 TEST(CrossTranslationUnit, IndexFormatCanBeParsed) {

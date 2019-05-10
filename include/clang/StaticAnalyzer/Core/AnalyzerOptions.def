@@ -288,6 +288,14 @@ ANALYZER_OPTION(bool, DisplayCTUProgress, "display-ctu-progress",
                 "the analyzer's progress related to ctu.",
                 false)
 
+ANALYZER_OPTION(unsigned, CTUImportThreshold, "ctu-import-threshold",
+                "The maximal amount of translation units that is considered "
+                "for import when inlining functions during CTU analysis. "
+                "Lowering this threshold can alleviate the memory burder of "
+                "analysis with many interdependent definitions located in "
+                "various translation units.",
+                100u)
+
 //===----------------------------------------------------------------------===//
 // Unsinged analyzer options.
 //===----------------------------------------------------------------------===//

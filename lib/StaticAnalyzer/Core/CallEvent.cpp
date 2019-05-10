@@ -561,7 +561,8 @@ RuntimeDefinition AnyFunctionCall::getRuntimeDefinition() const {
       *Engine.getCrossTranslationUnitContext();
   llvm::Expected<const FunctionDecl *> CTUDeclOrError =
       CTUCtx.getCrossTUDefinition(FD, Opts.CTUDir, Opts.CTUIndexName,
-                                  Opts.DisplayCTUProgress);
+                                  Opts.DisplayCTUProgress,
+                                  Opts.CTUImportThreshold);
 
   if (!CTUDeclOrError) {
     handleAllErrors(CTUDeclOrError.takeError(),
