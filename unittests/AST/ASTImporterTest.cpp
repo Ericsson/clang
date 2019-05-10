@@ -101,7 +101,7 @@ class TestImportBase : public CompilerOptionSpecificTest,
     createVirtualFileIfNeeded(To, FromFileName,
                               From->getBufferForFile(FromFileName));
 
-    auto Imported = Importer.Import_New(Node);
+    auto Imported = Importer.Import(Node);
 
     if (Imported) {
       // This should dump source locations and assert if some source locations
@@ -370,7 +370,7 @@ private:
     Decl *import(ASTImporterLookupTable &LookupTable, ASTUnit *ToAST,
                  Decl *FromDecl) {
       lazyInitImporter(LookupTable, ToAST);
-      if (auto ImportedOrErr = Importer->Import_New(FromDecl))
+      if (auto ImportedOrErr = Importer->Import(FromDecl))
         return *ImportedOrErr;
       else {
         llvm::consumeError(ImportedOrErr.takeError());
@@ -381,7 +381,7 @@ private:
     QualType import(ASTImporterLookupTable &LookupTable, ASTUnit *ToAST,
                     QualType FromType) {
       lazyInitImporter(LookupTable, ToAST);
-      if (auto ImportedOrErr = Importer->Import_New(FromType))
+      if (auto ImportedOrErr = Importer->Import(FromType))
         return *ImportedOrErr;
       else {
         llvm::consumeError(ImportedOrErr.takeError());

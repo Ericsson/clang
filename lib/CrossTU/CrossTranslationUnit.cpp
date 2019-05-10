@@ -358,7 +358,7 @@ CrossTranslationUnitContext::importDefinition(const FunctionDecl *FD) {
   assert(FD->hasBody() && "Functions to be imported should have body.");
 
   ASTImporter &Importer = getOrCreateASTImporter(FD->getASTContext());
-  auto ToDeclOrError = Importer.Import_New(FD);
+  auto ToDeclOrError = Importer.Import(FD);
   if (!ToDeclOrError) {
     handleAllErrors(ToDeclOrError.takeError(),
                     [&](const ImportError &IE) {
