@@ -354,12 +354,11 @@ class TypeSourceInfo;
     ///
     /// \param NumDecls the number of conflicting declarations in \p Decls.
     ///
-    /// \returns the name that the newly-imported declaration should have.
-    virtual DeclarationName HandleNameConflict(DeclarationName Name,
-                                               DeclContext *DC,
-                                               unsigned IDNS,
-                                               NamedDecl **Decls,
-                                               unsigned NumDecls);
+    /// \returns the name that the newly-imported declaration should have. Or
+    /// an error if we can't handle the name conflict.
+    virtual Expected<DeclarationName>
+    HandleNameConflict(DeclarationName Name, DeclContext *DC, unsigned IDNS,
+                       NamedDecl **Decls, unsigned NumDecls);
 
     /// Retrieve the context that AST nodes are being imported into.
     ASTContext &getToContext() const { return ToContext; }
