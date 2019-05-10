@@ -1666,7 +1666,7 @@ TEST_P(ASTImporterOptionSpecificTestBase,
 }
 
 TEST_P(ASTImporterOptionSpecificTestBase,
-       DISABLED_CXXRecordDeclFieldOrderShouldNotDependOnImportOrder) {
+       CXXRecordDeclFieldOrderShouldNotDependOnImportOrder) {
   Decl *From, *To;
   std::tie(From, To) = getImportedDecl(
       // The original recursive algorithm of ASTImporter first imports 'c' then

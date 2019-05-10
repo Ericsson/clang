@@ -406,4 +406,6 @@ def warn_padded_struct_size : Warning<
   InGroup<Padded>, DefaultIgnore;
 def warn_unnecessary_packed : Warning<
   "packed attribute is unnecessary for %0">, InGroup<Packed>, DefaultIgnore;
+def warn_ast_importer_missing_decl_in_decl_context : Warning<
+  "missing %0Decl in imported DeclContext <%1:%2:%3>">;
 }

@@ -1619,19 +1619,73 @@ ASTNodeImporter::ImportDeclarationNameLoc(
   llvm_unreachable("Unknown name kind.");
 }
 
-Error
-ASTNodeImporter::ImportDeclContext(DeclContext *FromDC, bool ForceImport) {
+Error ASTNodeImporter::ImportDeclContext(DeclContext *FromDC, bool ForceImport) {
   if (Importer.isMinimalImport() && !ForceImport) {
     auto ToDCOrErr = Importer.ImportContext(FromDC);
     return ToDCOrErr.takeError();
   }
+
   llvm::SmallVector<Decl *, 8> ImportedDecls;
   for (auto *From : FromDC->decls()) {
     ExpectedDecl ImportedOrErr = import(From);
-    if (!ImportedOrErr)
-      // Ignore the error, continue with next Decl.
-      // FIXME: Handle this case somehow better.
+    if (!ImportedOrErr) {
+      // We use strict error handling in case of records and enums, but not
+      // with e.g. namespaces.
+      //
+      // FIXME Clients of the ASTImporter should be able to choose an
+      // appropriate error handling strategy for their needs.  For instance,
+      // they may not want to mark an entire namespace as erroneous merely
+      // because there is an ODR error with two typedefs.  As another example,
+      // the client may allow EnumConstantDecls with same names but with
+      // different values in two distinct translation units.
+      if (isa<TagDecl>(FromDC))
+        return ImportedOrErr.takeError();
       consumeError(ImportedOrErr.takeError());
+    }
+    else
+      ImportedDecls.push_back(*ImportedOrErr);
+  }
+
+  // Reorder declarations in RecordDecls because they may have another
+  // order. Keeping field order is vitable because it determines structure
+  // layout.
+  const auto *FromRD = dyn_cast<RecordDecl>(FromDC);
+  if (!FromRD)
+    return Error::success();
+  auto ToDCOrErr = Importer.ImportContext(FromDC);
+  if (!ToDCOrErr)
+    return ToDCOrErr.takeError();
+  DeclContext *ToDC = *ToDCOrErr;
+  llvm::SmallDenseSet<Decl *, 2> MissingDecls;
+  // Frist, remove all declarations, which may be in wrong order in the
+  // lexical DeclContext.
+  for (Decl *ToD : ImportedDecls) { // O(n)
+    if (ToD && ToD->getLexicalDeclContext() == ToDC) {
+      if (ToDC->containsDecl(ToD)) { // containsDecl is O(1)
+        ToDC->removeDecl(ToD);       // O(n)
+      } else {
+        MissingDecls.insert(ToD);
+
+        const SourceLocation &Loc = ToD->getLocation();
+        const SourceManager &SM = ToD->getASTContext().getSourceManager();
+        SourceLocation SpellingLoc = SM.getSpellingLoc(Loc);
+        PresumedLoc PLoc = SM.getPresumedLoc(SpellingLoc);
+
+        FromDC->getParentASTContext().getDiagnostics().Report(
+            diag::warn_ast_importer_missing_decl_in_decl_context)
+            << ToD->getDeclKindName() << PLoc.getFilename() << PLoc.getLine()
+            << PLoc.getColumn();
+      }
+    }
+  }
+  // Add the declarations, but this time in the correct order.
+  for (Decl *ToD : ImportedDecls) {
+    if (ToD && ToD->getLexicalDeclContext() == ToDC) {
+      // FIXME remove this if, when all Decls are properly imported
+      if (MissingDecls.count(ToD) == 0) {
+        ToDC->addDeclInternal(ToD);
+      }
+    }
   }
 
   return Error::success();

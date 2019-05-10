@@ -38,6 +38,7 @@ CHECK-NEXT:   pp_poisoning_existing_macro
 CHECK-NEXT:   warn_accessor_property_type_mismatch
 CHECK-NEXT:   warn_arcmt_nsalloc_realloc
 CHECK-NEXT:   warn_asm_label_on_auto_decl
+CHECK-NEXT:   warn_ast_importer_missing_decl_in_decl_context
 CHECK-NEXT:   warn_c_kext
 CHECK-NEXT:   warn_call_wrong_number_of_arguments
 CHECK-NEXT:   warn_case_empty_range
