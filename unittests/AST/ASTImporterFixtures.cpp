@@ -184,8 +184,9 @@ Decl *ASTImporterTestBase::Import(Decl *From, Language ToLang) {
   TU *FromTU = findFromTU(From);
   assert(SharedStatePtr);
   Decl *To = FromTU->import(SharedStatePtr, ToAST.get(), From);
-  if (To)
-    // FIXME: checkImportedSourceLocations(From, To);
+  // FIXME
+  //if (To)
+    //checkImportedSourceLocations(From, To);
   return To;
 }
 
