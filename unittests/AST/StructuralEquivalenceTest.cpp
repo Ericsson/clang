@@ -1017,6 +1017,96 @@ template class Templ <Arg>;
   EXPECT_FALSE(testStructuralMatch(t));
 }
 
+TEST_F(StructuralEquivalenceTemplateTest, ConstantInTemplateArg) {
+  auto t = makeDecls<ClassTemplateSpecializationDecl>(
+      R"(
+      template <bool B>
+      struct X {};
+      X<true> Xx;
+      )",
+      R"(
+      template <bool B>
+      struct X {};
+      X<false> Xx;
+      )",
+      Lang_CXX11, classTemplateSpecializationDecl(hasName("X")));
+  EXPECT_FALSE(testStructuralMatch(t));
+}
+
+TEST_F(StructuralEquivalenceTemplateTest, VariableInTemplateArg1) {
+  auto t = makeDecls<ClassTemplateSpecializationDecl>(
+      R"(
+      const int A = 1;
+      template <int I>
+      struct X {};
+      X<A> Xx;
+      )",
+      R"(
+      const int A = 2;
+      template <int I>
+      struct X {};
+      X<A> Xx;
+      )",
+      Lang_CXX11, classTemplateSpecializationDecl(hasName("X")));
+  EXPECT_FALSE(testStructuralMatch(t));
+}
+
+TEST_F(StructuralEquivalenceTemplateTest, VariableInTemplateArg2) {
+  auto t = makeDecls<ClassTemplateSpecializationDecl>(
+      R"(
+      const int A = 1;
+      const int B = 2;
+      template <int I1, int I2>
+      struct X {};
+      X<A, B> Xx;
+      )",
+      R"(
+      const int A = 3;
+      const int B = 4;
+      template <int I1, int I2>
+      struct X {};
+      X<A, B> Xx;
+      )",
+      Lang_CXX11, classTemplateSpecializationDecl(hasName("X")));
+  EXPECT_FALSE(testStructuralMatch(t));
+}
+
+TEST_F(StructuralEquivalenceTemplateTest, DependentExprInTemplateArg1) {
+  auto t = makeDecls<FriendDecl>(
+      R"(
+      template <bool B1>
+      struct X {
+        friend X<!B1>;
+      };
+      )",
+      R"(
+      template <bool B1>
+      struct X {
+        friend X<B1>;
+      };
+      )",
+      Lang_CXX11, friendDecl());
+  EXPECT_FALSE(testStructuralMatch(t));
+}
+
+TEST_F(StructuralEquivalenceTemplateTest, DependentExprInTemplateArg2) {
+  auto t = makeDecls<FriendDecl>(
+      R"(
+      template <bool B1, bool B2>
+      struct X {
+        friend X<!B1, B2>;
+      };
+      )",
+      R"(
+      template <bool B1, bool B2>
+      struct X {
+        friend X<B1, !B2>;
+      };
+      )",
+      Lang_CXX11, friendDecl());
+  EXPECT_FALSE(testStructuralMatch(t));
+}
+
 struct StructuralEquivalenceDependentTemplateArgsTest
     : StructuralEquivalenceTemplateTest {};
 
