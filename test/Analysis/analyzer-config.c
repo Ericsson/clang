@@ -3,6 +3,7 @@
 
 // CHECK: [config]
 // CHECK-NEXT: aggressive-binary-operation-simplification = false
+// CHECK-NEXT: api-metadata-path = ""
 // CHECK-NEXT: avoid-suppressing-null-argument-paths = false
 // CHECK-NEXT: c++-allocator-inlining = true
 // CHECK-NEXT: c++-container-inlining = false
@@ -53,4 +54,4 @@
 // CHECK-NEXT: unroll-loops = false
 // CHECK-NEXT: widen-loops = false
 // CHECK-NEXT: [stats]
-// CHECK-NEXT: num-entries = 50
+// CHECK-NEXT: num-entries = 51

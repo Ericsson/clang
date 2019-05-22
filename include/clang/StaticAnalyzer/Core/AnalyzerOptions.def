@@ -381,5 +381,9 @@ ANALYZER_OPTION(
     "\"bfs_block_dfs_contents\".",
     "unexplored_first_queue")
 
+ANALYZER_OPTION(
+    StringRef, APIMetadataPath, "api-metadata-path",
+    "Directory where statistics are collected", "")
+
 #undef ANALYZER_OPTION_DEPENDS_ON_USER_MODE
 #undef ANALYZER_OPTION

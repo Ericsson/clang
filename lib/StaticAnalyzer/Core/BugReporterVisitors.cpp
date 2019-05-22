@@ -2504,3 +2504,48 @@ void FalsePositiveRefutationBRVisitor::Profile(
   static int Tag = 0;
   ID.AddPointer(&Tag);
 }
+
+std::shared_ptr<PathDiagnosticPiece>
+SpecialReturnValueBRVisitor::VisitNode(const ExplodedNode *Succ,
+                                       BugReporterContext &BRC, BugReport &BR) {
+  if (Satisfied)
+    return nullptr;
+
+  auto PS = Succ->getLocation().getAs<PostStmt>();
+  if (!PS.hasValue())
+    return nullptr;
+
+  auto Tag = PS->getTag();
+  if (!Tag)
+    return nullptr;
+
+  StringRef CheckerName, Msg;
+  std::tie(CheckerName, Msg) = Tag->getTagDescription().split(" : ");
+
+  if (CheckerName != "alpha.ericsson.statisticsbased.SpecialReturnValue")
+    return nullptr;
+
+  Satisfied = true;
+
+  assert(isa<CallExpr>(PS->getStmt()) &&
+         "Only CallExpr can \"return\" a value");
+  const auto *SpecCall = cast<CallExpr>(PS->getStmt());
+
+  const auto *LCtx = PS->getLocationContext();
+
+  auto L = PathDiagnosticLocation::createBegin(SpecCall, BRC.getSourceManager(),
+                                               LCtx);
+
+  if (!L.isValid() || !L.asLocation().isValid())
+    return nullptr;
+
+  SmallString<256> Buf;
+  llvm::raw_svector_ostream Out(Buf);
+
+  Out << "Assuming " << Msg << " (based on call statistics)";
+
+  auto Piece = std::make_shared<PathDiagnosticEventPiece>(L, Out.str());
+  Piece->addRange(SpecCall->getSourceRange());
+
+  return std::move(Piece);
+}
