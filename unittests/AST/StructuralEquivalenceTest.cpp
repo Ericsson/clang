@@ -403,6 +403,15 @@ TEST_F(StructuralEquivalenceFunctionTest,
   EXPECT_TRUE(testStructuralMatch(t));
 }
 
+TEST_F(StructuralEquivalenceFunctionTest,
+    ParameterInDifferentScopeShouldBeInequal) {
+  auto t = makeNamedDecls(
+      "namespace A { class X; } void foo(A::X &x);",
+      "namespace B { class X; } void foo(B::X &x);",
+      Lang_CXX);
+  EXPECT_FALSE(testStructuralMatch(t));
+}
+
 struct StructuralEquivalenceCXXMethodTest : StructuralEquivalenceTest {
 };
 

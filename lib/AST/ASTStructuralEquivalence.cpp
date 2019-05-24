@@ -104,10 +104,110 @@ static bool IsStructurallyEquivalent(StructuralEquivalenceContext &Context,
                                      const TemplateArgument &Arg1,
                                      const TemplateArgument &Arg2);
 static bool IsStructurallyEquivalent(StructuralEquivalenceContext &Context,
+                                     const TemplateArgumentList &ArgL1,
+                                     const TemplateArgumentList &ArgL2);
+static bool IsStructurallyEquivalent(StructuralEquivalenceContext &Context,
                                      NestedNameSpecifier *NNS1,
                                      NestedNameSpecifier *NNS2);
 static bool IsStructurallyEquivalent(const IdentifierInfo *Name1,
                                      const IdentifierInfo *Name2);
+static bool IsStructurallyEquivalent(const DeclarationName Name1,
+                                     const DeclarationName Name2);
+
+using ContextVector = llvm::SmallVector<const DeclContext *, 4>;
+
+static void GetContextsForEquivalenceCheck(ContextVector &Contexts,
+                                           const NamedDecl *ND) {
+  const DeclContext *Ctx = ND->getDeclContext();
+
+  // For ObjC methods, look through categories and use the interface as context.
+  if (auto *MD = dyn_cast<ObjCMethodDecl>(ND))
+    if (auto *ID = MD->getClassInterface())
+      Ctx = ID;
+
+  // Collect named contexts.
+  // Function contexts are ignored, this behavior is enough for ASTImporter.
+  // FIXME: Add assertion if different (non equivalent) functions are
+  // encountered on the paths (except the first)?
+  while (Ctx) {
+    if (isa<NamedDecl>(Ctx) && !isa<FunctionDecl>(Ctx))
+      Contexts.push_back(Ctx);
+    Ctx = Ctx->getParent();
+  }
+}
+
+static bool IsEquivalentDeclContext(StructuralEquivalenceContext &Context,
+                                    const DeclContext *DC1,
+                                    const DeclContext *DC2) {
+  if (const auto *Spec1 = dyn_cast<ClassTemplateSpecializationDecl>(DC1)) {
+    const auto *Spec2 = dyn_cast<ClassTemplateSpecializationDecl>(DC2);
+    if (!Spec2)
+      return false;
+    if (!IsStructurallyEquivalent(Spec1->getDeclName(), Spec2->getDeclName()))
+      return false;
+    if (!IsStructurallyEquivalent(Context, Spec1->getTemplateArgs(),
+                                  Spec2->getTemplateArgs()))
+      return false;
+  } else if (const auto *ND1 = dyn_cast<NamespaceDecl>(DC1)) {
+    const auto *ND2 = dyn_cast<NamespaceDecl>(DC2);
+    if (!ND2)
+      return false;
+    if (ND1->isAnonymousNamespace() != ND2->isAnonymousNamespace())
+      return false;
+    if (ND1->isInline() != ND2->isInline())
+      return false;
+    if (ND1->isAnonymousNamespace() || ND1->isInlineNamespace())
+      return true;
+    if (!IsStructurallyEquivalent(ND1->getDeclName(), ND2->getDeclName()))
+      return false;
+  } else if (const auto *RD1 = dyn_cast<RecordDecl>(DC1)) {
+    const auto *RD2 = dyn_cast<RecordDecl>(DC2);
+    if (!RD2)
+      return false;
+    if (!IsStructurallyEquivalent(RD1->getDeclName(), RD2->getDeclName()))
+      return false;
+  } else if (const auto *ED1 = dyn_cast<EnumDecl>(DC1)) {
+    const auto *ED2 = dyn_cast<EnumDecl>(DC2);
+    if (!ED2)
+      return false;
+    if (ED1->isScoped() != ED2->isScoped())
+      return false;
+  } else if (const auto *ND1 = dyn_cast<NamedDecl>(DC1)) {
+    const auto *ND2 = cast<NamedDecl>(DC2);
+    if (!IsStructurallyEquivalent(ND1->getDeclName(), ND2->getDeclName()))
+      return false;
+  } else
+    llvm_unreachable("Context should be NamedDecl.");
+
+  return true;
+}
+
+/// This function checks for equivalent "context" (scope) of an entity.
+/// This should check if the scope of two names is equivalent.
+/// Functions are excluded from this scope check because there is no use case
+/// when entities from different functions are compared.
+static bool IsEquivalentContext(StructuralEquivalenceContext &Context,
+                                const NamedDecl *ND1, const NamedDecl *ND2) {
+  ContextVector Contexts1, Contexts2;
+  GetContextsForEquivalenceCheck(Contexts1, ND1);
+  GetContextsForEquivalenceCheck(Contexts2, ND2);
+
+  auto DC2I = Contexts2.begin();
+  for (const DeclContext *DC1 : Contexts1) {
+    if (DC2I == Contexts2.end())
+      return false;
+    const DeclContext *DC2 = *DC2I;
+    ++DC2I;
+
+    if (!IsEquivalentDeclContext(Context, DC1, DC2))
+      return false;
+  }
+
+  if (DC2I != Contexts2.end())
+    return false;
+
+  return true;
+}
 
 static bool IsStructurallyEquivalent(const DeclarationName Name1,
                                      const DeclarationName Name2) {
@@ -336,6 +436,23 @@ static bool IsStructurallyEquivalent(StructuralEquivalenceContext &Context,
   }
 
   llvm_unreachable("Invalid template argument kind");
+}
+
+/// Determine whether two template argument lists are equivalent.
+static bool IsStructurallyEquivalent(StructuralEquivalenceContext &Context,
+                                     const TemplateArgumentList &ArgL1,
+                                     const TemplateArgumentList &ArgL2) {
+  if (ArgL1.size() != ArgL2.size()) {
+    if (Context.Complain) {
+    }
+    return false;
+  }
+
+  for (unsigned I = 0, N = ArgL1.size(); I != N; ++I)
+    if (!IsStructurallyEquivalent(Context, ArgL1.get(I), ArgL2.get(I)))
+      return false;
+
+  return true;
 }
 
 /// Determine structural equivalence for the common part of array
@@ -1664,6 +1781,8 @@ unsigned StructuralEquivalenceContext::getApplicableDiagnostic(
     return diag::warn_odr_parameter_pack_non_pack;
   case diag::err_odr_non_type_parameter_type_inconsistent:
     return diag::warn_odr_non_type_parameter_type_inconsistent;
+  default:
+    llvm_unreachable("Unknown diagnostic type.");
   }
 }
 
@@ -1704,6 +1823,14 @@ bool StructuralEquivalenceContext::CheckCommonEquivalence(Decl *D1, Decl *D2) {
     return false;
 
   // FIXME: Move check for identifier names into this function.
+
+  if (auto *ND1 = dyn_cast<NamedDecl>(D1)) {
+    auto *ND2 = dyn_cast<NamedDecl>(D2);
+    if (!ND2)
+      return false;
+    if (!IsEquivalentContext(*this, ND1, ND2))
+      return false;
+  }
 
   return true;
 }
