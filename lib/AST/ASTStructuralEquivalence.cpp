@@ -185,6 +185,54 @@ static bool IsStructurallyEquivalent(const IdentifierInfo *Name1,
   return Name1->getName() == Name2->getName();
 }
 
+static bool IsStructurallyEquivalent(const DeclarationName Name1,
+                                     const DeclarationName Name2) {
+  if (Name1.getNameKind() != Name2.getNameKind())
+    return false;
+
+  switch (Name1.getNameKind()) {
+
+  case DeclarationName::Identifier: {
+    const IdentifierInfo *II1 = Name1.getAsIdentifierInfo();
+    const IdentifierInfo *II2 = Name2.getAsIdentifierInfo();
+    if (!II1 || !II2)
+      return II1 == II2;
+    return Name1.getAsIdentifierInfo()->getName() ==
+           Name2.getAsIdentifierInfo()->getName();
+  }
+
+  // We assume that the parent CXXRecordDecl is being checked before this
+  // function is called.
+  case DeclarationName::CXXConstructorName:
+  case DeclarationName::CXXDestructorName:
+  case DeclarationName::CXXConversionFunctionName:
+    return true;
+
+  case DeclarationName::CXXDeductionGuideName:
+    return IsStructurallyEquivalent(
+        Name1.getCXXDeductionGuideTemplate()->getDeclName(),
+        Name2.getCXXDeductionGuideTemplate()->getDeclName());
+
+  case DeclarationName::CXXOperatorName:
+    return Name1.getCXXOverloadedOperator() == Name2.getCXXOverloadedOperator();
+
+  case DeclarationName::CXXLiteralOperatorName:
+    return Name1.getCXXLiteralIdentifier()->getName() ==
+           Name2.getCXXLiteralIdentifier()->getName();
+
+  case DeclarationName::CXXUsingDirective:
+    return false; // FIXME When do we consider two using directives equal?
+
+  case DeclarationName::ObjCZeroArgSelector:
+  case DeclarationName::ObjCOneArgSelector:
+  case DeclarationName::ObjCMultiArgSelector:
+    return true; // FIXME
+
+  }
+
+  return true;
+}
+
 /// Determine whether two nested-name-specifiers are equivalent.
 static bool IsStructurallyEquivalent(StructuralEquivalenceContext &Context,
                                      NestedNameSpecifier *NNS1,
@@ -1041,13 +1089,6 @@ static bool IsStructurallyEquivalent(StructuralEquivalenceContext &Context,
       return false;
   }
 
-  const IdentifierInfo *Name1 = Method1->getIdentifier();
-  const IdentifierInfo *Name2 = Method2->getIdentifier();
-  if (!::IsStructurallyEquivalent(Name1, Name2)) {
-    return false;
-    // TODO: Names do not match, add warning like at check for FieldDecl.
-  }
-
   // Check the prototypes.
   if (!::IsStructurallyEquivalent(Context,
                                   Method1->getType(), Method2->getType()))
@@ -1810,6 +1851,14 @@ bool StructuralEquivalenceContext::CheckKindSpecificEquivalence(
     }
   } else if (auto *MD1 = dyn_cast<CXXMethodDecl>(D1)) {
     if (auto *MD2 = dyn_cast<CXXMethodDecl>(D2)) {
+      CXXRecordDecl *Parent1 = MD1->getParent();
+      CXXRecordDecl *Parent2 = MD2->getParent();
+      if (!IsStructurallyEquivalent(Parent1->getDeclName(),
+                                    Parent2->getDeclName()) ||
+          !IsStructurallyEquivalent(*this, Parent1, Parent2))
+        return false;
+      if (!IsStructurallyEquivalent(MD1->getDeclName(), MD2->getDeclName()))
+          return false;
       if (!::IsStructurallyEquivalent(*this, MD1, MD2))
         return false;
     } else {
@@ -1818,15 +1867,8 @@ bool StructuralEquivalenceContext::CheckKindSpecificEquivalence(
     }
   } else if (FunctionDecl *FD1 = dyn_cast<FunctionDecl>(D1)) {
     if (FunctionDecl *FD2 = dyn_cast<FunctionDecl>(D2)) {
-      if (FD1->isOverloadedOperator()) {
-        if (!FD2->isOverloadedOperator())
+      if (!IsStructurallyEquivalent(FD1->getDeclName(), FD2->getDeclName()))
           return false;
-        if (FD1->getOverloadedOperator() != FD2->getOverloadedOperator())
-          return false;
-      }
-      if (!::IsStructurallyEquivalent(FD1->getIdentifier(),
-                                      FD2->getIdentifier()))
-        return false;
       if (!::IsStructurallyEquivalent(*this, FD1, FD2))
         return false;
     } else {
