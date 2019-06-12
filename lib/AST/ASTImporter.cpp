@@ -2740,6 +2740,9 @@ ExpectedDecl ASTNodeImporter::VisitRecordDecl(RecordDecl *D) {
             getCanonicalForwardRedeclChain(D2CXX);
         for (auto *R : Redecls) {
           auto *RI = cast<CXXRecordDecl>(R);
+          // Existing Decl in the chain might not have the described
+          // template set, so we set it now.
+          RI->setDescribedClassTemplate(ToDescribed);
           RI->setTypeForDecl(nullptr);
           // Below we create a new injected type and assign that to the
           // canonical decl, subsequent declarations in the chain will reuse
