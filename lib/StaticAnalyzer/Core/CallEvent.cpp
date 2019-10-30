@@ -559,10 +559,15 @@ RuntimeDefinition AnyFunctionCall::getRuntimeDefinition() const {
 
   cross_tu::CrossTranslationUnitContext &CTUCtx =
       *Engine.getCrossTranslationUnitContext();
+
+  Optional<StringRef> OnDemandParsingDatabase;
+  if (Opts.CTUOnDemandParsing)
+    OnDemandParsingDatabase = Opts.CTUOnDemandParsingDatabase;
+
   llvm::Expected<const FunctionDecl *> CTUDeclOrError =
-      CTUCtx.getCrossTUDefinition(FD, Opts.CTUDir, Opts.CTUIndexName,
-                                  Opts.DisplayCTUProgress,
-                                  Opts.CTUImportThreshold);
+      CTUCtx.getCrossTUDefinition(
+          FD, Opts.CTUDir, Opts.CTUIndexName, Opts.DisplayCTUProgress,
+          Opts.CTUImportThreshold, OnDemandParsingDatabase);
 
   if (!CTUDeclOrError) {
     handleAllErrors(CTUDeclOrError.takeError(),

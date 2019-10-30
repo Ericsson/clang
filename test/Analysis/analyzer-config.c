@@ -23,6 +23,8 @@
 // CHECK-NEXT: ctu-dir = ""
 // CHECK-NEXT: ctu-import-threshold = 100
 // CHECK-NEXT: ctu-index-name = externalDefMap.txt
+// CHECK-NEXT: ctu-on-demand-parsing = false
+// CHECK-NEXT: ctu-on-demand-parsing-database = compile_commands.json
 // CHECK-NEXT: display-ctu-progress = false
 // CHECK-NEXT: eagerly-assume = true
 // CHECK-NEXT: elide-constructors = true
@@ -54,4 +56,4 @@
 // CHECK-NEXT: unroll-loops = false
 // CHECK-NEXT: widen-loops = false
 // CHECK-NEXT: [stats]
-// CHECK-NEXT: num-entries = 51
+// CHECK-NEXT: num-entries = 53

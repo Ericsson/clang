@@ -32,6 +32,10 @@ class FunctionDecl;
 class NamedDecl;
 class TranslationUnitDecl;
 
+namespace tooling {
+class JSONCompilationDatabase;
+}
+
 namespace cross_tu {
 
 enum class index_error_code {
@@ -41,12 +45,14 @@ enum class index_error_code {
   multiple_definitions,
   missing_definition,
   failed_import,
+  failed_to_load_compilation_database,
   failed_to_get_external_ast,
   failed_to_generate_usr,
   triple_mismatch,
   lang_mismatch,
   lang_dialect_mismatch,
-  load_threshold_reached
+  load_threshold_reached,
+  ambiguous_compile_commands_database
 };
 
 class IndexError : public llvm::ErrorInfo<IndexError> {
@@ -85,7 +91,8 @@ private:
 /// \return Returns a map where the USR is the key and the filepath is the value
 ///         or an error.
 llvm::Expected<llvm::StringMap<std::string>>
-parseCrossTUIndex(StringRef IndexPath, StringRef CrossTUDir);
+parseCrossTUIndex(StringRef IndexPath, StringRef CrossTUDir,
+                  llvm::Optional<StringRef> OnDemandParsingDatabase);
 
 std::string createCrossTUIndexString(const llvm::StringMap<std::string> &Index);
 
@@ -125,7 +132,8 @@ public:
   llvm::Expected<const FunctionDecl *>
   getCrossTUDefinition(const FunctionDecl *FD, StringRef CrossTUDir,
                        StringRef IndexName, bool DisplayCTUProgress,
-                       unsigned CTULoadThreshold);
+                       unsigned CTULoadThreshold,
+                       llvm::Optional<StringRef> OnDemandParsingDatabase);
 
   /// This function loads a function definition from an external AST
   ///        file.
@@ -141,11 +149,11 @@ public:
   /// The returned pointer is never a nullptr.
   ///
   /// Note that the AST files should also be in the \p CrossTUDir.
-  llvm::Expected<ASTUnit *> loadExternalAST(StringRef LookupName,
-                                            StringRef CrossTUDir,
-                                            StringRef IndexName,
-                                            bool DisplayCTUProgress,
-                                            unsigned CTULoadThreshold);
+  llvm::Expected<ASTUnit *>
+  loadExternalAST(StringRef LookupName, StringRef CrossTUDir,
+                  StringRef IndexName, bool DisplayCTUProgress,
+                  unsigned CTULoadThreshold,
+                  llvm::Optional<StringRef> OnDemandParsingDatabase);
 
   /// This function merges a definition from a separate AST Unit into
   ///        the current one which was created by the compiler instance that
@@ -172,6 +180,11 @@ public:
   GetImportedFromSourceLocation(const clang::SourceLocation &ToLoc) const;
 
 private:
+  llvm::Expected<std::unique_ptr<ASTUnit>>
+  loadASTFromDump(StringRef ASTSourcePath) const;
+  llvm::Expected<std::unique_ptr<ASTUnit>>
+  loadASTOnDemand(StringRef ASTSourcePath) const;
+  llvm::Error lazyInitCompileCommands(StringRef CompileCommandsFile);
   void lazyInitImporterSharedSt(TranslationUnitDecl *ToTU);
   ASTImporter &getOrCreateASTImporter(ASTUnit *Unit);
   const FunctionDecl *findFunctionInDeclContext(const DeclContext *DC,
@@ -190,6 +203,9 @@ private:
   ASTContext &Context;
   std::shared_ptr<ASTImporterSharedState> ImporterSharedSt;
   unsigned NumASTLoaded{0u};
+  /// In case of on-demand parsing, the compilation database is parsed and
+  /// stored.
+  std::unique_ptr<tooling::JSONCompilationDatabase> CompileCommands;
 };
 
 } // namespace cross_tu

@@ -1,23 +1,25 @@
 // RUN: rm -rf %t && mkdir %t
 // RUN: mkdir -p %t/ctudir
-// RUN: %clang_cc1 -triple x86_64-pc-linux-gnu \
-// RUN:   -emit-pch -o %t/ctudir/ctu-other.cpp.ast %S/Inputs/ctu-other.cpp
-// RUN: %clang_cc1 -triple x86_64-pc-linux-gnu \
-// RUN:   -emit-pch -o %t/ctudir/ctu-chain.cpp.ast %S/Inputs/ctu-chain.cpp
-// RUN: cp %S/Inputs/ctu-other.cpp.externalDefMap.ast-dump.txt %t/ctudir/externalDefMap.txt
+// RUN: cp %S/Inputs/ctu-chain.cpp %t/ctudir/ctu-chain.cpp
+// RUN: echo '[{"directory":"%S/Inputs","command":"clang++ -c ctu-chain.cpp","file":"ctu-chain.cpp"},{"directory":"%S/Inputs","command":"clang++ -c ctu-other.cpp","file":"ctu-other.cpp"}]' | sed -e 's/\\/\\\\/g' > %t/ctudir/compile_commands.json
+// RUN: %clang_extdef_map %S/Inputs/ctu-chain.cpp %S/Inputs/ctu-other.cpp > %t/ctudir/externalDefMap.txt
 // RUN: %clang_analyze_cc1 -triple x86_64-pc-linux-gnu \
 // RUN:   -analyzer-checker=core,debug.ExprInspection \
 // RUN:   -analyzer-config experimental-enable-naive-ctu-analysis=true \
-// RUN:   -analyzer-config ctu-dir=%t/ctudir \
+// RUN:   -analyzer-config ctu-dir="%t/ctudir" \
+// RUN:   -analyzer-config ctu-on-demand-parsing=true \
+// RUN:   -analyzer-config ctu-on-demand-parsing-database="%t/ctudir/compile_commands.json" \
 // RUN:   -verify %s
 // RUN: %clang_analyze_cc1 -triple x86_64-pc-linux-gnu \
 // RUN:   -analyzer-checker=core,debug.ExprInspection \
 // RUN:   -analyzer-config experimental-enable-naive-ctu-analysis=true \
-// RUN:   -analyzer-config ctu-dir=%t/ctudir \
+// RUN:   -analyzer-config ctu-dir="%t/ctudir" \
+// RUN:   -analyzer-config ctu-on-demand-parsing=true \
+// RUN:   -analyzer-config ctu-on-demand-parsing-database="%t/ctudir/compile_commands.json" \
 // RUN:   -analyzer-config display-ctu-progress=true 2>&1 %s | FileCheck %s
 
-// CHECK: CTU loaded AST file: {{.*}}ctu-other.cpp.ast
-// CHECK: CTU loaded AST file: {{.*}}ctu-chain.cpp.ast
+// CHECK: CTU loaded AST file: {{.*}}ctu-other.cpp
+// CHECK: CTU loaded AST file: {{.*}}ctu-chain.cpp
 
 #include "ctu-hdr.h"
 
@@ -40,7 +42,7 @@ class embed_cls {
 public:
   int fecl(int x);
 };
-}
+} // namespace myns
 
 class mycls {
 public:
@@ -66,16 +68,14 @@ int chf1(int x);
 int fun_using_anon_struct(int);
 int other_macro_diag(int);
 
-void test_virtual_functions(mycls* obj) {
+void test_virtual_functions(mycls *obj) {
   // The dynamic type is known.
   clang_analyzer_eval(mycls().fvcl(1) == 8);   // expected-warning{{TRUE}}
   clang_analyzer_eval(derived().fvcl(1) == 9); // expected-warning{{TRUE}}
   // We cannot decide about the dynamic type.
-  clang_analyzer_eval(obj->fvcl(1) == 8);      // expected-warning{{FALSE}} expected-warning{{TRUE}}
-  clang_analyzer_eval(obj->fvcl(1) == 9);      // expected-warning{{FALSE}} expected-warning{{TRUE}}
+  clang_analyzer_eval(obj->fvcl(1) == 8); // expected-warning{{FALSE}} expected-warning{{TRUE}}
+  clang_analyzer_eval(obj->fvcl(1) == 9); // expected-warning{{FALSE}} expected-warning{{TRUE}}
 }
-
-extern int testDefParmIncompleteImport(int);
 
 int main() {
   clang_analyzer_eval(f(3) == 2); // expected-warning{{TRUE}}
@@ -91,12 +91,10 @@ int main() {
   clang_analyzer_eval(myns::embed_cls().fecl(1) == -6);     // expected-warning{{TRUE}}
   clang_analyzer_eval(mycls::embed_cls2().fecl2(0) == -11); // expected-warning{{TRUE}}
 
-  clang_analyzer_eval(chns::chf1(4) == 12); // expected-warning{{TRUE}}
+  clang_analyzer_eval(chns::chf1(4) == 12);           // expected-warning{{TRUE}}
   clang_analyzer_eval(fun_using_anon_struct(8) == 8); // expected-warning{{TRUE}}
 
   clang_analyzer_eval(other_macro_diag(1) == 1); // expected-warning{{TRUE}}
   // expected-warning@Inputs/ctu-other.cpp:93{{REACHABLE}}
   MACRODIAG(); // expected-warning{{REACHABLE}}
-
-  clang_analyzer_eval(testDefParmIncompleteImport(9) == 9); // expected-warning{{TRUE}}
 }
