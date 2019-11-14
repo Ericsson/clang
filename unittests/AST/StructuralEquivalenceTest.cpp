@@ -78,14 +78,12 @@ struct StructuralEquivalenceTest : ::testing::Test {
   }
 
   bool testStructuralMatch(Decl *D0, Decl *D1) {
-    llvm::DenseSet<std::pair<Decl *, Decl *>> NonEquivalentDecls01;
-    llvm::DenseSet<std::pair<Decl *, Decl *>> NonEquivalentDecls10;
-    StructuralEquivalenceContext Ctx01(
-        D0->getASTContext(), D1->getASTContext(),
-        NonEquivalentDecls01, StructuralEquivalenceKind::Default, false, false);
-    StructuralEquivalenceContext Ctx10(
-        D1->getASTContext(), D0->getASTContext(),
-        NonEquivalentDecls10, StructuralEquivalenceKind::Default, false, false);
+    StructuralEquivalenceContext Ctx01(D0->getASTContext(), D1->getASTContext(),
+                                       StructuralEquivalenceKind::Default,
+                                       false, false);
+    StructuralEquivalenceContext Ctx10(D1->getASTContext(), D0->getASTContext(),
+                                       StructuralEquivalenceKind::Default,
+                                       false, false);
     bool Eq01 = Ctx01.IsEquivalent(D0, D1);
     bool Eq10 = Ctx10.IsEquivalent(D1, D0);
     EXPECT_EQ(Eq01, Eq10);
@@ -1307,7 +1305,7 @@ TEST_F(StructuralEquivalenceCacheTest, SimpleNonEq) {
 
   StructuralEquivalenceContext Ctx(
       get<0>(TU)->getASTContext(), get<1>(TU)->getASTContext(),
-      NonEquivalentDecls, StructuralEquivalenceKind::Default, false, false);
+      StructuralEquivalenceKind::Default, false, false);
 
   auto X = findDeclPair<FunctionDecl>(TU, functionDecl(hasName("x")));
   EXPECT_FALSE(Ctx.IsEquivalent(X.first, X.second));
@@ -1344,7 +1342,7 @@ TEST_F(StructuralEquivalenceCacheTest, SpecialNonEq) {
 
   StructuralEquivalenceContext Ctx(
       get<0>(TU)->getASTContext(), get<1>(TU)->getASTContext(),
-      NonEquivalentDecls, StructuralEquivalenceKind::Default, false, false);
+      StructuralEquivalenceKind::Default, false, false);
 
   auto C = findDeclPair<CXXRecordDecl>(
       TU, cxxRecordDecl(hasName("C"), unless(isImplicit())));
@@ -1383,7 +1381,7 @@ TEST_F(StructuralEquivalenceCacheTest, Cycle) {
 
   StructuralEquivalenceContext Ctx(
       get<0>(TU)->getASTContext(), get<1>(TU)->getASTContext(),
-      NonEquivalentDecls, StructuralEquivalenceKind::Default, false, false);
+      StructuralEquivalenceKind::Default, false, false);
 
   auto C = findDeclPair<CXXRecordDecl>(
       TU, cxxRecordDecl(hasName("C"), unless(isImplicit())));

@@ -84,7 +84,6 @@ class TypeSourceInfo;
   class ASTImporter {
     friend class ASTNodeImporter;
   public:
-    using NonEquivalentDeclSet = llvm::DenseSet<std::pair<Decl *, Decl *>>;
     using ImportedCXXBaseSpecifierMap =
         llvm::DenseMap<const CXXBaseSpecifier *, CXXBaseSpecifier *>;
     using FileIDImportHandlerType =
@@ -275,10 +274,6 @@ class TypeSourceInfo;
     ///  the "from" source manager to the corresponding CXXBasesSpecifier
     ///  in the "to" source manager.
     ImportedCXXBaseSpecifierMap ImportedCXXBaseSpecifiers;
-
-    /// Declaration (from, to) pairs that are known not to be equivalent
-    /// (which we have already complained about).
-    NonEquivalentDeclSet NonEquivalentDecls;
 
     using FoundDeclsTy = SmallVector<NamedDecl *, 2>;
     FoundDeclsTy findDeclsInToCtx(DeclContext *DC, DeclarationName Name);
@@ -546,9 +541,6 @@ class TypeSourceInfo;
 
     /// Report a diagnostic in the "from" context.
     DiagnosticBuilder FromDiag(SourceLocation Loc, unsigned DiagID);
-
-    /// Return the set of declarations that we know are not equivalent.
-    NonEquivalentDeclSet &getNonEquivalentDecls() { return NonEquivalentDecls; }
 
     /// Called for ObjCInterfaceDecl, ObjCProtocolDecl, and TagDecl.
     /// Mark the Decl as complete, filling it in as much as possible.
