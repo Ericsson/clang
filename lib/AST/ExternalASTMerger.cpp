@@ -414,7 +414,7 @@ void ExternalASTMerger::AddSources(llvm::ArrayRef<ImporterSource> Sources) {
     assert(&S.getASTContext() != &Target.AST);
     // Check that the associated merger actually imports into the source AST.
     assert(!S.getMerger() || &S.getMerger()->Target.AST == &S.getASTContext());
-    Importers.push_back(std::make_unique<LazyASTImporter>(
+    Importers.push_back(llvm::make_unique<LazyASTImporter>(
         *this, Target.AST, Target.FM, S, SharedState));
   }
 }

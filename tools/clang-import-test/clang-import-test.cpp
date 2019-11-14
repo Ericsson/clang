@@ -267,7 +267,7 @@ void AddExternalSource(CIAndOrigins &CI,
   for (CIAndOrigins &Import : Imports)
     Sources.emplace_back(Import.getASTContext(), Import.getFileManager(),
                          Import.getOriginMap());
-  auto ES = std::make_unique<ExternalASTMerger>(Target, Sources);
+  auto ES = llvm::make_unique<ExternalASTMerger>(Target, Sources);
   CI.getASTContext().setExternalSource(ES.release());
   CI.getASTContext().getTranslationUnitDecl()->setHasExternalVisibleStorage();
 }
